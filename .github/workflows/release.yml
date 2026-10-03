@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+
+      - name: Verify tag matches website version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          grep -Fq "__version__ = \"${version}\"" src/alen/__init__.py || {
+            echo "Tag ${tag} does not match ALEN version ${version}." >&2
+            exit 1
+          }
+
+      - name: Verify release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          if [[ ! -f "$notes" ]]; then
+            echo "Release notes were not found at ${notes}." >&2
+            exit 1
+          fi
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          notes="docs/releases/${tag}.md"
+          args=(release create "$tag" --title "ALEN $tag" --notes-file "$notes")
+          if [[ "$tag" =~ -(alpha|beta|rc)[0-9.]*$ ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"

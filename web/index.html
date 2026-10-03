@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#02050a">
+  <meta name="description" content="ALEN — Astronomical Live Environment & Navigation">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <title>ALEN — Astronomical Live Environment & Navigation</title>
+  <link rel="stylesheet" href="./styles.css?v=0.1.0">
+</head>
+<body>
+  <main class="sky-shell">
+    <canvas id="sky" aria-label="Interactive ALEN sky"></canvas>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">A</div>
+        <div><strong>ALEN</strong><span>Astronomical Live Environment &amp; Navigation</span></div>
+      </div>
+
+      <div class="search-wrap">
+        <label class="sr-only" for="sky-search">Search the sky</label>
+        <input id="sky-search" type="search" placeholder="Search Vega, Saturn, Moon…" autocomplete="off">
+        <div id="search-results" class="search-results" hidden></div>
+      </div>
+
+      <div class="top-status"><span id="clock">--:--:--</span><span class="mode-pill">ALEN SKY</span></div>
+    </header>
+
+    <aside id="inspector" class="inspector" hidden>
+      <button id="inspector-close" type="button" class="close" aria-label="Close object details">×</button>
+      <p id="inspector-kind" class="eyebrow">OBJECT</p>
+      <h2 id="inspector-name">—</h2>
+      <div id="inspector-visual" class="inspector-visual" aria-hidden="true"></div>
+      <dl id="inspector-details"></dl>
+      <section class="facts"><h3>About</h3><p id="inspector-fact"></p></section>
+    </aside>
+
+    <nav class="layerbar" aria-label="Sky layers">
+      <button type="button" data-layer="stars" aria-pressed="true">Stars</button>
+      <button type="button" data-layer="constellations" aria-pressed="true">Constellations</button>
+      <button type="button" data-layer="planets" aria-pressed="true">Planets</button>
+      <button type="button" data-layer="atmosphere" aria-pressed="true">Atmosphere</button>
+      <button type="button" data-layer="aircraft" aria-pressed="false">Aircraft</button>
+      <button type="button" data-layer="satellites" aria-pressed="false">Satellites</button>
+    </nav>
+
+    <section class="timebar" aria-label="Time controls">
+      <button id="time-back" type="button" aria-label="Run time backwards">◀◀</button>
+      <button id="time-play" type="button" aria-label="Pause time">❚❚</button>
+      <button id="time-forward" type="button" aria-label="Run time forwards">▶▶</button>
+      <span id="time-rate">1×</span>
+      <button id="time-now" type="button">Now</button>
+    </section>
+
+    <div class="compass" aria-hidden="true">
+      <span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span>
+    </div>
+    <p class="hint">Drag to look around · wheel to zoom · click an object to select · click it again to deselect</p>
+  </main>
+  <script src="./app.js?v=0.1.0"></script>
+</body>
+</html>
