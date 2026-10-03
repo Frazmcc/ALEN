@@ -43,6 +43,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert "./assets/alen-logo.png?v=2" in HTML
     assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
+    assert './app.js?v=0.6.3' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
