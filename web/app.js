@@ -15,6 +15,7 @@ const liveEl=document.querySelector("#live-status");
 
 const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
 const API_BASE="https://alen-api-lquw.onrender.com";
+const AIRCRAFT_RADIUS_MILES=50,AIRCRAFT_RADIUS_KM=80.4672,AIRCRAFT_RADIUS_NM=43.4488;
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
@@ -223,12 +224,12 @@ async function refreshAircraft(force=false){
  if(!force&&Date.now()-aircraftUpdated<2500)return;
  aircraftUpdated=Date.now();
  try{
-   const url=`https://api.adsb.lol/v2/lat/${observer.lat.toFixed(4)}/lon/${observer.lon.toFixed(4)}/dist/120`;
+   const url=`https://api.adsb.lol/v2/lat/${observer.lat.toFixed(4)}/lon/${observer.lon.toFixed(4)}/dist/${AIRCRAFT_RADIUS_NM}`;
    const res=await fetch(url,{mode:"cors",cache:"no-store",credentials:"omit"});
    if(!res.ok)throw new Error("aircraft "+res.status);
    const data=await res.json(),now=performance.now();
    const old=new Map(aircraft.map(a=>[a.id,a]));
-   aircraft=(Array.isArray(data.ac)?data.ac:[]).filter(a=>Number.isFinite(a.lat)&&Number.isFinite(a.lon)).slice(0,450).map(a=>{
+   aircraft=(Array.isArray(data.ac)?data.ac:[]).filter(a=>Number.isFinite(a.lat)&&Number.isFinite(a.lon)&&greatCircle(observer.lat,observer.lon,a.lat,a.lon).distanceKm<=AIRCRAFT_RADIUS_KM).slice(0,450).map(a=>{
      const id=(a.hex||a.flight||Math.random().toString(36)).trim(),prior=old.get(id);
      return{
        id,kind:"AIRCRAFT",name:(a.flight||a.r||a.hex||"Aircraft").trim(),lat:a.lat,lon:a.lon,
