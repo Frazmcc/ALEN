@@ -14,7 +14,7 @@ const locationEl=document.querySelector("#location-status");
 const liveEl=document.querySelector("#live-status");
 
 const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
-const API_BASE="https://alen-api.onrender.com";
+const API_BASE="https://alen-api-lquw.onrender.com";
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
