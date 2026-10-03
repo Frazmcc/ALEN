@@ -43,7 +43,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert "./assets/alen-logo.png?v=2" in HTML
     assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=0.6.3' in HTML
+    assert './app.js?v=0.7.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -83,7 +83,7 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "dist/${AIRCRAFT_RADIUS_NM}" in APP
     assert "distanceKm<=AIRCRAFT_RADIUS_KM" in APP
     assert "requestAnimationFrame(tick)" in APP
-    assert "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json" in APP
+    assert "https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(source)}&FORMAT=json" in APP
     assert "satelliteAltAz" in APP
     assert 'data-layer="aircraft" aria-pressed="true"' in HTML
     assert 'data-layer="satellites" aria-pressed="true"' in HTML
@@ -104,6 +104,29 @@ def test_airports_are_clickable_selectable_objects_with_media() -> None:
     assert 'o.kind==="AIRPORT"' in APP
     assert "function updateInspectorMedia(o)" in APP
     assert "function objectVisualSvg(o)" in APP
+
+
+def test_satellite_group_controls_and_visual_categories() -> None:
+    assert 'id="satellite-groups-button"' in HTML
+    assert 'id="satellite-groups"' in HTML
+    for key in (
+        "new", "stations", "bright", "starlink", "oneweb", "kuiper",
+        "navigation", "weather", "earth", "science", "amateur", "geo",
+        "military", "cubesat", "debris",
+    ):
+        assert f'data-satellite-group="{key}"' in HTML
+        assert f"{key}:{{label:" in APP
+    assert 'sources:["last-30-days"]' in APP
+    assert 'sources:["fengyun-1c-debris","iridium-33-debris","cosmos-2251-debris","cosmos-1408-debris"]' in APP
+    assert 'isNew:(el.memberships||[]).includes("new")' in APP
+    assert 'isDebris:(el.memberships||[]).includes("debris")' in APP
+    assert 'satellitePrimaryGroup' in APP
+    assert 'group.enabled=input.checked' in APP
+    assert 'ctx.fillStyle=s.color' in APP
+    assert 'ctx.fillText(s.glyph||"◇"' in APP
+    assert '["Category",o.groupLabel||"Satellite"]' in APP
+    assert '["New launch",o.isNew?"Yes · ≤30 days":"No"]' in APP
+    assert '["Debris",o.isDebris?"Yes":"No"]' in APP
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
