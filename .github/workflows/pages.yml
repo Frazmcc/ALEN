@@ -2,9 +2,10 @@ name: Deploy hosted web to GitHub Pages
 
 on:
   workflow_run:
-    workflows: ["CodeQL"]
-    types: [completed]
-  workflow_dispatch:
+    workflows:
+      - CodeQL
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -18,21 +19,13 @@ concurrency:
 
 jobs:
   deploy:
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.workflow_run.event == 'push' &&
-          github.event.workflow_run.head_branch == 'main' &&
-          github.event.workflow_run.conclusion == 'success'
-        )
-      }}
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     env:
-      DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
 
     steps:
       - name: Verify all required CI checks passed
@@ -43,7 +36,12 @@ jobs:
           set -euo pipefail
 
           for attempt in $(seq 1 60); do
-            curl --fail --silent --show-error               --header "Accept: application/vnd.github+json"               --header "Authorization: Bearer $GH_TOKEN"               --header "X-GitHub-Api-Version: 2022-11-28"               "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$DEPLOY_SHA/check-runs?per_page=100"               > /tmp/checks.json
+            curl --fail --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$DEPLOY_SHA/check-runs?per_page=100" \
+              > /tmp/checks.json
 
             result="$(python - <<'PY'
 import json
@@ -76,14 +74,17 @@ PY
             if [[ "$result" == "PASS" ]]; then
               break
             fi
+
             if [[ "$result" == FAILED:* ]]; then
               echo "Required CI check failed: ${result#FAILED:}" >&2
               exit 1
             fi
+
             if [[ "$attempt" -eq 60 ]]; then
               echo "Timed out waiting for required CI checks: ${result#PENDING:}" >&2
               exit 1
             fi
+
             sleep 5
           done
 
