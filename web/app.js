@@ -14,14 +14,15 @@ const locationEl=document.querySelector("#location-status");
 const liveEl=document.querySelector("#live-status");
 
 const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
+const API_BASE="https://alen-api.onrender.com";
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
-let aircraft=[],satellites=[],satelliteElements=[];
+let aircraft=[],satellites=[],satelliteElements=[],airports=[];
 let aircraftUpdated=0,satellitesUpdated=0;
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
-const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,aircraft:true,satellites:true};
+const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,airports:true,aircraft:true,satellites:true};
 
 const STAR_CATALOG=[
 {id:"vega",kind:"STAR",name:"Vega",ra:279.23473479,dec:38.78368896,mag:.03,color:"#dcecff",distance:"25.0 ly",detail:"A0 V",fact:"Vega is a rapidly rotating A-type star and one of the brightest stars in the northern sky."},
@@ -187,6 +188,7 @@ function onLocation(pos){
    refreshAircraft(true);
    refreshSatellites(true);
    refreshTerrainProfile();
+   refreshAirports();
  }
  setLiveStatus();
 }
@@ -244,6 +246,24 @@ function stepAircraft(now){
    const k=1-Math.exp(-dt/900);
    a.displayLat+=(a.lat-a.displayLat)*k;a.displayLon+=(a.lon-a.displayLon)*k;
  }
+}
+
+async function refreshAirports(){
+ if(!observer||!layers.airports)return;
+ try{
+   const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_km:"180",limit:"14"});
+   const res=await fetch(API_BASE+"/api/v1/airports?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
+   if(!res.ok)throw new Error("airports "+res.status);
+   const data=await res.json();
+   airports=(Array.isArray(data.airports)?data.airports:[]).map(a=>({
+     id:"airport:"+(a.icao||a.iata||a.name),kind:"AIRPORT",name:a.name||a.icao||"Airport",
+     iata:a.iata||"",icao:a.icao||"",distanceKm:Number(a.distance_km)||0,
+     az:Number(a.bearing_deg)||0,type:a.type||"airport",lat:Number(a.latitude),lon:Number(a.longitude)
+   }));
+ }catch(e){airports=[];console.warn("ALEN airport feed unavailable",e)}
+}
+function airportDisplayObject(a){
+ return{...a,el:terrainHorizonElevation(a.az)+.75};
 }
 
 function parseEpoch(s){const t=Date.parse(s);return Number.isFinite(t)?t:Date.now()}
@@ -366,6 +386,17 @@ function draw(){
    if(o.mag<.5||isSelected){ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2)}
   }
  }
+ if(layers.airports){
+  for(const raw of airports){
+   const a=airportDisplayObject(raw),p=project(a.az,a.el);if(!p)continue;
+   const active=selected?.id===a.id;
+   ctx.strokeStyle=active?"#dff9ff":"rgba(123,229,255,.78)";ctx.fillStyle=active?"#dff9ff":"rgba(123,229,255,.78)";
+   ctx.lineWidth=active?1.5:1;
+   ctx.beginPath();ctx.moveTo(p[0],p[1]-8);ctx.lineTo(p[0]-5,p[1]+1);ctx.lineTo(p[0]+5,p[1]+1);ctx.closePath();ctx.stroke();
+   ctx.beginPath();ctx.moveTo(p[0],p[1]+1);ctx.lineTo(p[0],p[1]+8);ctx.stroke();
+   ctx.font="9px ui-monospace,monospace";ctx.fillText(a.iata||a.icao,p[0]+8,p[1]-6);
+  }
+ }
  if(layers.aircraft){
   for(const a of aircraft){
    const q=airborneAltAz(a.displayLat,a.displayLon,a.altM);if(!q||q.el<0)continue;const p=project(q.az,q.el);if(!p)continue;
@@ -390,27 +421,45 @@ function draw(){
 function allSelectableObjects(){
  const stars=currentSkyObjects(simTime).filter(o=>o.el>=0);
  const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?{...a,az:p.az,el:p.el}:null}).filter(Boolean);
- return [...stars,...ac,...satellites];
+ const aps=layers.airports?airports.map(airportDisplayObject):[];
+ return [...stars,...aps,...ac,...satellites];
 }
 function nearestObject(x,y){
  let best=null,bestD=Infinity;
  for(const o of allSelectableObjects()){const p=project(o.az,o.el);if(!p)continue;const d=Math.hypot(x-p[0],y-p[1]);if(d<22&&d<bestD){best=o;bestD=d}}
  return best;
 }
+function escapeSvgText(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[ch]))}
+function objectVisualSvg(o){
+ const title=escapeSvgText(o.name||o.kind),kind=escapeSvgText(o.kind||"OBJECT");
+ let symbol="✦",sub="";
+ if(o.kind==="AIRCRAFT"){symbol="✈";sub=escapeSvgText(o.registration||o.type||"Live aircraft")}
+ else if(o.kind==="SATELLITE"){symbol="◈";sub=escapeSvgText("Orbital object")}
+ else if(o.kind==="AIRPORT"){symbol="△";sub=escapeSvgText((o.iata||o.icao||"Airport")+" · "+Math.round(o.distanceKm)+" km")}
+ else{sub=escapeSvgText(o.detail||"Astronomical object")}
+ const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#071522"/><stop offset="1" stop-color="#010308"/></linearGradient><radialGradient id="r"><stop offset="0" stop-color="#123044"/><stop offset="1" stop-color="#010308"/></radialGradient></defs><rect width="720" height="360" fill="url(#g)"/><circle cx="360" cy="170" r="112" fill="url(#r)" stroke="#1d526a"/><text x="360" y="205" text-anchor="middle" font-family="system-ui,sans-serif" font-size="96" fill="#9feaff">${symbol}</text><text x="28" y="302" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#eef8ff">${title}</text><text x="28" y="331" font-family="system-ui,sans-serif" font-size="15" fill="#88a4b5">${kind} · ${sub}</text></svg>`;
+ return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+}
+function updateInspectorMedia(o){
+ const image=document.querySelector("#inspector-image");
+ const credit=document.querySelector("#inspector-image-credit");
+ image.src=objectVisualSvg(o);image.alt=(o.name||o.kind)+" visual";
+ credit.textContent=o.kind==="AIRPORT"?"Airport horizon reference · ALEN":o.kind==="AIRCRAFT"?"Live aircraft visual · ALEN":o.kind==="SATELLITE"?"Satellite visual · ALEN":"Sky object visual · ALEN";
+}
 function showObject(o){
  selected=o;
  document.querySelector("#inspector-kind").textContent=o.kind;
  document.querySelector("#inspector-name").textContent=o.name;
+ updateInspectorMedia(o);
  document.querySelector("#inspector-fact").textContent=o.fact||(
    o.kind==="AIRCRAFT"?"Live aircraft position from the current ADS-B feed; motion is smoothed between network updates.":
+   o.kind==="AIRPORT"?"Nearby airport positioned at its true bearing along the local terrain horizon.":
    "Live satellite position propagated from current orbital elements. Visual position is approximate rather than precision tracking."
  );
- const visual=document.querySelector("#inspector-visual");
- const color=o.color||(o.kind==="AIRCRAFT"?"#9fd9ff":"#ffe08b");
- visual.style.background="radial-gradient(circle at 50% 50%,"+color+" 0 4px,rgba(123,229,255,.20) 5px 28px,transparent 46%),#010308";
  const details=document.querySelector("#inspector-details");details.replaceChildren();
  let rows=[];
  if(o.kind==="AIRCRAFT")rows=[["Type",o.type],["Registration",o.registration],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
+ else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Source",o.detail],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
  else rows=[["Type",o.detail],["Distance",o.distance],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Magnitude",String(o.mag)]];
  for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;details.append(dt,dd)}
@@ -448,6 +497,7 @@ document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("cli
  const key=btn.dataset.layer;layers[key]=!layers[key];btn.setAttribute("aria-pressed",String(layers[key]));
  if(key==="aircraft"&&layers[key])refreshAircraft(true);
  if(key==="satellites"&&layers[key])refreshSatellites(true);
+ if(key==="airports"&&layers[key])refreshAirports();
  setLiveStatus();
 }));
 
