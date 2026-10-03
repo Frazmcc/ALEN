@@ -28,3 +28,23 @@ def test_nearby_airports_endpoint(monkeypatch) -> None:
     response = TestClient(app).get("/api/v1/airports?lat=55.86&lon=-4.25&radius_km=180&limit=14")
     assert response.status_code == 200
     assert response.json()["airports"] == sample
+
+
+def test_visible_satellites_endpoint(monkeypatch) -> None:
+    sample = [
+        {
+            "norad": 25544,
+            "name": "ISS (ZARYA)",
+            "international_id": "1998-067A",
+            "azimuth_deg": 180.0,
+            "elevation_deg": 42.0,
+            "range_km": 820.0,
+            "groups": ["stations"],
+        }
+    ]
+    monkeypatch.setattr("alen.api._satellites.visible", lambda *args, **kwargs: sample)
+    response = TestClient(app).get(
+        "/api/v1/satellites?lat=55.86&lon=-4.25&altitude_m=50&groups=stations&limit=10"
+    )
+    assert response.status_code == 200
+    assert response.json()["satellites"] == sample
