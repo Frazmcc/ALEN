@@ -32,10 +32,18 @@ jobs:
         with:
           enablement: true
 
+      - name: Prepare static web artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          cp -R web _site
+          printf '{"git_commit":"%s"}\n' "$GITHUB_SHA" > _site/build.json
+
       - name: Upload static web artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: web
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
