@@ -63,13 +63,20 @@ function raDecToAltAz(ra,dec,ms){
  const x=Math.sin(d)*Math.cos(lat)-Math.cos(d)*Math.sin(lat)*Math.cos(ha);
  return{az:norm360(Math.atan2(y,x)*RAD),el:alt*RAD};
 }
+function horizonBottomGap(){
+ return width<=900?124:72;
+}
+function updateMinPitch(){
+ const vfov=fov*height/Math.max(width,1);
+ const targetY=Math.max(0,height-horizonBottomGap());
+ minPitch=((targetY/height)-.55)/.82*vfov;
+}
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
  width=Math.max(1,canvas.clientWidth);height=Math.max(1,canvas.clientHeight);
  canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
  ctx.setTransform(dpr,0,0,dpr,0,0);
- const vfov=fov*height/Math.max(width,1);
- minPitch=.5488*vfov;
+ updateMinPitch();
  pitch=Math.max(pitch,minPitch);
 }
 new ResizeObserver(resize).observe(canvas);resize();
@@ -110,7 +117,7 @@ function onLocation(pos){
  setLocationStatus(observerLabel(),"ok");
  if(first){
    yaw=observer.lat>=0?180:0;
-   pitch=Math.max(minPitch,minPitch+6);
+   pitch=minPitch;
    refreshAircraft(true);
    refreshSatellites(true);
  }
@@ -337,7 +344,7 @@ canvas.addEventListener("pointerup",e=>{
 });
 canvas.addEventListener("wheel",e=>{
  e.preventDefault();fov=clamp(fov*(e.deltaY<0?.88:1.12),18,130);
- const vfov=fov*height/Math.max(width,1);minPitch=.5488*vfov;pitch=Math.max(pitch,minPitch);
+ updateMinPitch();pitch=Math.max(pitch,minPitch);
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 
