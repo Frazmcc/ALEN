@@ -47,7 +47,10 @@ def test_live_location_and_horizon_contract() -> None:
     assert "navigator.geolocation.getCurrentPosition" in APP
     assert "navigator.geolocation.watchPosition" in APP
     assert 'id="location-status"' in HTML
-    assert "minPitch=.5488*vfov" in APP
+    assert "function horizonBottomGap()" in APP
+    assert "return width<=900?124:72" in APP
+    assert "function updateMinPitch()" in APP
+    assert "pitch=minPitch" in APP
     assert "pitch=clamp(drag.pitch+dy/height*fov*.55,minPitch,88)" in APP
 
 
