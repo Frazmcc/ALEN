@@ -16,6 +16,7 @@ def test_web_identity_and_security_contract() -> None:
         "https://api.adsb.lol",
         "https://celestrak.org",
         "https://s3.amazonaws.com",
+        "https://alen-api-lquw.onrender.com",
         "img-src 'self' data:",
         "object-src 'none'",
         "base-uri 'none'",
@@ -78,6 +79,21 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "satelliteAltAz" in APP
     assert 'data-layer="aircraft" aria-pressed="true"' in HTML
     assert 'data-layer="satellites" aria-pressed="true"' in HTML
+
+
+def test_airports_are_clickable_selectable_objects_with_media() -> None:
+    assert 'data-layer="airports" aria-pressed="true"' in HTML
+    assert 'id="inspector-media"' in HTML
+    assert 'id="inspector-image"' in HTML
+    assert 'id="inspector-image-credit"' in HTML
+    assert 'const API_BASE="https://alen-api-lquw.onrender.com"' in APP
+    assert 'kind:"AIRPORT"' in APP
+    assert "function refreshAirports()" in APP
+    assert "function airportDisplayObject" in APP
+    assert "airports.map(airportDisplayObject)" in APP
+    assert 'o.kind==="AIRPORT"' in APP
+    assert "function updateInspectorMedia(o)" in APP
+    assert "function objectVisualSvg(o)" in APP
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:

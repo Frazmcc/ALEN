@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .airports import AirportProvider
 
 app = FastAPI(
     title="ALEN API",
@@ -15,11 +16,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[],
+    allow_origins=["https://frazmcc.github.io"],
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["Accept", "Content-Type"],
 )
+
+_airports = AirportProvider()
 
 
 @app.get("/api/v1/health")
@@ -29,4 +32,21 @@ def health() -> dict[str, str]:
         "name": "ALEN",
         "version": __version__,
         "timestamp": datetime.now(UTC).isoformat(),
+    }
+
+
+@app.get("/api/v1/airports")
+def nearby_airports(
+    lat: float = Query(ge=-90.0, le=90.0),
+    lon: float = Query(ge=-180.0, le=180.0),
+    radius_km: float = Query(default=180.0, ge=20.0, le=400.0),
+    limit: int = Query(default=14, ge=1, le=30),
+) -> dict[str, object]:
+    return {
+        "airports": _airports.nearby(
+            lat,
+            lon,
+            max_distance_km=radius_km,
+            limit=limit,
+        )
     }
