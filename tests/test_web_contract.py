@@ -74,6 +74,11 @@ def test_live_view_has_no_time_transport_controls() -> None:
 
 def test_live_aircraft_and_satellite_contract() -> None:
     assert "https://api.adsb.lol/v2/lat/" in APP
+    assert "AIRCRAFT_RADIUS_MILES=50" in APP
+    assert "AIRCRAFT_RADIUS_KM=80.4672" in APP
+    assert "AIRCRAFT_RADIUS_NM=43.4488" in APP
+    assert "dist/${AIRCRAFT_RADIUS_NM}" in APP
+    assert "distanceKm<=AIRCRAFT_RADIUS_KM" in APP
     assert "requestAnimationFrame(tick)" in APP
     assert "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json" in APP
     assert "satelliteAltAz" in APP
