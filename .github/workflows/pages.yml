@@ -43,31 +43,7 @@ jobs:
               "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$DEPLOY_SHA/check-runs?per_page=100" \
               > /tmp/checks.json
 
-            result="$(python - <<'PY'
-import json
-from pathlib import Path
-
-payload = json.loads(Path("/tmp/checks.json").read_text(encoding="utf-8"))
-checks = {item["name"]: item for item in payload.get("check_runs", [])}
-required = ("test", "Analyze Python and JavaScript")
-
-pending = []
-failed = []
-for name in required:
-    check = checks.get(name)
-    if not check or check.get("status") != "completed":
-        pending.append(name)
-    elif check.get("conclusion") != "success":
-        failed.append(f"{name}={check.get('conclusion')}")
-
-if failed:
-    print("FAILED:" + ",".join(failed))
-elif pending:
-    print("PENDING:" + ",".join(pending))
-else:
-    print("PASS")
-PY
-)"
+            result="$(python -c 'import json; from pathlib import Path; payload=json.loads(Path("/tmp/checks.json").read_text(encoding="utf-8")); checks={item["name"]:item for item in payload.get("check_runs",[])}; required=("test","Analyze Python and JavaScript"); pending=[name for name in required if name not in checks or checks[name].get("status")!="completed"]; failed=[f"{name}={checks[name].get('"'"'conclusion'"'"')}" for name in required if name in checks and checks[name].get("status")=="completed" and checks[name].get("conclusion")!="success"]; print("FAILED:"+",".join(failed) if failed else "PENDING:"+",".join(pending) if pending else "PASS")')"
 
             echo "CI gate attempt $attempt for $DEPLOY_SHA: $result"
 
