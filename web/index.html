@@ -10,7 +10,7 @@
   <title>ALEN — Astronomical Live Environment & Navigation</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./assets/alen-logo.png?v=2">
   <link rel="apple-touch-icon" href="./assets/alen-logo.png?v=2">
-  <link rel="stylesheet" href="./styles.css?v=0.3.0">
+  <link rel="stylesheet" href="./styles.css?v=0.4.0">
 </head>
 <body>
   <main class="sky-shell">
@@ -54,19 +54,12 @@
       <button type="button" data-layer="satellites" aria-pressed="true">Satellites</button>
     </nav>
 
-    <section class="timebar" aria-label="Time controls">
-      <button id="time-back" type="button" aria-label="Run time backwards">◀◀</button>
-      <button id="time-play" type="button" aria-label="Pause time">❚❚</button>
-      <button id="time-forward" type="button" aria-label="Run time forwards">▶▶</button>
-      <span id="time-rate">1×</span>
-      <button id="time-now" type="button">Now</button>
-    </section>
 
     <div class="compass" aria-hidden="true">
       <span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span>
     </div>
-    <p class="hint">Live from your location · drag freely to look around · wheel to zoom · arrow keys also work</p>
+    <p class="hint">Live from your location · horizon is the lowest view · drag to look around · wheel to zoom</p>
   </main>
-  <script src="./app.js?v=0.3.0"></script>
+  <script src="./app.js?v=0.4.0"></script>
 </body>
 </html>
