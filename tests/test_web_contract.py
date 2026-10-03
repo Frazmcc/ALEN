@@ -37,6 +37,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert 'rel="icon"' in HTML
     assert 'rel="apple-touch-icon"' in HTML
     assert "./assets/alen-logo.png?v=2" in HTML
+    assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
 
 
