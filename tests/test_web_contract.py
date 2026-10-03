@@ -30,3 +30,10 @@ def test_selection_is_explicitly_toggleable() -> None:
 def test_no_inline_remote_dependencies() -> None:
     assert "https://" not in HTML
     assert "<script src=" in HTML
+
+
+def test_alen_brand_logo_and_favicon_are_present() -> None:
+    assert 'class="brand-mark"' in HTML
+    assert 'rel="icon"' in HTML
+    assert 'rel="apple-touch-icon"' in HTML
+    assert HTML.count("data:image/png;base64,") >= 3
