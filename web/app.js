@@ -16,6 +16,7 @@ const liveEl=document.querySelector("#live-status");
 const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
 const API_BASE="https://alen-api-lquw.onrender.com";
 const AIRCRAFT_RADIUS_MILES=50,AIRCRAFT_RADIUS_KM=80.4672,AIRCRAFT_RADIUS_NM=43.4488;
+const AIRPORT_RADIUS_MILES=50,AIRPORT_RADIUS_KM=80.4672;
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
@@ -252,11 +253,11 @@ function stepAircraft(now){
 async function refreshAirports(){
  if(!observer||!layers.airports)return;
  try{
-   const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_km:"180",limit:"14"});
+   const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_km:String(AIRPORT_RADIUS_KM),limit:"14"});
    const res=await fetch(API_BASE+"/api/v1/airports?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
    if(!res.ok)throw new Error("airports "+res.status);
    const data=await res.json();
-   airports=(Array.isArray(data.airports)?data.airports:[]).map(a=>({
+   airports=(Array.isArray(data.airports)?data.airports:[]).filter(a=>Number(a.distance_km)<=AIRPORT_RADIUS_KM).map(a=>({
      id:"airport:"+(a.icao||a.iata||a.name),kind:"AIRPORT",name:a.name||a.icao||"Airport",
      iata:a.iata||"",icao:a.icao||"",distanceKm:Number(a.distance_km)||0,
      az:Number(a.bearing_deg)||0,type:a.type||"airport",lat:Number(a.latitude),lon:Number(a.longitude)

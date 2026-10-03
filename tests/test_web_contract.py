@@ -77,6 +77,8 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "AIRCRAFT_RADIUS_MILES=50" in APP
     assert "AIRCRAFT_RADIUS_KM=80.4672" in APP
     assert "AIRCRAFT_RADIUS_NM=43.4488" in APP
+    assert "AIRPORT_RADIUS_MILES=50" in APP
+    assert "AIRPORT_RADIUS_KM=80.4672" in APP
     assert "dist/${AIRCRAFT_RADIUS_NM}" in APP
     assert "distanceKm<=AIRCRAFT_RADIUS_KM" in APP
     assert "requestAnimationFrame(tick)" in APP
@@ -94,6 +96,8 @@ def test_airports_are_clickable_selectable_objects_with_media() -> None:
     assert 'const API_BASE="https://alen-api-lquw.onrender.com"' in APP
     assert 'kind:"AIRPORT"' in APP
     assert "function refreshAirports()" in APP
+    assert "radius_km:String(AIRPORT_RADIUS_KM)" in APP
+    assert "Number(a.distance_km)<=AIRPORT_RADIUS_KM" in APP
     assert "function airportDisplayObject" in APP
     assert "airports.map(airportDisplayObject)" in APP
     assert 'o.kind==="AIRPORT"' in APP
