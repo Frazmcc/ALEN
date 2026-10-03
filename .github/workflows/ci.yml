@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project and development dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Compile Python sources
+        run: python -m compileall -q src tests
+
+      - name: Ruff correctness checks
+        run: python -m ruff check --select E4,E7,E9,F src tests
+
+      - name: Validate all hosted JavaScript syntax
+        shell: pwsh
+        run: |
+          Get-ChildItem .\web -Filter *.js | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "JavaScript syntax check failed: $($_.Name)"
+            }
+          }
+
+      - name: Hosted DOM contract smoke test
+        shell: pwsh
+        run: |
+          $html = Get-Content web/index.html -Raw
+          $scripts = @(Get-ChildItem .\web -Filter *.js)
+          $createdIds = [System.Collections.Generic.HashSet[string]]::new()
+
+          foreach ($script in $scripts) {
+            $source = Get-Content $script.FullName -Raw
+            [regex]::Matches($source, '\.id\s*=\s*["'']([^"'']+)["'']') | ForEach-Object {
+              [void]$createdIds.Add($_.Groups[1].Value)
+            }
+          }
+
+          foreach ($script in $scripts) {
+            $js = Get-Content $script.FullName -Raw
+            $selectorIds = [regex]::Matches($js, 'querySelector\("#([^"]+)"\)') | ForEach-Object { $_.Groups[1].Value }
+            $elementIds = [regex]::Matches($js, 'getElementById\(["'']([^"'']+)["'']\)') | ForEach-Object { $_.Groups[1].Value }
+            $ids = @($selectorIds; $elementIds) | Sort-Object -Unique
+            foreach ($id in $ids) {
+              $htmlHasId = $html -match ('id="' + [regex]::Escape($id) + '"')
+              $pageCreatesId = $createdIds.Contains($id)
+              if (-not $htmlHasId -and -not $pageCreatesId) {
+                throw "$($script.Name) references missing DOM id: $id"
+              }
+            }
+            if ($js.Contains('\nfunction')) {
+              throw "$($script.Name) contains a literal escaped newline before function"
+            }
+          }
+
+      - name: Security policy contract
+        shell: pwsh
+        run: |
+          $html = Get-Content web/index.html -Raw
+          $required = @(
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self'",
+            "connect-src 'self'",
+            "img-src 'self' data:",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'self'",
+            "frame-ancestors 'none'"
+          )
+          foreach ($directive in $required) {
+            if (-not $html.Contains($directive)) {
+              throw "Missing CSP directive: $directive"
+            }
+          }
+
+      - name: Pytest
+        run: python -m pytest -q
