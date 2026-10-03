@@ -1,0 +1,74 @@
+name: Live website smoke probe
+
+on:
+  workflow_run:
+    workflows: ["Deploy hosted web to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-web-smoke
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    name: Probe production website
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    env:
+      SITE_BASE: https://frazmcc.github.io/ALEN
+
+    steps:
+      - name: Determine expected commit
+        id: expected
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wait for exact website commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            status="$(curl --silent --show-error --location --connect-timeout 5 --max-time 12               --output /tmp/build.json --write-out '%{http_code}' "$SITE_BASE/build.json" || true)"
+            deployed=""
+            if [[ "$status" == "200" ]]; then
+              deployed="$(python - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+try:
+    print(json.loads(Path("/tmp/build.json").read_text())["git_commit"])
+except Exception:
+    pass
+PY
+)"
+            fi
+            echo "Attempt $attempt: HTTP=$status deployed=${deployed:-unknown} expected=$EXPECTED_SHA"
+            if [[ "$status" == "200" && "$deployed" == "$EXPECTED_SHA" ]]; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "ALEN website did not expose expected commit $EXPECTED_SHA." >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Probe website document
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 5 --max-time 12             "$SITE_BASE/" > /tmp/index.html
+          grep -Fq "Astronomical Live Environment &amp; Navigation" /tmp/index.html
+          grep -Fq "Content-Security-Policy" /tmp/index.html
