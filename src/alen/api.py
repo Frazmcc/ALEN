@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .airports import AirportProvider
+from .satellites import SatelliteProvider
 
 app = FastAPI(
     title="ALEN API",
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 _airports = AirportProvider()
+_satellites = SatelliteProvider()
 
 
 @app.get("/api/v1/health")
@@ -47,6 +49,27 @@ def nearby_airports(
             lat,
             lon,
             max_distance_km=radius_km,
+            limit=limit,
+        )
+    }
+
+
+@app.get("/api/v1/satellites")
+def visible_satellites(
+    lat: float = Query(ge=-90.0, le=90.0),
+    lon: float = Query(ge=-180.0, le=180.0),
+    altitude_m: float = Query(default=0.0, ge=-500.0, le=20000.0),
+    groups: str = Query(default="last-30-days,stations,visual"),
+    limit: int = Query(default=260, ge=1, le=500),
+) -> dict[str, object]:
+    requested = [value.strip() for value in groups.split(",") if value.strip()]
+    requested = requested[:12]
+    return {
+        "satellites": _satellites.visible(
+            lat,
+            lon,
+            altitude_m,
+            requested,
             limit=limit,
         )
     }
