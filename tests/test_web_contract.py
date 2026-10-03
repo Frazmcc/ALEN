@@ -43,7 +43,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert "./assets/alen-logo.png?v=2" in HTML
     assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=0.7.0' in HTML
+    assert './app.js?v=0.8.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -83,7 +83,8 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "dist/${AIRCRAFT_RADIUS_NM}" in APP
     assert "distanceKm<=AIRCRAFT_RADIUS_KM" in APP
     assert "requestAnimationFrame(tick)" in APP
-    assert "https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(source)}&FORMAT=json" in APP
+    assert "API_BASE+\"/api/v1/satellites?\"" in APP
+    assert "SGP4 · CelesTrak orbital elements" in APP
     assert "satelliteAltAz" in APP
     assert 'data-layer="aircraft" aria-pressed="true"' in HTML
     assert 'data-layer="satellites" aria-pressed="true"' in HTML
@@ -127,6 +128,26 @@ def test_satellite_group_controls_and_visual_categories() -> None:
     assert '["Category",o.groupLabel||"Satellite"]' in APP
     assert '["New launch",o.isNew?"Yes · ≤30 days":"No"]' in APP
     assert '["Debris",o.isDebris?"Yes":"No"]' in APP
+
+
+def test_dense_stars_and_real_planets_are_present() -> None:
+    star_path = Path("web/data/bright-stars.json")
+    assert star_path.is_file()
+    import json
+    payload = json.loads(star_path.read_text(encoding="utf-8"))
+    assert payload["count"] >= 2500
+    assert payload["magnitude_limit"] <= 5.5
+    assert "function loadBrightStars()" in APP
+    assert "function solarSystemRaDec(ms)" in APP
+    assert "function currentPlanetObjects(ms)" in APP
+    for body in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"):
+        assert f'{body}:{{name:' in APP
+
+
+def test_satellites_use_backend_sgp4_live_positions() -> None:
+    assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
+    assert 'satelliteTimer=setInterval(()=>refreshSatellites(false),10000)' in APP
+    assert 'function stepSatellites(_ms){}' in APP
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
