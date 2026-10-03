@@ -20,7 +20,7 @@ const AIRPORT_RADIUS_MILES=50,AIRPORT_RADIUS_KM=80.4672;
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
-let aircraft=[],satellites=[],satelliteElements=[],airports=[];
+let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
 let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0;
 const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
@@ -60,12 +60,90 @@ const STAR_CATALOG=[
 ];
 
 const SKY_OBJECTS=[...STAR_CATALOG];
+const PLANET_INFO={
+ sun:{name:"Sun",symbol:"☉",color:"#ffd76a",detail:"G2 V star",fact:"The Sun is the star at the centre of the Solar System."},
+ moon:{name:"Moon",symbol:"◐",color:"#e8edf2",detail:"Natural satellite",fact:"The Moon is Earth's natural satellite."},
+ mercury:{name:"Mercury",symbol:"☿",color:"#c6b69b",detail:"Terrestrial planet",fact:"Mercury is the innermost planet in the Solar System."},
+ venus:{name:"Venus",symbol:"♀",color:"#ffe0a3",detail:"Terrestrial planet",fact:"Venus is often the brightest planet seen from Earth."},
+ mars:{name:"Mars",symbol:"♂",color:"#ff8a66",detail:"Terrestrial planet",fact:"Mars is the fourth planet from the Sun."},
+ jupiter:{name:"Jupiter",symbol:"♃",color:"#f0c29a",detail:"Gas giant",fact:"Jupiter is the largest planet in the Solar System."},
+ saturn:{name:"Saturn",symbol:"♄",color:"#f5d889",detail:"Gas giant",fact:"Saturn is famous for its extensive ring system."},
+ uranus:{name:"Uranus",symbol:"⛢",color:"#9fe8eb",detail:"Ice giant",fact:"Uranus rotates on its side relative to most planets."},
+ neptune:{name:"Neptune",symbol:"♆",color:"#759cff",detail:"Ice giant",fact:"Neptune is the outermost major planet."}
+};
 const constellationLines=[
 ["vega","deneb","altair"],
 ["betelgeuse","rigel"],
 ["sirius","procyon","pollux"]
 ];
 
+function starColor(temp){
+ const t=clamp(Number(temp)||6000,2500,30000);
+ if(t<3500)return "#ffb07a";if(t<5000)return "#ffd2a1";if(t<6500)return "#fff2d2";if(t<9000)return "#eef4ff";return "#cfe1ff";
+}
+async function loadBrightStars(){
+ try{
+  const res=await fetch("./data/bright-stars.json?v=1",{cache:"force-cache"});
+  if(!res.ok)throw new Error("stars "+res.status);
+  const data=await res.json();
+  brightStars=(Array.isArray(data.stars)?data.stars:[]).map(s=>({
+   id:s.id,kind:"STAR",name:s.name,ra:Number(s.ra),dec:Number(s.dec),mag:Number(s.mag),
+   color:starColor(s.temp),distance:"—",detail:s.designation||"Bright star",
+   fact:"A real star from the Yale Bright Star Catalog."
+  })).filter(s=>Number.isFinite(s.ra)&&Number.isFinite(s.dec)&&Number.isFinite(s.mag));
+ }catch(e){console.warn("ALEN bright-star catalogue unavailable",e)}
+}
+function orbitalEccentricAnomaly(Mdeg,e){
+ const M=norm360(Mdeg)*DEG;let E=M+e*Math.sin(M)*(1+e*Math.cos(M));
+ for(let i=0;i<6;i++)E-=(E-e*Math.sin(E)-M)/(1-e*Math.cos(E));
+ return E;
+}
+function orbitalPosition(elements,d){
+ const N=(elements.N0+elements.Nd*d)*DEG,i=(elements.i0+elements.id*d)*DEG,w=(elements.w0+elements.wd*d)*DEG;
+ const a=elements.a0+elements.ad*d,e=elements.e0+elements.ed*d,M=elements.M0+elements.Md*d;
+ const E=orbitalEccentricAnomaly(M,e),xv=a*(Math.cos(E)-e),yv=a*Math.sqrt(1-e*e)*Math.sin(E);
+ const v=Math.atan2(yv,xv),r=Math.hypot(xv,yv),u=v+w;
+ return{
+  x:r*(Math.cos(N)*Math.cos(u)-Math.sin(N)*Math.sin(u)*Math.cos(i)),
+  y:r*(Math.sin(N)*Math.cos(u)+Math.cos(N)*Math.sin(u)*Math.cos(i)),
+  z:r*(Math.sin(u)*Math.sin(i))
+ };
+}
+function eclipticToRaDec(x,y,z,d){
+ const ecl=(23.4393-3.563e-7*d)*DEG;
+ const ye=y*Math.cos(ecl)-z*Math.sin(ecl),ze=y*Math.sin(ecl)+z*Math.cos(ecl);
+ return{ra:norm360(Math.atan2(ye,x)*RAD),dec:Math.atan2(ze,Math.hypot(x,ye))*RAD};
+}
+function solarSystemRaDec(ms){
+ const d=toJulian(ms)-2451543.5;
+ const sunW=282.9404+4.70935e-5*d,sunE=.016709-1.151e-9*d,sunM=356.0470+.9856002585*d;
+ const sunEA=orbitalEccentricAnomaly(sunM,sunE),sunXv=Math.cos(sunEA)-sunE,sunYv=Math.sqrt(1-sunE*sunE)*Math.sin(sunEA);
+ const sunV=Math.atan2(sunYv,sunXv),sunR=Math.hypot(sunXv,sunYv),sunLon=sunV+sunW*DEG;
+ const sx=sunR*Math.cos(sunLon),sy=sunR*Math.sin(sunLon);
+ const elements={
+  mercury:{N0:48.3313,Nd:3.24587e-5,i0:7.0047,id:5e-8,w0:29.1241,wd:1.01444e-5,a0:.387098,ad:0,e0:.205635,ed:5.59e-10,M0:168.6562,Md:4.0923344368},
+  venus:{N0:76.6799,Nd:2.4659e-5,i0:3.3946,id:2.75e-8,w0:54.891,wd:1.38374e-5,a0:.72333,ad:0,e0:.006773,ed:-1.302e-9,M0:48.0052,Md:1.6021302244},
+  mars:{N0:49.5574,Nd:2.11081e-5,i0:1.8497,id:-1.78e-8,w0:286.5016,wd:2.92961e-5,a0:1.523688,ad:0,e0:.093405,ed:2.516e-9,M0:18.6021,Md:.5240207766},
+  jupiter:{N0:100.4542,Nd:2.76854e-5,i0:1.303,id:-1.557e-7,w0:273.8777,wd:1.64505e-5,a0:5.20256,ad:0,e0:.048498,ed:4.469e-9,M0:19.895,Md:.0830853001},
+  saturn:{N0:113.6634,Nd:2.3898e-5,i0:2.4886,id:-1.081e-7,w0:339.3939,wd:2.97661e-5,a0:9.55475,ad:0,e0:.055546,ed:-9.499e-9,M0:316.967,Md:.0334442282},
+  uranus:{N0:74.0005,Nd:1.3978e-5,i0:.7733,id:1.9e-8,w0:96.6612,wd:3.0565e-5,a0:19.18171,ad:-1.55e-8,e0:.047318,ed:7.45e-9,M0:142.5905,Md:.011725806},
+  neptune:{N0:131.7806,Nd:3.0173e-5,i0:1.77,id:-2.55e-7,w0:272.8461,wd:-6.027e-6,a0:30.05826,ad:3.313e-8,e0:.008606,ed:2.15e-9,M0:260.2471,Md:.005995147}
+ };
+ const out={sun:eclipticToRaDec(sx,sy,0,d)};
+ for(const [key,el] of Object.entries(elements)){const p=orbitalPosition(el,d);out[key]=eclipticToRaDec(p.x+sx,p.y+sy,p.z,d)}
+ const moonEl={N0:125.1228,Nd:-.0529538083,i0:5.1454,id:0,w0:318.0634,wd:.1643573223,a0:60.2666,ad:0,e0:.0549,ed:0,M0:115.3654,Md:13.0649929509};
+ const m=orbitalPosition(moonEl,d);out.moon=eclipticToRaDec(m.x,m.y,m.z,d);
+ return out;
+}
+function currentPlanetObjects(ms){
+ if(!observer||!layers.planets)return[];
+ const positions=solarSystemRaDec(ms);
+ return Object.entries(positions).map(([id,p])=>{
+  const info=PLANET_INFO[id],altaz=raDecToAltAz(p.ra,p.dec,ms);if(!info||!altaz)return null;
+  return{id:"planet:"+id,kind:"PLANET",name:info.name,ra:p.ra,dec:p.dec,az:altaz.az,el:altaz.el,
+   color:info.color,symbol:info.symbol,detail:info.detail,fact:info.fact};
+ }).filter(Boolean);
+}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function norm360(v){v%=360;return v<0?v+360:v}
 function adiff(a,b){return ((a-b+540)%360)-180}
@@ -286,42 +364,6 @@ function airportDisplayObject(a){
  return{...a,el:terrainHorizonElevation(a.az)+.75};
 }
 
-function parseEpoch(s){const t=Date.parse(s);return Number.isFinite(t)?t:Date.now()}
-function solveKepler(M,e){
- let E=M;
- for(let i=0;i<7;i++)E-= (E-e*Math.sin(E)-M)/(1-e*Math.cos(E));
- return E;
-}
-function satelliteEci(el,ms){
- const nRev=Number(el.MEAN_MOTION),e=Number(el.ECCENTRICITY),inc=Number(el.INCLINATION)*DEG;
- const raan=Number(el.RA_OF_ASC_NODE)*DEG,arg=Number(el.ARG_OF_PERICENTER)*DEG;
- if(![nRev,e,inc,raan,arg].every(Number.isFinite)||nRev<=0)return null;
- const n=nRev*2*Math.PI/86400,a=Math.cbrt(MU/(n*n));
- const M0=Number(el.MEAN_ANOMALY)*DEG,dt=(ms-parseEpoch(el.EPOCH))/1000,M=(M0+n*dt)%(2*Math.PI);
- const E=solveKepler(M,e),nu=2*Math.atan2(Math.sqrt(1+e)*Math.sin(E/2),Math.sqrt(1-e)*Math.cos(E/2));
- const r=a*(1-e*Math.cos(E)),u=arg+nu;
- const cu=Math.cos(u),su=Math.sin(u),co=Math.cos(raan),so=Math.sin(raan),ci=Math.cos(inc),si=Math.sin(inc);
- return{x:r*(co*cu-so*su*ci),y:r*(so*cu+co*su*ci),z:r*(su*si)};
-}
-function eciToEcef(v,ms){
- const g=gmstDeg(ms)*DEG,c=Math.cos(g),s=Math.sin(g);
- return{x:c*v.x+s*v.y,y:-s*v.x+c*v.y,z:v.z};
-}
-function observerEcef(){
- const lat=observer.lat*DEG,lon=observer.lon*DEG,r=EARTH_KM+(observer.altM||0)/1000;
- return{x:r*Math.cos(lat)*Math.cos(lon),y:r*Math.cos(lat)*Math.sin(lon),z:r*Math.sin(lat)};
-}
-function satelliteAltAz(el,ms){
- if(!observer)return null;
- const eci=satelliteEci(el,ms);if(!eci)return null;
- const sat=eciToEcef(eci,ms),obs=observerEcef(),dx=sat.x-obs.x,dy=sat.y-obs.y,dz=sat.z-obs.z;
- const lat=observer.lat*DEG,lon=observer.lon*DEG;
- const east=-Math.sin(lon)*dx+Math.cos(lon)*dy;
- const north=-Math.sin(lat)*Math.cos(lon)*dx-Math.sin(lat)*Math.sin(lon)*dy+Math.cos(lat)*dz;
- const up=Math.cos(lat)*Math.cos(lon)*dx+Math.cos(lat)*Math.sin(lon)*dy+Math.sin(lat)*dz;
- const range=Math.sqrt(east*east+north*north+up*up);
- return{az:norm360(Math.atan2(east,north)*RAD),el:Math.asin(clamp(up/range,-1,1))*RAD,rangeKm:range};
-}
 function satelliteGroupEntries(){
  return Object.entries(SATELLITE_GROUPS);
 }
@@ -331,65 +373,40 @@ function activeSatelliteGroups(){
 function satellitePrimaryGroup(memberships){
  return memberships.map(key=>[key,SATELLITE_GROUPS[key]]).filter(([,g])=>g?.enabled).sort((a,b)=>b[1].priority-a[1].priority)[0]?.[0]||"bright";
 }
-async function fetchSatelliteSource(source,limit,force){
- const cacheKey=source;
- const cached=satelliteGroupCache.get(cacheKey);
- if(!force&&cached&&Date.now()-cached.updated<2*60*60*1000)return cached.data;
- const res=await fetch(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(source)}&FORMAT=json`,{mode:"cors",cache:"no-store",credentials:"omit"});
- if(!res.ok)throw new Error("satellites "+source+" "+res.status);
- const raw=await res.json();
- const data=Array.isArray(raw)?raw.slice(0,limit):[];
- satelliteGroupCache.set(cacheKey,{updated:Date.now(),data});
- return data;
-}
-function rebuildSatelliteElements(){
- const merged=new Map();
- for(const [key,group] of activeSatelliteGroups()){
-  for(const source of group.sources){
-   const cached=satelliteGroupCache.get(source)?.data||[];
-   for(const el of cached){
-    const id=String(el.NORAD_CAT_ID||el.OBJECT_ID||el.OBJECT_NAME||"").trim();if(!id)continue;
-    const prior=merged.get(id);
-    if(prior){prior.memberships.add(key);continue}
-    merged.set(id,{...el,memberships:new Set([key])});
-   }
-  }
- }
- satelliteElements=[...merged.values()].map(el=>({...el,memberships:[...el.memberships]}));
+function logicalSatelliteMemberships(sourceGroups){
+ const sourceSet=new Set(sourceGroups||[]),memberships=[];
+ for(const [key,group] of satelliteGroupEntries())if(group.sources.some(source=>sourceSet.has(source)))memberships.push(key);
+ return memberships;
 }
 async function refreshSatellites(force=false){
- if(!layers.satellites)return;
- if(!force&&Date.now()-satellitesUpdated<15*60*1000)return;
+ if(!observer||!layers.satellites)return;
+ if(!force&&Date.now()-satellitesUpdated<8000)return;
  satellitesUpdated=Date.now();
  try{
-  const work=[];
-  for(const [,group] of activeSatelliteGroups()){
-   for(const source of group.sources)work.push(fetchSatelliteSource(source,group.limit,force));
-  }
-  await Promise.all(work);
-  rebuildSatelliteElements();
- }catch(e){console.warn("ALEN satellite feed unavailable",e)}
+  const sources=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))];
+  if(!sources.length){satellites=[];setLiveStatus();return}
+  const qs=new URLSearchParams({
+   lat:String(observer.lat),lon:String(observer.lon),altitude_m:String(observer.altM||0),
+   groups:sources.join(","),limit:"320"
+  });
+  const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
+  if(!res.ok)throw new Error("satellites "+res.status);
+  const data=await res.json();
+  satellites=(Array.isArray(data.satellites)?data.satellites:[]).map(s=>{
+   const memberships=logicalSatelliteMemberships(s.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
+   return{id:"sat:"+s.norad,kind:"SATELLITE",name:s.name||("NORAD "+s.norad),az:Number(s.azimuth_deg),el:Number(s.elevation_deg),
+    rangeKm:Number(s.range_km),detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
+    norad:String(s.norad||"—"),objectId:s.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")};
+  }).filter(s=>Number.isFinite(s.az)&&Number.isFinite(s.el)&&s.el>=0);
+ }catch(e){satellites=[];console.warn("ALEN satellite feed unavailable",e)}
  setLiveStatus();
 }
-function stepSatellites(ms){
- if(!observer||!layers.satellites){satellites=[];return}
- if(ms-lastSatelliteStep<350)return;
- lastSatelliteStep=ms;
- satellites=satelliteElements.map(el=>{
-   const p=satelliteAltAz(el,ms);if(!p||p.el<0)return null;
-   const group=satellitePrimaryGroup(el.memberships||[]),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
-   return{
-    id:String(el.NORAD_CAT_ID||el.OBJECT_ID||el.OBJECT_NAME),kind:"SATELLITE",name:el.OBJECT_NAME||"Satellite",
-    az:p.az,el:p.el,rangeKm:p.rangeKm,detail:"CelesTrak live orbital elements",group,groupLabel:style.label,
-    color:style.color,glyph:style.glyph,norad:String(el.NORAD_CAT_ID||"—"),objectId:el.OBJECT_ID||"—",
-    memberships:el.memberships||[],isNew:(el.memberships||[]).includes("new"),isDebris:(el.memberships||[]).includes("debris")
-   };
- }).filter(Boolean).sort((a,b)=>b.el-a.el).slice(0,260);
-}
+function stepSatellites(_ms){}
 
 function currentSkyObjects(ms){
  if(!observer)return[];
- return SKY_OBJECTS.map(o=>{
+ const catalogue=brightStars.length?brightStars:SKY_OBJECTS;
+ return catalogue.map(o=>{
    const p=raDecToAltAz(o.ra,o.dec,ms);
    return p?{...o,az:p.az,el:p.el}:null;
  }).filter(Boolean);
@@ -451,6 +468,16 @@ function draw(){
    if(o.mag<.5||isSelected){ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2)}
   }
  }
+ if(layers.planets){
+  for(const o of currentPlanetObjects(simTime)){
+   if(o.el<0)continue;const p=project(o.az,o.el);if(!p)continue;const active=selected?.id===o.id;
+   const size=o.name==="Sun"?25:o.name==="Moon"?22:15;
+   ctx.fillStyle=o.color;ctx.font=`${active?"700 ":""}${size}px system-ui`;ctx.textAlign="center";ctx.textBaseline="middle";
+   ctx.fillText(o.symbol,p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
+   if(active){ctx.strokeStyle=o.color;ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],size*.72,0,Math.PI*2);ctx.stroke()}
+   ctx.fillStyle="rgba(238,248,255,.88)";ctx.font="10px ui-monospace";ctx.fillText(o.name,p[0]+size*.55,p[1]-size*.45);
+  }
+ }
  if(layers.airports){
   for(const raw of airports){
    const a=airportDisplayObject(raw),p=project(a.az,a.el);if(!p)continue;
@@ -490,7 +517,8 @@ function allSelectableObjects(){
  const stars=currentSkyObjects(simTime).filter(o=>o.el>=0);
  const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?{...a,az:p.az,el:p.el}:null}).filter(Boolean);
  const aps=layers.airports?airports.map(airportDisplayObject):[];
- return [...stars,...aps,...ac,...satellites];
+ const planets=currentPlanetObjects(simTime).filter(o=>o.el>=0);
+ return [...stars,...planets,...aps,...ac,...satellites];
 }
 function nearestObject(x,y){
  let best=null,bestD=Infinity;
@@ -504,6 +532,7 @@ function objectVisualSvg(o){
  if(o.kind==="AIRCRAFT"){symbol="✈";sub=escapeSvgText(o.registration||o.type||"Live aircraft")}
  else if(o.kind==="SATELLITE"){symbol=escapeSvgText(o.glyph||"◈");sub=escapeSvgText((o.groupLabel||"Orbital object")+(o.isNew?" · NEW":"")+(o.isDebris?" · DEBRIS":""))}
  else if(o.kind==="AIRPORT"){symbol="△";sub=escapeSvgText((o.iata||o.icao||"Airport")+" · "+Math.round(o.distanceKm)+" km")}
+ else if(o.kind==="PLANET"){symbol=escapeSvgText(o.symbol||"●");sub=escapeSvgText(o.detail||"Solar System object")}
  else{sub=escapeSvgText(o.detail||"Astronomical object")}
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#071522"/><stop offset="1" stop-color="#010308"/></linearGradient><radialGradient id="r"><stop offset="0" stop-color="#123044"/><stop offset="1" stop-color="#010308"/></radialGradient></defs><rect width="720" height="360" fill="url(#g)"/><circle cx="360" cy="170" r="112" fill="url(#r)" stroke="#1d526a"/><text x="360" y="205" text-anchor="middle" font-family="system-ui,sans-serif" font-size="96" fill="#9feaff">${symbol}</text><text x="28" y="302" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#eef8ff">${title}</text><text x="28" y="331" font-family="system-ui,sans-serif" font-size="15" fill="#88a4b5">${kind} · ${sub}</text></svg>`;
  return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
@@ -529,6 +558,7 @@ function showObject(o){
  if(o.kind==="AIRCRAFT")rows=[["Type",o.type],["Registration",o.registration],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
+ else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"]];
  else rows=[["Type",o.detail],["Distance",o.distance],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Magnitude",String(o.mag)]];
  for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;details.append(dt,dd)}
  inspector.hidden=false;
@@ -602,7 +632,7 @@ function tick(now){
  stepAircraft(now);stepSatellites(simTime);draw();requestAnimationFrame(tick);
 }
 aircraftTimer=setInterval(()=>refreshAircraft(false),3000);
-satelliteTimer=setInterval(()=>refreshSatellites(false),15*60*1000);
+satelliteTimer=setInterval(()=>refreshSatellites(false),10000);
 window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);clearInterval(satelliteTimer)});
-setLiveStatus();requestLocation();requestAnimationFrame(tick);
+loadBrightStars();setLiveStatus();requestLocation();requestAnimationFrame(tick);
 })();
