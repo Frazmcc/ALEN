@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#02050a">
   <meta name="description" content="ALEN — Astronomical Live Environment & Navigation">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.adsb.lol https://celestrak.org https://www.celestrak.org https://s3.amazonaws.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.adsb.lol https://celestrak.org https://www.celestrak.org https://s3.amazonaws.com https://alen-api.onrender.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
   <title>ALEN — Astronomical Live Environment & Navigation</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./assets/alen-logo.png?v=2">
   <link rel="apple-touch-icon" href="./assets/alen-logo.png?v=2">
-  <link rel="stylesheet" href="./styles.css?v=0.5.0">
+  <link rel="stylesheet" href="./styles.css?v=0.6.0">
 </head>
 <body>
   <main class="sky-shell">
@@ -24,7 +24,7 @@
 
       <div class="search-wrap">
         <label class="sr-only" for="sky-search">Search the live sky</label>
-        <input id="sky-search" type="search" placeholder="Search stars, aircraft, satellites…" autocomplete="off">
+        <input id="sky-search" type="search" placeholder="Search stars, airports, aircraft, satellites…" autocomplete="off">
         <div id="search-results" class="search-results" hidden></div>
       </div>
 
@@ -39,7 +39,7 @@
       <button id="inspector-close" type="button" class="close" aria-label="Close object details">×</button>
       <p id="inspector-kind" class="eyebrow">OBJECT</p>
       <h2 id="inspector-name">—</h2>
-      <div id="inspector-visual" class="inspector-visual" aria-hidden="true"></div>
+      <figure id="inspector-media" class="inspector-media"><img id="inspector-image" alt="" decoding="async"><figcaption id="inspector-image-credit"></figcaption></figure>
       <dl id="inspector-details"></dl>
       <section class="facts"><h3>About</h3><p id="inspector-fact"></p></section>
     </aside>
@@ -50,6 +50,7 @@
       <button type="button" data-layer="planets" aria-pressed="true">Planets</button>
       <button type="button" data-layer="atmosphere" aria-pressed="true">Atmosphere</button>
       <button type="button" data-layer="landscape" aria-pressed="true">Landscape</button>
+      <button type="button" data-layer="airports" aria-pressed="true">Airports</button>
       <button type="button" data-layer="aircraft" aria-pressed="true">Aircraft</button>
       <button type="button" data-layer="satellites" aria-pressed="true">Satellites</button>
     </nav>
@@ -60,6 +61,6 @@
     </div>
     <p class="hint">Live from your location · horizon is the lowest view · drag to look around · wheel to zoom</p>
   </main>
-  <script src="./app.js?v=0.5.0"></script>
+  <script src="./app.js?v=0.6.0"></script>
 </body>
 </html>
