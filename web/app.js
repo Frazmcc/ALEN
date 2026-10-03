@@ -16,12 +16,12 @@ const locationEl=document.querySelector("#location-status");
 const liveEl=document.querySelector("#live-status");
 
 const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
-let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
+let width=1,height=1,dpr=1,yaw=180,pitch=30,fov=92,drag=null,selected=null;
 let simTime=Date.now(),timeRate=1,running=true,lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[];
 let aircraftUpdated=0,satellitesUpdated=0;
-const layers={stars:true,constellations:true,planets:true,atmosphere:true,aircraft:true,satellites:true};
+const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,aircraft:true,satellites:true};
 
 const STAR_CATALOG=[
 {id:"vega",kind:"STAR",name:"Vega",ra:279.23473479,dec:38.78368896,mag:.03,color:"#dcecff",distance:"25.0 ly",detail:"A0 V",fact:"Vega is a rapidly rotating A-type star and one of the brightest stars in the northern sky."},
@@ -66,18 +66,16 @@ function raDecToAltAz(ra,dec,ms){
 function horizonBottomGap(){
  return width<=900?124:72;
 }
-function updateMinPitch(){
+function startupPitch(){
  const vfov=fov*height/Math.max(width,1);
  const targetY=Math.max(0,height-horizonBottomGap());
- minPitch=((targetY/height)-.55)/.82*vfov;
+ return ((targetY/height)-.55)/.82*vfov;
 }
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
  width=Math.max(1,canvas.clientWidth);height=Math.max(1,canvas.clientHeight);
  canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
  ctx.setTransform(dpr,0,0,dpr,0,0);
- updateMinPitch();
- pitch=Math.max(pitch,minPitch);
 }
 new ResizeObserver(resize).observe(canvas);resize();
 
@@ -117,7 +115,7 @@ function onLocation(pos){
  setLocationStatus(observerLabel(),"ok");
  if(first){
    yaw=observer.lat>=0?180:0;
-   pitch=minPitch;
+   pitch=startupPitch();
    refreshAircraft(true);
    refreshSatellites(true);
  }
@@ -242,15 +240,45 @@ function currentSkyObjects(ms){
    return p?{...o,az:p.az,el:p.el}:null;
  }).filter(Boolean);
 }
+function screenYForElevation(el){
+ const vfov=fov*height/Math.max(width,1);
+ return height*.55-(el-pitch)/vfov*height*.82;
+}
+function terrainElevation(az,layer){
+ const r=az*DEG;
+ if(layer===0)return 1.4+1.1*Math.sin(r*1.7)+.7*Math.sin(r*4.3+1.2)+.35*Math.sin(r*9.1);
+ return 2.1+1.7*Math.sin(r*1.25+.7)+1.0*Math.sin(r*3.7+2.2)+.45*Math.sin(r*8.4+.4);
+}
+function drawLandscapeLayer(layer,fill){
+ ctx.beginPath();
+ let first=true;
+ const step=4;
+ for(let x=-step;x<=width+step;x+=step){
+   const az=norm360(yaw+(x-width*.5)/width*fov);
+   let el=terrainElevation(az,layer);
+   if(layer===1){
+     const treeWave=Math.sin(az*DEG*13.7)+Math.sin(az*DEG*21.3+.9);
+     if(treeWave>1.55)el+=2.2+(treeWave-1.55)*4.5;
+   }
+   const y=screenYForElevation(el);
+   if(first){ctx.moveTo(x,y);first=false}else ctx.lineTo(x,y);
+ }
+ ctx.lineTo(width+step,height+2);ctx.lineTo(-step,height+2);ctx.closePath();
+ ctx.fillStyle=fill;ctx.fill();
+}
 function drawHorizon(){
- const p=project(yaw,0),horizonY=p?.[1]??height;
+ const horizonY=screenYForElevation(0);
  if(layers.atmosphere){
-  const glow=ctx.createLinearGradient(0,Math.max(0,horizonY-120),0,Math.min(height,horizonY+20));
-  glow.addColorStop(0,"rgba(60,120,160,0)");glow.addColorStop(.72,"rgba(65,125,165,.12)");glow.addColorStop(1,"rgba(0,0,0,.22)");
-  ctx.fillStyle=glow;ctx.fillRect(0,Math.max(0,horizonY-120),width,Math.min(140,height));
+  const glow=ctx.createLinearGradient(0,Math.max(0,horizonY-120),0,Math.min(height,horizonY+28));
+  glow.addColorStop(0,"rgba(60,120,160,0)");glow.addColorStop(.72,"rgba(65,125,165,.12)");glow.addColorStop(1,"rgba(0,0,0,.28)");
+  ctx.fillStyle=glow;ctx.fillRect(0,Math.max(0,horizonY-120),width,Math.min(148,height));
+ }
+ if(layers.landscape&&horizonY<height+180){
+   drawLandscapeLayer(0,"rgba(8,14,18,.90)");
+   drawLandscapeLayer(1,"rgba(2,5,7,.98)");
  }
  if(horizonY>=0&&horizonY<=height){
-   ctx.strokeStyle="rgba(190,225,240,.24)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,horizonY);ctx.lineTo(width,horizonY);ctx.stroke();
+   ctx.strokeStyle="rgba(190,225,240,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,horizonY);ctx.lineTo(width,horizonY);ctx.stroke();
  }
 }
 function draw(){
@@ -335,7 +363,7 @@ canvas.addEventListener("pointerdown",e=>{canvas.setPointerCapture(e.pointerId);
 canvas.addEventListener("pointermove",e=>{
  if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>3)drag.moved=true;
  yaw=norm360(drag.yaw-dx/width*fov);
- pitch=clamp(drag.pitch+dy/height*fov*.55,minPitch,88);
+ pitch=clamp(drag.pitch+dy/height*fov*.62,-75,89);
 });
 canvas.addEventListener("pointerup",e=>{
  if(!drag)return;const moved=drag.moved;drag=null;try{canvas.releasePointerCapture(e.pointerId)}catch{}
@@ -344,9 +372,17 @@ canvas.addEventListener("pointerup",e=>{
 });
 canvas.addEventListener("wheel",e=>{
  e.preventDefault();fov=clamp(fov*(e.deltaY<0?.88:1.12),18,130);
- updateMinPitch();pitch=Math.max(pitch,minPitch);
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
+canvas.addEventListener("keydown",e=>{
+ if(!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key))return;
+ e.preventDefault();
+ const step=Math.max(1.5,fov*.035);
+ if(e.key==="ArrowLeft")yaw=norm360(yaw-step);
+ if(e.key==="ArrowRight")yaw=norm360(yaw+step);
+ if(e.key==="ArrowUp")pitch=clamp(pitch+step,-75,89);
+ if(e.key==="ArrowDown")pitch=clamp(pitch-step,-75,89);
+});
 
 document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
  const key=btn.dataset.layer;layers[key]=!layers[key];btn.setAttribute("aria-pressed",String(layers[key]));
@@ -361,7 +397,7 @@ function renderSearch(){
  searchResults.replaceChildren(...matches.map(o=>{
   const b=document.createElement("button");b.type="button";
   const n=document.createElement("span");n.textContent=o.name;const k=document.createElement("small");k.textContent=o.kind;b.append(n,k);
-  b.addEventListener("click",()=>{yaw=o.az;pitch=Math.max(minPitch,o.el);showObject(o);searchInput.value="";searchResults.hidden=true;});return b;
+  b.addEventListener("click",()=>{yaw=o.az;pitch=clamp(o.el,-75,89);showObject(o);searchInput.value="";searchResults.hidden=true;});return b;
  }));
  searchResults.hidden=!matches.length;
 }

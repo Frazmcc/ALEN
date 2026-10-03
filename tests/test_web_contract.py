@@ -49,9 +49,14 @@ def test_live_location_and_horizon_contract() -> None:
     assert 'id="location-status"' in HTML
     assert "function horizonBottomGap()" in APP
     assert "return width<=900?124:72" in APP
-    assert "function updateMinPitch()" in APP
-    assert "pitch=minPitch" in APP
-    assert "pitch=clamp(drag.pitch+dy/height*fov*.55,minPitch,88)" in APP
+    assert "function startupPitch()" in APP
+    assert "pitch=startupPitch()" in APP
+    assert "pitch=clamp(drag.pitch+dy/height*fov*.62,-75,89)" in APP
+    assert "function drawLandscapeLayer" in APP
+    assert "function terrainElevation" in APP
+    assert 'data-layer="landscape" aria-pressed="true"' in HTML
+    assert 'tabindex="0"' in HTML
+    assert 'canvas.addEventListener("keydown"' in APP
 
 
 def test_live_aircraft_and_satellite_contract() -> None:
