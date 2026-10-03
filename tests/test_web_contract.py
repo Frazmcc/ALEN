@@ -15,6 +15,7 @@ def test_web_identity_and_security_contract() -> None:
         "connect-src 'self'",
         "https://api.adsb.lol",
         "https://celestrak.org",
+        "https://s3.amazonaws.com",
         "img-src 'self' data:",
         "object-src 'none'",
         "base-uri 'none'",
@@ -53,7 +54,10 @@ def test_live_location_and_horizon_contract() -> None:
     assert "pitch=minPitch" in APP
     assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
     assert "function drawLandscapeLayer" in APP
-    assert "function terrainElevation" in APP
+    assert "function terrainElevationAt" in APP
+    assert "function refreshTerrainProfile" in APP
+    assert "function terrainHorizonElevation" in APP
+    assert "elevation-tiles-prod/terrarium" in APP
     assert 'data-layer="landscape" aria-pressed="true"' in HTML
     assert 'tabindex="0"' in HTML
     assert 'canvas.addEventListener("keydown"' in APP
