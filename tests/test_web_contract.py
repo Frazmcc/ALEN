@@ -16,7 +16,7 @@ def test_web_identity_and_security_contract() -> None:
         "https://api.adsb.lol",
         "https://celestrak.org",
         "https://s3.amazonaws.com",
-        "https://alen-api.onrender.com",
+        "https://alen-api-lquw.onrender.com",
         "img-src 'self' data:",
         "object-src 'none'",
         "base-uri 'none'",
@@ -86,7 +86,7 @@ def test_airports_are_clickable_selectable_objects_with_media() -> None:
     assert 'id="inspector-media"' in HTML
     assert 'id="inspector-image"' in HTML
     assert 'id="inspector-image-credit"' in HTML
-    assert 'const API_BASE="https://alen-api.onrender.com"' in APP
+    assert 'const API_BASE="https://alen-api-lquw.onrender.com"' in APP
     assert 'kind:"AIRPORT"' in APP
     assert "function refreshAirports()" in APP
     assert "function airportDisplayObject" in APP
