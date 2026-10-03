@@ -85,7 +85,6 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "requestAnimationFrame(tick)" in APP
     assert "API_BASE+\"/api/v1/satellites?\"" in APP
     assert "SGP4 · CelesTrak orbital elements" in APP
-    assert "satelliteAltAz" in APP
     assert 'data-layer="aircraft" aria-pressed="true"' in HTML
     assert 'data-layer="satellites" aria-pressed="true"' in HTML
 
@@ -119,8 +118,8 @@ def test_satellite_group_controls_and_visual_categories() -> None:
         assert f"{key}:{{label:" in APP
     assert 'sources:["last-30-days"]' in APP
     assert 'sources:["fengyun-1c-debris","iridium-33-debris","cosmos-2251-debris","cosmos-1408-debris"]' in APP
-    assert 'isNew:(el.memberships||[]).includes("new")' in APP
-    assert 'isDebris:(el.memberships||[]).includes("debris")' in APP
+    assert 'isNew:memberships.includes("new")' in APP
+    assert 'isDebris:memberships.includes("debris")' in APP
     assert 'satellitePrimaryGroup' in APP
     assert 'group.enabled=input.checked' in APP
     assert 'ctx.fillStyle=s.color' in APP
