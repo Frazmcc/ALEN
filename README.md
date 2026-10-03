@@ -9,7 +9,7 @@ ALEN is a browser-first immersive live-sky website for exploring the night sky, 
 - **One selected object at a time** — select, inspect, deselect naturally.
 - **Live + astronomical data** — stars, planets, satellites and aircraft share one visual environment.
 - **Modular data sources** — public astronomy data can be added without coupling the renderer to one provider.
-- **Independent implementation** — ALEN does not embed the Stellarium Web Engine.
+- **Independent implementation** — ALEN uses its own rendering and data architecture.
 
 ## Status
 

@@ -36,4 +36,12 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert 'class="brand-mark"' in HTML
     assert 'rel="icon"' in HTML
     assert 'rel="apple-touch-icon"' in HTML
-    assert HTML.count("data:image/png;base64,") >= 3
+    assert "./assets/alen-logo.png?v=2" in HTML
+    assert Path("web/assets/alen-logo.png").is_file()
+    assert "data:image/png;base64," not in HTML
+
+
+def test_docs_do_not_reference_external_comparison_project() -> None:
+    forbidden = "stel" + "larium"
+    for path in Path(".").rglob("*.md"):
+        assert forbidden not in path.read_text(encoding="utf-8").lower()
