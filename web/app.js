@@ -19,6 +19,8 @@ let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[];
 let aircraftUpdated=0,satellitesUpdated=0;
+let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
+const terrainTileCache=new Map();
 const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,aircraft:true,satellites:true};
 
 const STAR_CATALOG=[
@@ -85,6 +87,72 @@ function project(az,el){
  return[width*.5+dx/fov*width,height*.55-dy/vfov*height*.82];
 }
 
+function latLonToTilePixel(lat,lon,z=9){
+ const n=2**z,latRad=clamp(lat,-85.05112878,85.05112878)*DEG;
+ const tx=(lon+180)/360*n;
+ const ty=(1-Math.asinh(Math.tan(latRad))/Math.PI)/2*n;
+ const x=Math.floor(tx),y=Math.floor(ty);
+ return{x,y,px:clamp(Math.floor((tx-x)*256),0,255),py:clamp(Math.floor((ty-y)*256),0,255),z};
+}
+function terrainTileKey(x,y,z){return `${z}/${x}/${y}`}
+function loadTerrainTile(x,y,z){
+ const key=terrainTileKey(x,y,z);
+ if(terrainTileCache.has(key))return terrainTileCache.get(key);
+ const promise=fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,{mode:"cors",cache:"force-cache",credentials:"omit"})
+  .then(res=>{if(!res.ok)throw new Error("terrain "+res.status);return res.blob()})
+  .then(createImageBitmap)
+  .then(bitmap=>{
+    const off=document.createElement("canvas");off.width=256;off.height=256;
+    const ox=off.getContext("2d",{willReadFrequently:true});ox.drawImage(bitmap,0,0,256,256);
+    if(typeof bitmap.close==="function")bitmap.close();
+    return ox.getImageData(0,0,256,256).data;
+  });
+ terrainTileCache.set(key,promise);
+ return promise;
+}
+async function terrainElevationAt(lat,lon,z=9){
+ const p=latLonToTilePixel(lat,lon,z),data=await loadTerrainTile(p.x,p.y,p.z);
+ const i=(p.py*256+p.px)*4;
+ return data[i]*256+data[i+1]+data[i+2]/256-32768;
+}
+function destinationPoint(lat,lon,bearingDeg,distanceKm){
+ const d=distanceKm/EARTH_KM,b=bearingDeg*DEG,p1=lat*DEG,l1=lon*DEG;
+ const p2=Math.asin(Math.sin(p1)*Math.cos(d)+Math.cos(p1)*Math.sin(d)*Math.cos(b));
+ const l2=l1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(p1),Math.cos(d)-Math.sin(p1)*Math.sin(p2));
+ return{lat:p2*RAD,lon:((l2*RAD+540)%360)-180};
+}
+async function refreshTerrainProfile(){
+ if(!observer)return;
+ const token=++terrainLoadToken;
+ try{
+   const z=9,azStep=5,distances=[.5,1,2,4,8,16,32,48];
+   const obsElev=await terrainElevationAt(observer.lat,observer.lon,z);
+   const bearings=Array.from({length:Math.ceil(360/azStep)},(_,i)=>i*azStep);
+   const profile=await Promise.all(bearings.map(async az=>{
+     let best=0;
+     for(const distanceKm of distances){
+       const p=destinationPoint(observer.lat,observer.lon,az,distanceKm);
+       const elev=await terrainElevationAt(p.lat,p.lon,z);
+       const curvature=(distanceKm*distanceKm)/(2*EARTH_KM)*1000;
+       const angle=Math.atan2(elev-obsElev-curvature,distanceKm*1000)*RAD;
+       if(Number.isFinite(angle))best=Math.max(best,angle);
+     }
+     return{az,el:clamp(best,0,18)};
+   }));
+   if(token!==terrainLoadToken)return;
+   terrainObserverElevation=obsElev;
+   terrainProfile=profile;
+ }catch(e){
+   if(token===terrainLoadToken){terrainProfile=null;console.warn("ALEN terrain skyline unavailable",e)}
+ }
+}
+function terrainHorizonElevation(az){
+ if(!terrainProfile?.length)return 0;
+ const step=360/terrainProfile.length,pos=norm360(az)/step,i=Math.floor(pos)%terrainProfile.length,f=pos-Math.floor(pos);
+ const a=terrainProfile[i].el,b=terrainProfile[(i+1)%terrainProfile.length].el;
+ return a+(b-a)*f;
+}
+
 function observerLabel(){
  if(!observer)return "LOCATION REQUIRED";
  const acc=Number.isFinite(observer.accuracy)?` ±${Math.round(observer.accuracy)}m`:"";
@@ -118,6 +186,7 @@ function onLocation(pos){
    pitch=minPitch;
    refreshAircraft(true);
    refreshSatellites(true);
+   refreshTerrainProfile();
  }
  setLiveStatus();
 }
@@ -244,22 +313,13 @@ function screenYForElevation(el){
  const vfov=fov*height/Math.max(width,1);
  return height*.55-(el-pitch)/vfov*height*.82;
 }
-function terrainElevation(az,layer){
- const r=az*DEG;
- if(layer===0)return 1.4+1.1*Math.sin(r*1.7)+.7*Math.sin(r*4.3+1.2)+.35*Math.sin(r*9.1);
- return 2.1+1.7*Math.sin(r*1.25+.7)+1.0*Math.sin(r*3.7+2.2)+.45*Math.sin(r*8.4+.4);
-}
-function drawLandscapeLayer(layer,fill){
+function drawLandscapeLayer(fill){
  ctx.beginPath();
  let first=true;
- const step=4;
+ const step=5;
  for(let x=-step;x<=width+step;x+=step){
    const az=norm360(yaw+(x-width*.5)/width*fov);
-   let el=terrainElevation(az,layer);
-   if(layer===1){
-     const treeWave=Math.sin(az*DEG*13.7)+Math.sin(az*DEG*21.3+.9);
-     if(treeWave>1.55)el+=2.2+(treeWave-1.55)*4.5;
-   }
+   const el=terrainHorizonElevation(az);
    const y=screenYForElevation(el);
    if(first){ctx.moveTo(x,y);first=false}else ctx.lineTo(x,y);
  }
@@ -274,8 +334,7 @@ function drawHorizon(){
   ctx.fillStyle=glow;ctx.fillRect(0,Math.max(0,horizonY-120),width,Math.min(148,height));
  }
  if(layers.landscape&&horizonY<height+180){
-   drawLandscapeLayer(0,"rgba(8,14,18,.90)");
-   drawLandscapeLayer(1,"rgba(2,5,7,.98)");
+   drawLandscapeLayer("rgba(2,5,7,.98)");
  }
  if(horizonY>=0&&horizonY<=height){
    ctx.strokeStyle="rgba(190,225,240,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,horizonY);ctx.lineTo(width,horizonY);ctx.stroke();
