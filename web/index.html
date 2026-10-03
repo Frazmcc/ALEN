@@ -10,7 +10,7 @@
   <title>ALEN — Astronomical Live Environment & Navigation</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./assets/alen-logo.png?v=2">
   <link rel="apple-touch-icon" href="./assets/alen-logo.png?v=2">
-  <link rel="stylesheet" href="./styles.css?v=0.6.0">
+  <link rel="stylesheet" href="./styles.css?v=0.7.0">
 </head>
 <body>
   <main class="sky-shell">
@@ -53,14 +53,40 @@
       <button type="button" data-layer="airports" aria-pressed="true">Airports</button>
       <button type="button" data-layer="aircraft" aria-pressed="true">Aircraft</button>
       <button type="button" data-layer="satellites" aria-pressed="true">Satellites</button>
+      <button id="satellite-groups-button" type="button" aria-expanded="false" aria-controls="satellite-groups">Satellite groups</button>
     </nav>
 
+
+    <aside id="satellite-groups" class="satellite-groups" hidden aria-label="Satellite groups">
+      <div class="satellite-groups-head">
+        <div><strong>Satellite groups</strong><span>Choose what appears in the live sky</span></div>
+        <button id="satellite-groups-close" type="button" aria-label="Close satellite groups">×</button>
+      </div>
+      <div class="satellite-group-grid">
+        <label class="sat-group is-on sat-new"><input type="checkbox" data-satellite-group="new" checked><span class="sat-mark">✦</span><span>New launches <small>≤30 days</small></span></label>
+        <label class="sat-group is-on sat-stations"><input type="checkbox" data-satellite-group="stations" checked><span class="sat-mark">▣</span><span>Space stations</span></label>
+        <label class="sat-group is-on sat-bright"><input type="checkbox" data-satellite-group="bright" checked><span class="sat-mark">◆</span><span>Bright / visual</span></label>
+        <label class="sat-group sat-starlink"><input type="checkbox" data-satellite-group="starlink"><span class="sat-mark">●</span><span>Starlink</span></label>
+        <label class="sat-group sat-oneweb"><input type="checkbox" data-satellite-group="oneweb"><span class="sat-mark">●</span><span>OneWeb</span></label>
+        <label class="sat-group sat-kuiper"><input type="checkbox" data-satellite-group="kuiper"><span class="sat-mark">●</span><span>Kuiper</span></label>
+        <label class="sat-group sat-navigation"><input type="checkbox" data-satellite-group="navigation"><span class="sat-mark">◇</span><span>Navigation / GNSS</span></label>
+        <label class="sat-group sat-weather"><input type="checkbox" data-satellite-group="weather"><span class="sat-mark">◐</span><span>Weather</span></label>
+        <label class="sat-group sat-earth"><input type="checkbox" data-satellite-group="earth"><span class="sat-mark">◉</span><span>Earth observation</span></label>
+        <label class="sat-group sat-science"><input type="checkbox" data-satellite-group="science"><span class="sat-mark">✧</span><span>Science</span></label>
+        <label class="sat-group sat-amateur"><input type="checkbox" data-satellite-group="amateur"><span class="sat-mark">○</span><span>Amateur radio</span></label>
+        <label class="sat-group sat-geo"><input type="checkbox" data-satellite-group="geo"><span class="sat-mark">◇</span><span>Geostationary</span></label>
+        <label class="sat-group sat-military"><input type="checkbox" data-satellite-group="military"><span class="sat-mark">◆</span><span>Military</span></label>
+        <label class="sat-group sat-cubesat"><input type="checkbox" data-satellite-group="cubesat"><span class="sat-mark">□</span><span>CubeSats</span></label>
+        <label class="sat-group sat-debris"><input type="checkbox" data-satellite-group="debris"><span class="sat-mark">×</span><span>Space junk / debris</span></label>
+      </div>
+      <p class="satellite-groups-note">New launches override their normal category colour for 30 days. Debris uses a dedicated warning colour.</p>
+    </aside>
 
     <div class="compass" aria-hidden="true">
       <span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span>
     </div>
     <p class="hint">Live from your location · horizon is the lowest view · drag to look around · wheel to zoom</p>
   </main>
-  <script src="./app.js?v=0.6.3"></script>
+  <script src="./app.js?v=0.7.0"></script>
 </body>
 </html>
