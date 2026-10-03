@@ -10,14 +10,12 @@ const inspector=document.querySelector("#inspector");
 const searchInput=document.querySelector("#sky-search");
 const searchResults=document.querySelector("#search-results");
 const clock=document.querySelector("#clock");
-const rateEl=document.querySelector("#time-rate");
-const playBtn=document.querySelector("#time-play");
 const locationEl=document.querySelector("#location-status");
 const liveEl=document.querySelector("#live-status");
 
 const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
-let width=1,height=1,dpr=1,yaw=180,pitch=30,fov=92,drag=null,selected=null;
-let simTime=Date.now(),timeRate=1,running=true,lastFrame=performance.now();
+let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected=null;
+let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[];
 let aircraftUpdated=0,satellitesUpdated=0;
@@ -64,18 +62,20 @@ function raDecToAltAz(ra,dec,ms){
  return{az:norm360(Math.atan2(y,x)*RAD),el:alt*RAD};
 }
 function horizonBottomGap(){
- return width<=900?124:72;
+ return width<=900?70:72;
 }
-function startupPitch(){
+function updateMinPitch(){
  const vfov=fov*height/Math.max(width,1);
  const targetY=Math.max(0,height-horizonBottomGap());
- return ((targetY/height)-.55)/.82*vfov;
+ minPitch=((targetY/height)-.55)/.82*vfov;
 }
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
  width=Math.max(1,canvas.clientWidth);height=Math.max(1,canvas.clientHeight);
  canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
  ctx.setTransform(dpr,0,0,dpr,0,0);
+ updateMinPitch();
+ pitch=Math.max(pitch,minPitch);
 }
 new ResizeObserver(resize).observe(canvas);resize();
 
@@ -115,7 +115,7 @@ function onLocation(pos){
  setLocationStatus(observerLabel(),"ok");
  if(first){
    yaw=observer.lat>=0?180:0;
-   pitch=startupPitch();
+   pitch=minPitch;
    refreshAircraft(true);
    refreshSatellites(true);
  }
@@ -363,7 +363,7 @@ canvas.addEventListener("pointerdown",e=>{canvas.setPointerCapture(e.pointerId);
 canvas.addEventListener("pointermove",e=>{
  if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>3)drag.moved=true;
  yaw=norm360(drag.yaw-dx/width*fov);
- pitch=clamp(drag.pitch+dy/height*fov*.62,-75,89);
+ pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89);
 });
 canvas.addEventListener("pointerup",e=>{
  if(!drag)return;const moved=drag.moved;drag=null;try{canvas.releasePointerCapture(e.pointerId)}catch{}
@@ -372,6 +372,7 @@ canvas.addEventListener("pointerup",e=>{
 });
 canvas.addEventListener("wheel",e=>{
  e.preventDefault();fov=clamp(fov*(e.deltaY<0?.88:1.12),18,130);
+ updateMinPitch();pitch=Math.max(pitch,minPitch);
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 canvas.addEventListener("keydown",e=>{
@@ -380,8 +381,8 @@ canvas.addEventListener("keydown",e=>{
  const step=Math.max(1.5,fov*.035);
  if(e.key==="ArrowLeft")yaw=norm360(yaw-step);
  if(e.key==="ArrowRight")yaw=norm360(yaw+step);
- if(e.key==="ArrowUp")pitch=clamp(pitch+step,-75,89);
- if(e.key==="ArrowDown")pitch=clamp(pitch-step,-75,89);
+ if(e.key==="ArrowUp")pitch=clamp(pitch+step,minPitch,89);
+ if(e.key==="ArrowDown")pitch=clamp(pitch-step,minPitch,89);
 });
 
 document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
@@ -397,27 +398,21 @@ function renderSearch(){
  searchResults.replaceChildren(...matches.map(o=>{
   const b=document.createElement("button");b.type="button";
   const n=document.createElement("span");n.textContent=o.name;const k=document.createElement("small");k.textContent=o.kind;b.append(n,k);
-  b.addEventListener("click",()=>{yaw=o.az;pitch=clamp(o.el,-75,89);showObject(o);searchInput.value="";searchResults.hidden=true;});return b;
+  b.addEventListener("click",()=>{yaw=o.az;pitch=clamp(o.el,minPitch,89);showObject(o);searchInput.value="";searchResults.hidden=true;});return b;
  }));
  searchResults.hidden=!matches.length;
 }
 searchInput.addEventListener("input",renderSearch);
 searchInput.addEventListener("keydown",e=>{if(e.key==="Escape"){searchInput.value="";searchResults.hidden=true}});
 
-document.querySelector("#time-back").addEventListener("click",()=>{timeRate=Math.max(-1000,timeRate===1?-10:timeRate*10);running=true;updateTimeControls()});
-document.querySelector("#time-forward").addEventListener("click",()=>{timeRate=Math.min(1000,timeRate===1?10:Math.abs(timeRate)*10);running=true;updateTimeControls()});
-playBtn.addEventListener("click",()=>{running=!running;updateTimeControls()});
-document.querySelector("#time-now").addEventListener("click",()=>{simTime=Date.now();timeRate=1;running=true;updateTimeControls()});
-function updateTimeControls(){rateEl.textContent=timeRate+"×";playBtn.textContent=running?"❚❚":"▶";playBtn.setAttribute("aria-label",running?"Pause time":"Resume time")}
-
 function tick(now){
- const dt=Math.min(100,Math.max(0,now-lastFrame));lastFrame=now;if(running)simTime+=dt*timeRate;
- if(timeRate===1&&running&&Math.abs(simTime-Date.now())>1500)simTime=Date.now();
+ const dt=Math.min(100,Math.max(0,now-lastFrame));lastFrame=now;
+ simTime=Date.now();
  clock.textContent=new Date(simTime).toLocaleString([], {year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
  stepAircraft(now);stepSatellites(simTime);draw();requestAnimationFrame(tick);
 }
 aircraftTimer=setInterval(()=>refreshAircraft(false),3000);
 satelliteTimer=setInterval(()=>refreshSatellites(false),15*60*1000);
 window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);clearInterval(satelliteTimer)});
-updateTimeControls();setLiveStatus();requestLocation();requestAnimationFrame(tick);
+setLiveStatus();requestLocation();requestAnimationFrame(tick);
 })();
