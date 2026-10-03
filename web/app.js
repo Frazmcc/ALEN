@@ -21,10 +21,28 @@ let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=92,drag=null,selected
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[];
-let aircraftUpdated=0,satellitesUpdated=0;
+let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0;
+const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
 const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,airports:true,aircraft:true,satellites:true};
+const SATELLITE_GROUPS={
+ new:{label:"New launches · ≤30 days",sources:["last-30-days"],enabled:true,color:"#68ff9a",glyph:"✦",priority:100,limit:900},
+ stations:{label:"Space stations",sources:["stations"],enabled:true,color:"#ffffff",glyph:"▣",priority:90,limit:120},
+ bright:{label:"Bright / visual",sources:["visual"],enabled:true,color:"#ffe082",glyph:"◆",priority:70,limit:250},
+ starlink:{label:"Starlink",sources:["starlink"],enabled:false,color:"#64b5f6",glyph:"●",priority:60,limit:1800},
+ oneweb:{label:"OneWeb",sources:["oneweb"],enabled:false,color:"#ab8cff",glyph:"●",priority:59,limit:900},
+ kuiper:{label:"Kuiper",sources:["kuiper"],enabled:false,color:"#50d0ff",glyph:"●",priority:58,limit:700},
+ navigation:{label:"Navigation / GNSS",sources:["gnss"],enabled:false,color:"#4dd0c8",glyph:"◇",priority:57,limit:500},
+ weather:{label:"Weather",sources:["weather"],enabled:false,color:"#6ed0ff",glyph:"◐",priority:56,limit:500},
+ earth:{label:"Earth observation",sources:["earth-resources"],enabled:false,color:"#7ee787",glyph:"◉",priority:55,limit:700},
+ science:{label:"Science",sources:["science"],enabled:false,color:"#e6a6ff",glyph:"✧",priority:54,limit:500},
+ amateur:{label:"Amateur radio",sources:["amateur"],enabled:false,color:"#ffb86c",glyph:"○",priority:53,limit:700},
+ geo:{label:"Geostationary",sources:["geo"],enabled:false,color:"#ffd166",glyph:"◇",priority:52,limit:700},
+ military:{label:"Military",sources:["military"],enabled:false,color:"#ff9f43",glyph:"◆",priority:51,limit:700},
+ cubesat:{label:"CubeSats",sources:["cubesat"],enabled:false,color:"#b7f7d0",glyph:"□",priority:50,limit:900},
+ debris:{label:"Space junk / debris",sources:["fengyun-1c-debris","iridium-33-debris","cosmos-2251-debris","cosmos-1408-debris"],enabled:false,color:"#ff6262",glyph:"×",priority:95,limit:2200}
+};
 
 const STAR_CATALOG=[
 {id:"vega",kind:"STAR",name:"Vega",ra:279.23473479,dec:38.78368896,mag:.03,color:"#dcecff",distance:"25.0 ly",detail:"A0 V",fact:"Vega is a rapidly rotating A-type star and one of the brightest stars in the northern sky."},
@@ -304,24 +322,69 @@ function satelliteAltAz(el,ms){
  const range=Math.sqrt(east*east+north*north+up*up);
  return{az:norm360(Math.atan2(east,north)*RAD),el:Math.asin(clamp(up/range,-1,1))*RAD,rangeKm:range};
 }
+function satelliteGroupEntries(){
+ return Object.entries(SATELLITE_GROUPS);
+}
+function activeSatelliteGroups(){
+ return satelliteGroupEntries().filter(([,group])=>group.enabled);
+}
+function satellitePrimaryGroup(memberships){
+ return memberships.map(key=>[key,SATELLITE_GROUPS[key]]).filter(([,g])=>g?.enabled).sort((a,b)=>b[1].priority-a[1].priority)[0]?.[0]||"bright";
+}
+async function fetchSatelliteSource(source,limit,force){
+ const cacheKey=source;
+ const cached=satelliteGroupCache.get(cacheKey);
+ if(!force&&cached&&Date.now()-cached.updated<2*60*60*1000)return cached.data;
+ const res=await fetch(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(source)}&FORMAT=json`,{mode:"cors",cache:"no-store",credentials:"omit"});
+ if(!res.ok)throw new Error("satellites "+source+" "+res.status);
+ const raw=await res.json();
+ const data=Array.isArray(raw)?raw.slice(0,limit):[];
+ satelliteGroupCache.set(cacheKey,{updated:Date.now(),data});
+ return data;
+}
+function rebuildSatelliteElements(){
+ const merged=new Map();
+ for(const [key,group] of activeSatelliteGroups()){
+  for(const source of group.sources){
+   const cached=satelliteGroupCache.get(source)?.data||[];
+   for(const el of cached){
+    const id=String(el.NORAD_CAT_ID||el.OBJECT_ID||el.OBJECT_NAME||"").trim();if(!id)continue;
+    const prior=merged.get(id);
+    if(prior){prior.memberships.add(key);continue}
+    merged.set(id,{...el,memberships:new Set([key])});
+   }
+  }
+ }
+ satelliteElements=[...merged.values()].map(el=>({...el,memberships:[...el.memberships]}));
+}
 async function refreshSatellites(force=false){
  if(!layers.satellites)return;
- if(!force&&Date.now()-satellitesUpdated<2*60*60*1000)return;
+ if(!force&&Date.now()-satellitesUpdated<15*60*1000)return;
  satellitesUpdated=Date.now();
  try{
-   const res=await fetch("https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json",{mode:"cors",cache:"no-store",credentials:"omit"});
-   if(!res.ok)throw new Error("satellites "+res.status);
-   const data=await res.json();
-   satelliteElements=Array.isArray(data)?data.slice(0,300):[];
+  const work=[];
+  for(const [,group] of activeSatelliteGroups()){
+   for(const source of group.sources)work.push(fetchSatelliteSource(source,group.limit,force));
+  }
+  await Promise.all(work);
+  rebuildSatelliteElements();
  }catch(e){console.warn("ALEN satellite feed unavailable",e)}
  setLiveStatus();
 }
 function stepSatellites(ms){
  if(!observer||!layers.satellites){satellites=[];return}
+ if(ms-lastSatelliteStep<350)return;
+ lastSatelliteStep=ms;
  satellites=satelliteElements.map(el=>{
    const p=satelliteAltAz(el,ms);if(!p||p.el<0)return null;
-   return{id:String(el.NORAD_CAT_ID||el.OBJECT_ID||el.OBJECT_NAME),kind:"SATELLITE",name:el.OBJECT_NAME||"Satellite",az:p.az,el:p.el,rangeKm:p.rangeKm,detail:"CelesTrak visual group"};
- }).filter(Boolean).sort((a,b)=>b.el-a.el).slice(0,120);
+   const group=satellitePrimaryGroup(el.memberships||[]),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
+   return{
+    id:String(el.NORAD_CAT_ID||el.OBJECT_ID||el.OBJECT_NAME),kind:"SATELLITE",name:el.OBJECT_NAME||"Satellite",
+    az:p.az,el:p.el,rangeKm:p.rangeKm,detail:"CelesTrak live orbital elements",group,groupLabel:style.label,
+    color:style.color,glyph:style.glyph,norad:String(el.NORAD_CAT_ID||"—"),objectId:el.OBJECT_ID||"—",
+    memberships:el.memberships||[],isNew:(el.memberships||[]).includes("new"),isDebris:(el.memberships||[]).includes("debris")
+   };
+ }).filter(Boolean).sort((a,b)=>b.el-a.el).slice(0,260);
 }
 
 function currentSkyObjects(ms){
@@ -409,8 +472,11 @@ function draw(){
  if(layers.satellites){
   for(const s of satellites){
    const p=project(s.az,s.el);if(!p)continue;
-   ctx.strokeStyle="#ffe08b";ctx.lineWidth=1;ctx.strokeRect(p[0]-2.5,p[1]-2.5,5,5);
-   if(s.el>30){ctx.fillStyle="rgba(255,224,139,.85)";ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+7,p[1]-5)}
+   const active=selected?.id===s.id;
+   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.font=active?"700 15px ui-monospace":"700 12px ui-monospace";
+   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
+   if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
+   if(s.el>28||active){ctx.globalAlpha=.9;ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
   }
  }
  if(!observer){
@@ -436,7 +502,7 @@ function objectVisualSvg(o){
  const title=escapeSvgText(o.name||o.kind),kind=escapeSvgText(o.kind||"OBJECT");
  let symbol="✦",sub="";
  if(o.kind==="AIRCRAFT"){symbol="✈";sub=escapeSvgText(o.registration||o.type||"Live aircraft")}
- else if(o.kind==="SATELLITE"){symbol="◈";sub=escapeSvgText("Orbital object")}
+ else if(o.kind==="SATELLITE"){symbol=escapeSvgText(o.glyph||"◈");sub=escapeSvgText((o.groupLabel||"Orbital object")+(o.isNew?" · NEW":"")+(o.isDebris?" · DEBRIS":""))}
  else if(o.kind==="AIRPORT"){symbol="△";sub=escapeSvgText((o.iata||o.icao||"Airport")+" · "+Math.round(o.distanceKm)+" km")}
  else{sub=escapeSvgText(o.detail||"Astronomical object")}
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#071522"/><stop offset="1" stop-color="#010308"/></linearGradient><radialGradient id="r"><stop offset="0" stop-color="#123044"/><stop offset="1" stop-color="#010308"/></radialGradient></defs><rect width="720" height="360" fill="url(#g)"/><circle cx="360" cy="170" r="112" fill="url(#r)" stroke="#1d526a"/><text x="360" y="205" text-anchor="middle" font-family="system-ui,sans-serif" font-size="96" fill="#9feaff">${symbol}</text><text x="28" y="302" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#eef8ff">${title}</text><text x="28" y="331" font-family="system-ui,sans-serif" font-size="15" fill="#88a4b5">${kind} · ${sub}</text></svg>`;
@@ -462,7 +528,7 @@ function showObject(o){
  let rows=[];
  if(o.kind==="AIRCRAFT")rows=[["Type",o.type],["Registration",o.registration],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
- else if(o.kind==="SATELLITE")rows=[["Source",o.detail],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
+ else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
  else rows=[["Type",o.detail],["Distance",o.distance],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Magnitude",String(o.mag)]];
  for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;details.append(dt,dd)}
  inspector.hidden=false;
@@ -502,6 +568,19 @@ document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("cli
  if(key==="airports"&&layers[key])refreshAirports();
  setLiveStatus();
 }));
+
+document.querySelectorAll("[data-satellite-group]").forEach(input=>input.addEventListener("change",async()=>{
+ const key=input.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];if(!group)return;
+ group.enabled=input.checked;
+ input.closest("label")?.classList.toggle("is-on",group.enabled);
+ if(layers.satellites&&group.enabled)await refreshSatellites(true);else rebuildSatelliteElements();
+}));
+const satellitePanel=document.querySelector("#satellite-groups");
+const satelliteGroupsButton=document.querySelector("#satellite-groups-button");
+satelliteGroupsButton?.addEventListener("click",()=>{
+ const opening=satellitePanel.hidden;satellitePanel.hidden=!opening;satelliteGroupsButton.setAttribute("aria-expanded",String(opening));
+});
+document.querySelector("#satellite-groups-close")?.addEventListener("click",()=>{satellitePanel.hidden=true;satelliteGroupsButton?.setAttribute("aria-expanded","false")});
 
 function renderSearch(){
  const q=searchInput.value.trim().toLowerCase();if(!q){searchResults.hidden=true;searchResults.replaceChildren();return}
