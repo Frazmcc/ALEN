@@ -48,15 +48,23 @@ def test_live_location_and_horizon_contract() -> None:
     assert "navigator.geolocation.watchPosition" in APP
     assert 'id="location-status"' in HTML
     assert "function horizonBottomGap()" in APP
-    assert "return width<=900?124:72" in APP
-    assert "function startupPitch()" in APP
-    assert "pitch=startupPitch()" in APP
-    assert "pitch=clamp(drag.pitch+dy/height*fov*.62,-75,89)" in APP
+    assert "return width<=900?70:72" in APP
+    assert "function updateMinPitch()" in APP
+    assert "pitch=minPitch" in APP
+    assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
     assert "function drawLandscapeLayer" in APP
     assert "function terrainElevation" in APP
     assert 'data-layer="landscape" aria-pressed="true"' in HTML
     assert 'tabindex="0"' in HTML
     assert 'canvas.addEventListener("keydown"' in APP
+
+
+def test_live_view_has_no_time_transport_controls() -> None:
+    for control_id in ("time-back", "time-play", "time-forward", "time-rate", "time-now"):
+        assert f'id="{control_id}"' not in HTML
+    assert "simTime=Date.now()" in APP
+    assert "timeRate" not in APP
+    assert "running" not in APP
 
 
 def test_live_aircraft_and_satellite_contract() -> None:
