@@ -13,6 +13,8 @@ def test_web_identity_and_security_contract() -> None:
         "script-src 'self'",
         "style-src 'self'",
         "connect-src 'self'",
+        "https://api.adsb.lol",
+        "https://celestrak.org",
         "img-src 'self' data:",
         "object-src 'none'",
         "base-uri 'none'",
@@ -28,8 +30,8 @@ def test_selection_is_explicitly_toggleable() -> None:
 
 
 def test_no_inline_remote_dependencies() -> None:
-    assert "https://" not in HTML
     assert "<script src=" in HTML
+    assert "<script>" not in HTML
 
 
 def test_alen_brand_logo_and_favicon_are_present() -> None:
@@ -39,6 +41,23 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert "./assets/alen-logo.png?v=2" in HTML
     assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
+
+
+def test_live_location_and_horizon_contract() -> None:
+    assert "navigator.geolocation.getCurrentPosition" in APP
+    assert "navigator.geolocation.watchPosition" in APP
+    assert 'id="location-status"' in HTML
+    assert "minPitch=.5488*vfov" in APP
+    assert "pitch=clamp(drag.pitch+dy/height*fov*.55,minPitch,88)" in APP
+
+
+def test_live_aircraft_and_satellite_contract() -> None:
+    assert "https://api.adsb.lol/v2/lat/" in APP
+    assert "requestAnimationFrame(tick)" in APP
+    assert "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json" in APP
+    assert "satelliteAltAz" in APP
+    assert 'data-layer="aircraft" aria-pressed="true"' in HTML
+    assert 'data-layer="satellites" aria-pressed="true"' in HTML
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
