@@ -698,8 +698,8 @@ function draw(){
    const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
    ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
    ctx.globalAlpha=1;
-   const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a),squawk=String(a.squawk||"—");
-   const lines=meaning?[["Callsign:",callsign],["Squawk:",squawk],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
+   const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a);
+   const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
    ctx.font="700 9px ui-monospace";
    const lineWidths=lines.map(([label,value])=>ctx.measureText(label+" "+value).width);
    const boxW=Math.max(...lineWidths)+12,boxH=lines.length*13+4;
@@ -848,6 +848,42 @@ async function updateInspectorMedia(o){
   if(token===inspectorMediaRequest)console.warn("ALEN aircraft photo lookup unavailable",e);
  }
 }
+function formatRouteAirport(airport){
+ if(!airport)return "Unavailable";
+ const code=airport.iata||airport.icao||"";
+ const name=airport.name||airport.location||"";
+ return code&&name?`${code} · ${name}`:(code||name||"Unavailable");
+}
+function setInspectorDetail(key,value){
+ const details=document.querySelector("#inspector-details");
+ const dd=[...details.querySelectorAll("dd")].find(node=>node.dataset.key===key);
+ if(dd)dd.textContent=value;
+}
+async function updateAircraftRoute(o){
+ const callsign=String(o.callsign||o.name||"").trim();
+ if(!callsign)return;
+ const token=o.id;
+ try{
+  const qs=new URLSearchParams({callsign});
+  const res=await fetch(API_BASE+"/api/v1/aircraft/route?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
+  if(!res.ok)throw new Error("aircraft route "+res.status);
+  const data=await res.json(),route=data.route;
+  if(selected?.id!==token)return;
+  if(!route){
+   setInspectorDetail("Departure","Unavailable");
+   setInspectorDetail("Arrival","Unavailable");
+   return;
+  }
+  setInspectorDetail("Departure",formatRouteAirport(route.departure));
+  setInspectorDetail("Arrival",formatRouteAirport(route.arrival));
+ }catch(e){
+  if(selected?.id===token){
+   setInspectorDetail("Departure","Unavailable");
+   setInspectorDetail("Arrival","Unavailable");
+  }
+  console.warn("ALEN aircraft route lookup unavailable",e);
+ }
+}
 function showObject(o){
  selected=o;
  document.querySelector("#inspector-kind").textContent=o.kind;
@@ -860,13 +896,14 @@ function showObject(o){
  );
  const details=document.querySelector("#inspector-details");details.replaceChildren();
  let rows=[];
- if(o.kind==="AIRCRAFT"){const meaning=aircraftSpecialMeaning(o);rows=[["Callsign",o.callsign||o.name||"—"],["Operator",aircraftOperator(o)],["Squawk",o.squawk||"—"],["Meaning",meaning||"Standard ATC assignment / no special operation identified"],["Military",aircraftIsMilitary(o)?"Yes":"No"],["Type",o.type],["Registration",o.registration],["ICAO hex",o.hex||"—"],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]]}
+ if(o.kind==="AIRCRAFT"){const meaning=aircraftSpecialMeaning(o);rows=[["Callsign",o.callsign||o.name||"—"],["Operator",aircraftOperator(o)],["Squawk",o.squawk||"—"],["Meaning",meaning||"Standard ATC assignment / no special operation identified"],["Departure","Looking up…"],["Arrival","Looking up…"],["Military",aircraftIsMilitary(o)?"Yes":"No"],["Type",o.type],["Registration",o.registration],["ICAO hex",o.hex||"—"],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]]}
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
  else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"],["Position","Live for your location and current time"]];
  else rows=[["Classification",o.detail||"Star"],["Distance",o.distance||"—"],["Catalogue magnitude",Number.isFinite(o.mag)?o.mag.toFixed(2):"—"],["Apparent magnitude",Number.isFinite(o.apparentMag)?o.apparentMag.toFixed(2):(Number.isFinite(o.mag)?o.mag.toFixed(2):"—")],["Atmospheric extinction",Number.isFinite(o.extinctionMag)?o.extinctionMag.toFixed(2)+" mag":"0.00 mag"],["Temperature",o.temperatureK?Math.round(o.temperatureK)+" K":"—"],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",Number.isFinite(o.ra)?o.ra.toFixed(2)+"°":"—"],["Declination",Number.isFinite(o.dec)?o.dec.toFixed(2)+"°":"—"]];
- for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;details.append(dt,dd)}
+ for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;dt.dataset.key=k;dd.dataset.key=k;details.append(dt,dd)}
  inspector.hidden=false;
+ if(o.kind==="AIRCRAFT")updateAircraftRoute(o);
 }
 function clearSelection(){selected=null;inspector.hidden=true}
 
