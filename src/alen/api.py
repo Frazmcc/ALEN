@@ -6,6 +6,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .aircraft import AircraftProvider
 from .airports import AirportProvider
 from .satellites import SatelliteProvider
 
@@ -23,6 +24,7 @@ app.add_middleware(
     allow_headers=["Accept", "Content-Type"],
 )
 
+_aircraft = AircraftProvider()
 _airports = AirportProvider()
 _satellites = SatelliteProvider()
 
@@ -70,6 +72,23 @@ def visible_satellites(
             lon,
             altitude_m,
             requested,
+            limit=limit,
+        )
+    }
+
+
+@app.get("/api/v1/aircraft")
+def nearby_aircraft(
+    lat: float = Query(ge=-90.0, le=90.0),
+    lon: float = Query(ge=-180.0, le=180.0),
+    radius_nm: float = Query(default=43.4488, ge=1.0, le=250.0),
+    limit: int = Query(default=450, ge=1, le=500),
+) -> dict[str, object]:
+    return {
+        "aircraft": _aircraft.nearby(
+            lat,
+            lon,
+            radius_nm=radius_nm,
             limit=limit,
         )
     }
