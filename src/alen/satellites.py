@@ -22,6 +22,7 @@ class OrbitRecord:
 
 class SatelliteProvider:
     BASE_URL = "https://celestrak.org/NORAD/elements/gp.php"
+    FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"
     CACHE_SECONDS = 1800
 
     def __init__(self) -> None:
@@ -67,6 +68,15 @@ class SatelliteProvider:
                 else:
                     prior[1].add(group)
 
+        fallback_used = False
+        if not merged:
+            fallback_records = self._load_fallback_catalog()
+            if fallback_records:
+                fallback_used = True
+                loaded_by_group["public-fallback"] = len(fallback_records)
+                for record in fallback_records:
+                    merged[record.norad] = (record, {"visual"})
+
         visible: list[dict[str, object]] = []
         propagated = 0
         propagation_failures = 0
@@ -107,6 +117,7 @@ class SatelliteProvider:
             "propagation_failures": propagation_failures,
             "below_horizon": below_horizon,
             "visible": len(visible),
+            "fallback_used": fallback_used,
             "generated_at": now.isoformat(),
         }
         return visible[: max(1, min(int(limit), 500))]
@@ -124,6 +135,64 @@ class SatelliteProvider:
                 self._cache[group] = (time(), records)
             return records
         return cached[1] if cached else ()
+
+    def _load_fallback_catalog(self) -> tuple[OrbitRecord, ...]:
+        key = "__public_fallback__"
+        now = time()
+        with self._lock:
+            cached = self._cache.get(key)
+        if cached and now - cached[0] < self.CACHE_SECONDS:
+            return cached[1]
+
+        records = self._fetch_fallback_catalog()
+        if records:
+            with self._lock:
+                self._cache[key] = (time(), records)
+            return records
+        return cached[1] if cached else ()
+
+    def _fetch_fallback_catalog(self) -> tuple[OrbitRecord, ...]:
+        try:
+            with httpx.Client(
+                timeout=8.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
+            ) as client:
+                response = client.get(
+                    self.FALLBACK_URL,
+                    params={"page": "1", "page-size": "100", "sort": "popularity"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return ()
+
+        members = payload.get("member") if isinstance(payload, dict) else None
+        if not isinstance(members, list):
+            return ()
+
+        records: list[OrbitRecord] = []
+        for item in members:
+            if not isinstance(item, dict):
+                continue
+            try:
+                norad = int(item["satelliteId"])
+                line1 = str(item["line1"]).strip()
+                line2 = str(item["line2"]).strip()
+                satellite = Satrec.twoline2rv(line1, line2)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not line1.startswith("1 ") or not line2.startswith("2 "):
+                continue
+            records.append(
+                OrbitRecord(
+                    name=str(item.get("name") or f"NORAD {norad}").strip(),
+                    norad=norad,
+                    international_id=line1[9:17].strip(),
+                    satellite=satellite,
+                )
+            )
+        return tuple(records)
 
     def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
         records = self._fetch_group_json(group)
