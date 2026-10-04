@@ -134,6 +134,13 @@ function starRenderPalette(baseColor,daylight){
  const t=(d-.7)/.3;
  return{fill:mixHexColor("#f8fbff","#08283f",t),halo:"#ffffff",label:mixHexColor("#eef8ff","#08283f",t),outline:"rgba(255,255,255,.62)"};
 }
+function starVisibilityAlpha(visualMag,sky){
+ const night=clamp(sky.starVisibility,0,1);
+ if(sky.daylight<.72)return night;
+ const brightFactor=clamp((2.0-visualMag)/3.2,0,1);
+ const daylightFloor=.1+.28*brightFactor;
+ return Math.max(night,daylightFloor);
+}
 async function loadBrightStars(){
  try{
   const res=await fetch("./data/bright-stars.json?v=1",{cache:"force-cache"});
@@ -802,7 +809,7 @@ function draw(){
    const visualMag=Number.isFinite(o.apparentMag)?o.apparentMag:o.mag;
    const r=Math.max(1.05,3.8-visualMag*.42)*(90/fov),isSelected=selected?.id===o.id;
    if(isSelected){ctx.strokeStyle="#7be5ff";ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],r+8,0,Math.PI*2);ctx.stroke()}
-   const daylightAlpha=sky.starVisibility,starPalette=starRenderPalette(o.color,sky.daylight);
+   const daylightAlpha=starVisibilityAlpha(visualMag,sky),starPalette=starRenderPalette(o.color,sky.daylight);
    ctx.globalAlpha=Math.max(0,Math.max(.15,1-visualMag*.11)*daylightAlpha);
    ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=starPalette.halo;ctx.fillStyle=starPalette.fill;
    ctx.beginPath();ctx.arc(p[0],p[1],r,0,Math.PI*2);ctx.fill();
