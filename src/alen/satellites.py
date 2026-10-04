@@ -98,7 +98,7 @@ class SatelliteProvider:
             ) as client:
                 response = client.get(
                     self.BASE_URL,
-                    params={"GROUP": group, "FORMAT": "JSON"},
+                    params={"GROUP": group.upper(), "FORMAT": "JSON"},
                 )
                 response.raise_for_status()
                 payload = response.json()
