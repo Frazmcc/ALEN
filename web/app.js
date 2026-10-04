@@ -1194,27 +1194,53 @@ function appendInspectorLink(parent,label,url,allowedHost){
 async function updateInspectorMedia(o){
  const image=document.querySelector("#inspector-image");
  const credit=document.querySelector("#inspector-image-credit");
- const token=++inspectorMediaRequest;
- image.src=objectVisualSvg(o);image.alt=(o.name||o.kind)+" visual";
+ const token=++inspectorMediaRequest,fallback=objectVisualSvg(o);
+ image.src=fallback;image.alt=(o.name||o.kind)+" visual";
  credit.textContent=inspectorCreditText(o);
  if(o.kind!=="AIRCRAFT")return;
  const registration=o.registration&&o.registration!=="—"?o.registration:"";
  const aircraftType=o.type&&o.type!=="Aircraft"?o.type:"";
- if(!registration&&!aircraftType)return;
+ const icaoHex=String(o.hex||"").trim().toLowerCase();
+ if(!registration&&!aircraftType&&!icaoHex)return;
  try{
-  const qs=new URLSearchParams({registration,aircraft_type:aircraftType});
+  const qs=new URLSearchParams({registration,aircraft_type:aircraftType,icao_hex:icaoHex});
   const res=await fetch(API_BASE+"/api/v1/aircraft/photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
   if(!res.ok)throw new Error("aircraft photo "+res.status);
   const data=await res.json(),photo=data.photo;
-  const imageUrl=trustedExternalUrl(photo?.image_url,"upload.wikimedia.org");
-  if(token!==inspectorMediaRequest||selected?.id!==o.id||!imageUrl)return;
-  image.src=imageUrl;
-  image.alt=`${o.registration&&o.registration!=="—"?o.registration:o.name} aircraft photo`;
-  credit.replaceChildren(document.createTextNode(`${photo.artist||"Wikimedia Commons contributor"} · ${photo.license||"See source for licence"} · ${photo.match==="registration"?"exact registration":"aircraft type"}`));
-  appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org");
-  appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net");
+  if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
+  if(!photo?.image_path){
+   credit.textContent="No verified aircraft photo found · ALEN illustration";
+   appendInspectorLink(credit,"More photos",`https://www.planespotters.net/photos/reg/${encodeURIComponent(registration)}`,"www.planespotters.net");
+   return;
+  }
+  const imageUrl=API_BASE+photo.image_path;
+  const probe=new Image();
+  probe.decoding="async";
+  probe.onload=()=>{
+   if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
+   image.src=imageUrl;
+   image.alt=`${registration||o.name} aircraft photo`;
+   const matchLabel=photo.match==="icao"?"exact aircraft":photo.match==="registration"?"exact registration":"aircraft type";
+   credit.replaceChildren(document.createTextNode(`${photo.artist||"Aircraft photographer"} · ${photo.license||"See source for usage terms"} · ${matchLabel}`));
+   const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
+   const planeSpottersSource=trustedExternalUrl(photo.source_url,"www.planespotters.net");
+   if(commonsSource)appendInspectorLink(credit,"Source",commonsSource,"commons.wikimedia.org");
+   else if(planeSpottersSource)appendInspectorLink(credit,"Source",planeSpottersSource,"www.planespotters.net");
+   appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net");
+  };
+  probe.onerror=()=>{
+   if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
+   image.src=fallback;
+   credit.textContent="Aircraft photo source unavailable · ALEN illustration";
+   appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net");
+  };
+  probe.src=imageUrl;
  }catch(e){
-  if(token===inspectorMediaRequest)console.warn("ALEN aircraft photo lookup unavailable",e);
+  if(token===inspectorMediaRequest){
+   image.src=fallback;
+   credit.textContent="Aircraft photo lookup unavailable · ALEN illustration";
+   console.warn("ALEN aircraft photo lookup unavailable",e);
+  }
  }
 }
 function formatRouteAirport(airport){
