@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock
@@ -39,9 +40,24 @@ class SatelliteProvider:
     ) -> list[dict[str, object]]:
         now = datetime.now(timezone.utc)
         merged: dict[int, tuple[OrbitRecord, set[str]]] = {}
-        loaded_by_group: dict[str, int] = {}
-        for group in groups:
-            records = self._load_group(group)
+        requested_groups = list(dict.fromkeys(groups))
+        loaded_by_group: dict[str, int] = {group: 0 for group in requested_groups}
+        records_by_group: dict[str, tuple[OrbitRecord, ...]] = {}
+        if requested_groups:
+            with ThreadPoolExecutor(max_workers=min(6, len(requested_groups))) as executor:
+                futures = {
+                    executor.submit(self._load_group, group): group
+                    for group in requested_groups
+                }
+                for future in as_completed(futures):
+                    group = futures[future]
+                    try:
+                        records_by_group[group] = future.result()
+                    except Exception:
+                        records_by_group[group] = ()
+
+        for group in requested_groups:
+            records = records_by_group.get(group, ())
             loaded_by_group[group] = len(records)
             for record in records:
                 satnum = record.norad
@@ -84,7 +100,7 @@ class SatelliteProvider:
 
         visible.sort(key=lambda item: float(item["elevation_deg"]), reverse=True)
         self.last_diagnostics = {
-            "requested_groups": list(groups),
+            "requested_groups": requested_groups,
             "loaded_by_group": loaded_by_group,
             "unique_orbits": len(merged),
             "propagated": propagated,
@@ -97,19 +113,17 @@ class SatelliteProvider:
 
     def _load_group(self, group: str) -> tuple[OrbitRecord, ...]:
         now = time()
-        cached = self._cache.get(group)
+        with self._lock:
+            cached = self._cache.get(group)
         if cached and now - cached[0] < self.CACHE_SECONDS:
             return cached[1]
 
-        with self._lock:
-            cached = self._cache.get(group)
-            if cached and now - cached[0] < self.CACHE_SECONDS:
-                return cached[1]
-            records = self._fetch_group(group)
-            if records:
-                self._cache[group] = (now, records)
-                return records
-            return cached[1] if cached else ()
+        records = self._fetch_group(group)
+        if records:
+            with self._lock:
+                self._cache[group] = (time(), records)
+            return records
+        return cached[1] if cached else ()
 
     def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
         records = self._fetch_group_json(group)
@@ -120,7 +134,7 @@ class SatelliteProvider:
     def _fetch_group_json(self, group: str) -> tuple[OrbitRecord, ...]:
         try:
             with httpx.Client(
-                timeout=30.0,
+                timeout=8.0,
                 follow_redirects=True,
                 headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
             ) as client:
