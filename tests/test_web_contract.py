@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.3.0' in HTML
+    assert './app.js?v=1.4.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -306,3 +306,17 @@ def test_aircraft_photo_inspector_contract() -> None:
     assert 'appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org")' in APP
     assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net")' in APP
     assert "https://upload.wikimedia.org" in HTML
+
+
+def test_sky_colour_tracks_local_solar_elevation() -> None:
+    assert "function currentSunAltAz(ms)" in APP
+    assert "function timeOfDaySky(sunEl)" in APP
+    assert "{el:-18" in APP
+    assert "{el:-12" in APP
+    assert "{el:-6" in APP
+    assert "{el:-1" in APP
+    assert "{el:6" in APP
+    assert "{el:25" in APP
+    assert "const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el)" in APP
+    assert "g.addColorStop(0,sky.top)" in APP
+    assert "sky.starVisibility" in APP
