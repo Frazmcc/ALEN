@@ -401,6 +401,18 @@ function greatCircle(lat1,lon1,lat2,lon2){
  const x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
  return{distanceKm:EARTH_KM*central,bearing:norm360(Math.atan2(y,x)*RAD)};
 }
+function destinationPoint(lat,lon,bearingDeg,distanceKm){
+ const angular=distanceKm/EARTH_KM,b=bearingDeg*DEG,p1=lat*DEG,l1=lon*DEG;
+ const sinP2=Math.sin(p1)*Math.cos(angular)+Math.cos(p1)*Math.sin(angular)*Math.cos(b);
+ const p2=Math.asin(clamp(sinP2,-1,1));
+ const y=Math.sin(b)*Math.sin(angular)*Math.cos(p1);
+ const x=Math.cos(angular)-Math.sin(p1)*Math.sin(p2);
+ const l2=l1+Math.atan2(y,x);
+ return{lat:p2*RAD,lon:((l2*RAD+540)%360)-180};
+}
+function blendAngle(current,target,k){
+ return norm360(current+adiff(target,current)*k);
+}
 function geodeticToEcef(latDeg,lonDeg,altM){
  const a=6378137,e2=6.69437999014e-3,lat=latDeg*DEG,lon=lonDeg*DEG;
  const sinLat=Math.sin(lat),cosLat=Math.cos(lat),n=a/Math.sqrt(1-e2*sinLat*sinLat);
@@ -492,11 +504,21 @@ async function refreshAircraft(force=false){
      const id=String(a.hex||a.flight||a.registration||"").trim();
      if(!id)continue;
      const prior=previous.get(id),lat=Number(a.lat),lon=Number(a.lon);
+     const measuredGs=Math.max(0,Number(a.gs)||0),measuredTrack=norm360(Number(a.track)||0);
+     const seenSeconds=clamp(Number(a.seen)||0,0,30);
+     const projected=destinationPoint(lat,lon,measuredTrack,measuredGs*1.852*seenSeconds/3600);
+     const measuredAltM=aircraftAltitudeM({alt_geom:a.alt_geom,alt_baro:a.alt_baro});
      next.set(id,{
-       id,kind:"AIRCRAFT",name:String(a.flight||a.registration||a.hex||"Aircraft").trim(),callsign:String(a.flight||"").trim(),operator:String(a.operator||"").trim(),squawk:String(a.squawk||"").trim(),dbFlags:Number(a.db_flags)||0,hex:String(a.hex||"").trim(),lat,lon,
-       displayLat:prior?.displayLat??lat,displayLon:prior?.displayLon??lon,
-       altM:aircraftAltitudeM({alt_geom:a.alt_geom,alt_baro:a.alt_baro}),gs:Number(a.gs)||0,track:Number(a.track)||0,
-       type:a.type||"Aircraft",registration:a.registration||"—",seen:Number(a.seen)||0,
+       id,kind:"AIRCRAFT",name:String(a.flight||a.registration||a.hex||"Aircraft").trim(),callsign:String(a.flight||"").trim(),operator:String(a.operator||"").trim(),squawk:String(a.squawk||"").trim(),dbFlags:Number(a.db_flags)||0,hex:String(a.hex||"").trim(),
+       lat:projected.lat,lon:projected.lon,
+       displayLat:prior?.displayLat??projected.lat,displayLon:prior?.displayLon??projected.lon,
+       altM:measuredAltM,displayAltM:prior?.displayAltM??measuredAltM,
+       gs:measuredGs,displayGs:prior?.displayGs??measuredGs,
+       track:measuredTrack,displayTrack:prior?.displayTrack??measuredTrack,
+       correctionLat:projected.lat-(prior?.displayLat??projected.lat),
+       correctionLon:adiff(projected.lon,prior?.displayLon??projected.lon),
+       correctionRemainingMs:prior?5000:0,
+       type:a.type||"Aircraft",registration:a.registration||"—",seen:seenSeconds,
        lastFrame:prior?.lastFrame??frameNow,lastSeenAt:wallNow
      });
    }
@@ -516,8 +538,24 @@ async function refreshAircraft(force=false){
 function stepAircraft(now){
  for(const a of aircraft){
    const dt=Math.min(100,Math.max(0,now-(a.lastFrame||now)));a.lastFrame=now;
-   const k=1-Math.exp(-dt/900);
-   a.displayLat+=(a.lat-a.displayLat)*k;a.displayLon+=(a.lon-a.displayLon)*k;
+   if(dt<=0)continue;
+   const motionK=1-Math.exp(-dt/1800),altitudeK=1-Math.exp(-dt/2200);
+   a.displayGs+=(a.gs-a.displayGs)*motionK;
+   a.displayTrack=blendAngle(a.displayTrack,a.track,motionK);
+   a.displayAltM+=(a.altM-a.displayAltM)*altitudeK;
+
+   const travelKm=Math.max(0,a.displayGs)*1.852*dt/3600000;
+   const advanced=destinationPoint(a.displayLat,a.displayLon,a.displayTrack,travelKm);
+   a.displayLat=advanced.lat;a.displayLon=advanced.lon;
+
+   if(a.correctionRemainingMs>0){
+     const portion=Math.min(1,dt/a.correctionRemainingMs);
+     a.displayLat+=a.correctionLat*portion;
+     a.displayLon+=a.correctionLon*portion;
+     a.correctionLat*=1-portion;
+     a.correctionLon*=1-portion;
+     a.correctionRemainingMs=Math.max(0,a.correctionRemainingMs-dt);
+   }
  }
 }
 
@@ -694,9 +732,9 @@ function draw(){
  }
  if(layers.aircraft){
   for(const a of aircraft){
-   const q=airborneAltAz(a.displayLat,a.displayLon,a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
+   const q=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
    const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
-   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
+   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
    ctx.globalAlpha=1;
    const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a);
    const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
@@ -757,7 +795,7 @@ function draw(){
 
 function allSelectableObjects(){
  const stars=currentSkyObjects(simTime).filter(o=>skyObjectVisible(o));
- const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?makeSkyObject({...a,az:p.az,el:p.el,distanceKm:p.distanceKm,slantRangeKm:p.slantRangeKm,horizontalKm:p.horizontalKm}):null}).filter(o=>skyObjectVisible(o));
+ const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);return p?makeSkyObject({...a,az:p.az,el:p.el,distanceKm:p.distanceKm,slantRangeKm:p.slantRangeKm,horizontalKm:p.horizontalKm}):null}).filter(o=>skyObjectVisible(o));
  const aps=layers.airports?airports.map(airportDisplayObject).filter(o=>skyObjectVisible(o,{respectLandscape:false})):[];
  const planets=currentPlanetObjects(simTime).filter(o=>skyObjectVisible(o));
  const visibleSatellites=satellites.filter(o=>skyObjectVisible(o));
