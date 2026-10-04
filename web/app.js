@@ -488,6 +488,10 @@ function aircraftSpecialMeaning(a){
  return "";
 }
 const AIRCRAFT_GRACE_MS=20000;
+const AIRCRAFT_POSITION_RESPONSE_MS=4200;
+const AIRCRAFT_MOTION_RESPONSE_MS=1800;
+const AIRCRAFT_ALTITUDE_RESPONSE_MS=2200;
+const AIRCRAFT_MAX_FRAME_DT_MS=250;
 async function refreshAircraft(force=false){
  if(!observer||!layers.aircraft)return;
  if(!force&&Date.now()-aircraftUpdated<2500)return;
@@ -515,9 +519,8 @@ async function refreshAircraft(force=false){
        altM:measuredAltM,displayAltM:prior?.displayAltM??measuredAltM,
        gs:measuredGs,displayGs:prior?.displayGs??measuredGs,
        track:measuredTrack,displayTrack:prior?.displayTrack??measuredTrack,
-       correctionLat:projected.lat-(prior?.displayLat??projected.lat),
-       correctionLon:adiff(projected.lon,prior?.displayLon??projected.lon),
-       correctionRemainingMs:prior?5000:0,
+       targetLat:projected.lat,targetLon:projected.lon,
+       targetUpdatedAt:frameNow,
        type:a.type||"Aircraft",registration:a.registration||"—",seen:seenSeconds,
        lastFrame:prior?.lastFrame??frameNow,lastSeenAt:wallNow
      });
@@ -537,24 +540,38 @@ async function refreshAircraft(force=false){
 }
 function stepAircraft(now){
  for(const a of aircraft){
-   const dt=Math.min(100,Math.max(0,now-(a.lastFrame||now)));a.lastFrame=now;
-   if(dt<=0)continue;
-   const motionK=1-Math.exp(-dt/1800),altitudeK=1-Math.exp(-dt/2200);
+   const rawDt=Math.max(0,now-(a.lastFrame||now));a.lastFrame=now;
+   if(rawDt<=0)continue;
+   const dt=Math.min(AIRCRAFT_MAX_FRAME_DT_MS,rawDt);
+   const motionK=1-Math.exp(-dt/AIRCRAFT_MOTION_RESPONSE_MS);
+   const altitudeK=1-Math.exp(-dt/AIRCRAFT_ALTITUDE_RESPONSE_MS);
+   const positionK=1-Math.exp(-dt/AIRCRAFT_POSITION_RESPONSE_MS);
+
    a.displayGs+=(a.gs-a.displayGs)*motionK;
    a.displayTrack=blendAngle(a.displayTrack,a.track,motionK);
    a.displayAltM+=(a.altM-a.displayAltM)*altitudeK;
 
-   const travelKm=Math.max(0,a.displayGs)*1.852*dt/3600000;
-   const advanced=destinationPoint(a.displayLat,a.displayLon,a.displayTrack,travelKm);
-   a.displayLat=advanced.lat;a.displayLon=advanced.lon;
+   const displayTravelKm=Math.max(0,a.displayGs)*1.852*dt/3600000;
+   const displayAdvanced=destinationPoint(a.displayLat,a.displayLon,a.displayTrack,displayTravelKm);
+   a.displayLat=displayAdvanced.lat;a.displayLon=displayAdvanced.lon;
 
-   if(a.correctionRemainingMs>0){
-     const portion=Math.min(1,dt/a.correctionRemainingMs);
-     a.displayLat+=a.correctionLat*portion;
-     a.displayLon+=a.correctionLon*portion;
-     a.correctionLat*=1-portion;
-     a.correctionLon*=1-portion;
-     a.correctionRemainingMs=Math.max(0,a.correctionRemainingMs-dt);
+   const targetTravelKm=Math.max(0,a.gs)*1.852*dt/3600000;
+   const targetAdvanced=destinationPoint(a.targetLat??a.lat,a.targetLon??a.lon,a.track,targetTravelKm);
+   a.targetLat=targetAdvanced.lat;a.targetLon=targetAdvanced.lon;
+
+   const latError=(a.targetLat??a.displayLat)-a.displayLat;
+   const lonError=adiff(a.targetLon??a.displayLon,a.displayLon);
+   a.displayLat+=latError*positionK;
+   a.displayLon+=lonError*positionK;
+
+   if(rawDt>AIRCRAFT_MAX_FRAME_DT_MS){
+     const catchupMs=rawDt-AIRCRAFT_MAX_FRAME_DT_MS;
+     const catchupKm=Math.max(0,a.displayGs)*1.852*catchupMs/3600000;
+     const catchup=destinationPoint(a.displayLat,a.displayLon,a.displayTrack,catchupKm);
+     a.displayLat=catchup.lat;a.displayLon=catchup.lon;
+     const targetCatchupKm=Math.max(0,a.gs)*1.852*catchupMs/3600000;
+     const targetCatchup=destinationPoint(a.targetLat,a.targetLon,a.track,targetCatchupKm);
+     a.targetLat=targetCatchup.lat;a.targetLon=targetCatchup.lon;
    }
  }
 }
