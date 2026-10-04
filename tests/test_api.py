@@ -130,7 +130,7 @@ def test_aircraft_photo_endpoint(monkeypatch) -> None:
         artist="Example Photographer",
         license_name="CC BY-SA 4.0",
         match="registration",
-        planespotters_url="https://www.planespotters.net/photos?registration=G-TEST",
+        planespotters_url="https://www.planespotters.net/photos/reg/G-TEST",
     )
     monkeypatch.setattr("alen.api._aircraft_photos.find", lambda *args, **kwargs: sample)
     response = TestClient(app).get(
@@ -142,4 +142,59 @@ def test_aircraft_photo_endpoint(monkeypatch) -> None:
     assert payload["artist"] == "Example Photographer"
     assert payload["license"] == "CC BY-SA 4.0"
     assert payload["match"] == "registration"
-    assert payload["planespotters_url"].endswith("registration=G-TEST")
+    assert payload["planespotters_url"].endswith("/photos/reg/G-TEST")
+
+
+def test_aircraft_photo_prefers_commons_registration_category(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhotoProvider
+
+    calls = []
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {
+                "query": {
+                    "pages": [
+                        {
+                            "title": "File:British Airways A320neo at Heathrow.jpg",
+                            "imageinfo": [
+                                {
+                                    "mime": "image/jpeg",
+                                    "thumburl": "https://upload.wikimedia.org/example.jpg",
+                                    "descriptionurl": "https://commons.wikimedia.org/wiki/File:Example.jpg",
+                                    "extmetadata": {
+                                        "Artist": {"value": "Example Photographer"},
+                                        "LicenseShortName": {"value": "CC BY-SA 4.0"},
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str, params=None):
+            calls.append(dict(params or {}))
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft_photos.httpx.Client", Client)
+    photo = AircraftPhotoProvider().find("G-TTNY", "A20N")
+    assert photo is not None
+    assert calls[0]["generator"] == "categorymembers"
+    assert calls[0]["gcmtitle"] == "Category:G-TTNY (aircraft)"
+    assert photo.match == "registration"
+    assert photo.image_url == "https://upload.wikimedia.org/example.jpg"
+    assert photo.planespotters_url.endswith("/photos/reg/G-TTNY")
