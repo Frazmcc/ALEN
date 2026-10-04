@@ -26,6 +26,7 @@ class SatelliteProvider:
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, tuple[OrbitRecord, ...]]] = {}
         self._lock = Lock()
+        self.last_diagnostics: dict[str, object] = {}
 
     def visible(
         self,
@@ -38,8 +39,11 @@ class SatelliteProvider:
     ) -> list[dict[str, object]]:
         now = datetime.now(timezone.utc)
         merged: dict[int, tuple[OrbitRecord, set[str]]] = {}
+        loaded_by_group: dict[str, int] = {}
         for group in groups:
-            for record in self._load_group(group):
+            records = self._load_group(group)
+            loaded_by_group[group] = len(records)
+            for record in records:
                 satnum = record.norad
                 prior = merged.get(satnum)
                 if prior is None:
@@ -48,6 +52,9 @@ class SatelliteProvider:
                     prior[1].add(group)
 
         visible: list[dict[str, object]] = []
+        propagated = 0
+        propagation_failures = 0
+        below_horizon = 0
         for satnum, (record, memberships) in merged.items():
             position = _topocentric_from_tle(
                 record,
@@ -56,7 +63,12 @@ class SatelliteProvider:
                 longitude_deg,
                 altitude_m,
             )
-            if position is None or position["elevation_deg"] < 0.0:
+            if position is None:
+                propagation_failures += 1
+                continue
+            propagated += 1
+            if position["elevation_deg"] < 0.0:
+                below_horizon += 1
                 continue
             visible.append(
                 {
@@ -71,6 +83,16 @@ class SatelliteProvider:
             )
 
         visible.sort(key=lambda item: float(item["elevation_deg"]), reverse=True)
+        self.last_diagnostics = {
+            "requested_groups": list(groups),
+            "loaded_by_group": loaded_by_group,
+            "unique_orbits": len(merged),
+            "propagated": propagated,
+            "propagation_failures": propagation_failures,
+            "below_horizon": below_horizon,
+            "visible": len(visible),
+            "generated_at": now.isoformat(),
+        }
         return visible[: max(1, min(int(limit), 500))]
 
     def _load_group(self, group: str) -> tuple[OrbitRecord, ...]:
@@ -90,6 +112,12 @@ class SatelliteProvider:
             return cached[1] if cached else ()
 
     def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
+        records = self._fetch_group_json(group)
+        if records:
+            return records
+        return self._fetch_group_tle(group)
+
+    def _fetch_group_json(self, group: str) -> tuple[OrbitRecord, ...]:
         try:
             with httpx.Client(
                 timeout=30.0,
@@ -123,6 +151,56 @@ class SatelliteProvider:
             records.append(
                 OrbitRecord(
                     name=name,
+                    norad=norad,
+                    international_id=international_id,
+                    satellite=satellite,
+                )
+            )
+        return tuple(records)
+
+    def _fetch_group_tle(self, group: str) -> tuple[OrbitRecord, ...]:
+        try:
+            with httpx.Client(
+                timeout=30.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "text/plain"},
+            ) as client:
+                response = client.get(
+                    self.BASE_URL,
+                    params={"GROUP": group.upper(), "FORMAT": "TLE"},
+                )
+                response.raise_for_status()
+                lines = [line.strip() for line in response.text.splitlines() if line.strip()]
+        except httpx.HTTPError:
+            return ()
+
+        records: list[OrbitRecord] = []
+        index = 0
+        while index < len(lines):
+            if lines[index].startswith("1 ") and index + 1 < len(lines) and lines[index + 1].startswith("2 "):
+                name = ""
+                line1, line2 = lines[index], lines[index + 1]
+                index += 2
+            elif (
+                index + 2 < len(lines)
+                and lines[index + 1].startswith("1 ")
+                and lines[index + 2].startswith("2 ")
+            ):
+                name, line1, line2 = lines[index], lines[index + 1], lines[index + 2]
+                index += 3
+            else:
+                index += 1
+                continue
+
+            try:
+                satellite = Satrec.twoline2rv(line1, line2)
+                norad = int(line1[2:7])
+            except (TypeError, ValueError):
+                continue
+            international_id = line1[9:17].strip()
+            records.append(
+                OrbitRecord(
+                    name=name or f"NORAD {norad}",
                     norad=norad,
                     international_id=international_id,
                     satellite=satellite,
