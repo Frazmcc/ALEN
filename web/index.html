@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=6">
   <link rel="shortcut icon" href="/favicon.ico?v=6">
   <link rel="apple-touch-icon" href="/favicon.png?v=6">
-  <link rel="stylesheet" href="./styles.css?v=0.9.0">
+  <link rel="stylesheet" href="./styles.css?v=0.9.1">
 </head>
 <body>
   <main class="sky-shell">
@@ -46,24 +46,27 @@
       <section class="facts"><h3>About</h3><p id="inspector-fact"></p></section>
     </aside>
 
-    <nav class="layerbar" aria-label="Sky layers">
-      <section class="layer-group" aria-label="Astronomy layers">
-        <span class="layer-group-title">Astronomy</span>
-        <div class="layer-group-buttons">
-          <button type="button" data-layer="stars" aria-pressed="true">Stars</button>
-          <button type="button" data-layer="atmosphere" aria-pressed="true">Atmosphere</button>
-          <button type="button" data-layer="constellations" aria-pressed="true">Constellations</button>
-        </div>
-      </section>
+    <nav class="layerbar" aria-label="Sky control groups">
+      <button id="astronomy-groups-button" type="button" aria-expanded="false" aria-controls="astronomy-groups">Astronomy Groups</button>
       <div class="layerbar-divider" aria-hidden="true"></div>
-      <button type="button" data-layer="planets" aria-pressed="true">Planets</button>
-      <button type="button" data-layer="landscape" aria-pressed="true">Landscape</button>
-      <button type="button" data-layer="aircraft" aria-pressed="true">Aircraft</button>
-      <button id="aircraft-groups-button" type="button" aria-expanded="false" aria-controls="aircraft-groups">Aircraft groups</button>
-      <button type="button" data-layer="satellites" aria-pressed="true">Satellites</button>
-      <button id="satellite-groups-button" type="button" aria-expanded="false" aria-controls="satellite-groups">Satellite groups</button>
+      <button id="aircraft-groups-button" type="button" aria-expanded="false" aria-controls="aircraft-groups">Aircraft Groups</button>
+      <div class="layerbar-divider" aria-hidden="true"></div>
+      <button id="satellite-groups-button" type="button" aria-expanded="false" aria-controls="satellite-groups">Satellite Groups</button>
+      <div class="layerbar-divider" aria-hidden="true"></div>
+      <button id="display-groups-button" type="button" aria-expanded="false" aria-controls="display-groups">Display Groups</button>
     </nav>
 
+    <aside id="astronomy-groups" class="satellite-groups" hidden aria-label="Astronomy groups">
+      <div class="satellite-groups-head">
+        <div><strong>Astronomy Groups</strong><span>Control stars, constellations and planets</span></div>
+        <button id="astronomy-groups-close" type="button" aria-label="Close astronomy groups">×</button>
+      </div>
+      <div class="satellite-group-grid astronomy-group-grid">
+        <button type="button" class="sat-group is-on" data-layer="stars" aria-pressed="true"><span class="sat-mark">✦</span><span>Stars</span></button>
+        <button type="button" class="sat-group is-on" data-layer="constellations" aria-pressed="true"><span class="sat-mark">⌁</span><span>Constellations</span></button>
+        <button type="button" class="sat-group is-on" data-layer="planets" aria-pressed="true"><span class="sat-mark">●</span><span>Planets</span></button>
+      </div>
+    </aside>
 
     <aside id="aircraft-groups" class="satellite-groups" hidden aria-label="Aircraft groups">
       <div class="satellite-groups-head">
@@ -104,11 +107,22 @@
       <p class="satellite-groups-note">New launches override their normal category colour for 30 days. Debris uses a dedicated warning colour.</p>
     </aside>
 
+    <aside id="display-groups" class="satellite-groups" hidden aria-label="Display groups">
+      <div class="satellite-groups-head">
+        <div><strong>Display Groups</strong><span>Control the horizon and atmospheric display</span></div>
+        <button id="display-groups-close" type="button" aria-label="Close display groups">×</button>
+      </div>
+      <div class="satellite-group-grid display-group-grid">
+        <button type="button" class="sat-group is-on" data-layer="landscape" aria-pressed="true"><span class="sat-mark">⌂</span><span>Landscape</span></button>
+        <button type="button" class="sat-group is-on" data-layer="atmosphere" aria-pressed="true"><span class="sat-mark">◌</span><span>Atmosphere</span></button>
+      </div>
+    </aside>
+
     <div class="compass" aria-hidden="true">
       <span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span>
     </div>
     <p class="hint">Live from your location · horizon is the lowest view · drag to look around · wheel to zoom</p>
   </main>
-  <script src="./app.js?v=1.6.0"></script>
+  <script src="./app.js?v=1.6.1"></script>
 </body>
 </html>
