@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.1' in HTML
+    assert './app.js?v=1.6.2' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -626,3 +626,33 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert "stepAircraft(now);stepSatellites(now);draw()" in APP
     assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
     assert "retaining recent satellites" in APP
+
+
+def test_satellite_inspector_loads_useful_mission_metadata() -> None:
+    assert 'API_BASE+"/api/v1/satellite/info?"+qs' in APP
+    for label in (
+        "What is it?",
+        "Owner / operator",
+        "Country",
+        "Status",
+        "Launch date",
+        "Launch site",
+        "Expected life",
+        "Cost",
+        "Orbital period",
+        "Apogee",
+        "Perigee",
+        "Inclination",
+        "Radar cross-section",
+    ):
+        assert f'["{label}","Looking up…"]' in APP
+    assert 'fact.textContent=info.purpose' in APP
+    assert 'if(o.kind==="SATELLITE")updateSatelliteInfo(o)' in APP
+
+
+def test_satellite_inspector_supports_real_photos() -> None:
+    assert 'trustedExternalUrl(photo?.image_url,"db-satnogs.freetls.fastly.net")' in APP
+    assert 'trustedExternalUrl(photo?.image_url,"upload.wikimedia.org")' in APP
+    assert 'appendInspectorLink(credit,"Source",photo.source_url,"db.satnogs.org")' in APP
+    assert "https://db-satnogs.freetls.fastly.net" in HTML
+    assert "No verified public image found · ALEN illustration" in APP
