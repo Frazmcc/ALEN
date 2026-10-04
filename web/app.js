@@ -1254,7 +1254,7 @@ function tick(now){
  const dt=Math.min(100,Math.max(0,now-lastFrame));lastFrame=now;
  simTime=Date.now();
  clock.textContent=new Date(simTime).toLocaleString([], {year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
- stepAircraft(now);stepSatellites(simTime);draw();requestAnimationFrame(tick);
+ stepAircraft(now);stepSatellites(now);draw();requestAnimationFrame(tick);
 }
 aircraftTimer=setInterval(()=>refreshAircraft(false),3000);
 satelliteTimer=setInterval(()=>refreshSatellites(false),10000);
