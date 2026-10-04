@@ -759,6 +759,32 @@ function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false){
  const d1=isAngle?adiff(next,current):(next-current),d2=isAngle?adiff(next2,next):(next2-next);
  return{rate:d1/h,accel:(d2-d1)/(h*h)};
 }
+function satelliteSkyVector(az,el){
+ const azr=az*DEG,elr=el*DEG,c=Math.cos(elr);
+ return{x:c*Math.sin(azr),y:c*Math.cos(azr),z:Math.sin(elr)};
+}
+function normalizeSkyVector(v){
+ const m=Math.hypot(v.x,v.y,v.z)||1;
+ return{x:v.x/m,y:v.y/m,z:v.z/m};
+}
+function satelliteVectorToAltAz(v){
+ const n=normalizeSkyVector(v),horizontal=Math.hypot(n.x,n.y);
+ return{az:norm360(Math.atan2(n.x,n.y)*RAD),el:Math.atan2(n.z,horizontal)*RAD};
+}
+function satelliteVectorModel(v0,v1,v2,horizonSeconds){
+ const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
+ return{
+  rate:{x:(v1.x-v0.x)/h,y:(v1.y-v0.y)/h,z:(v1.z-v0.z)/h},
+  accel:{x:(v2.x-2*v1.x+v0.x)/(h*h),y:(v2.y-2*v1.y+v0.y)/(h*h),z:(v2.z-2*v1.z+v0.z)/(h*h)}
+ };
+}
+function blendSkyVector(current,target,k){
+ return normalizeSkyVector({
+  x:current.x+(target.x-current.x)*k,
+  y:current.y+(target.y-current.y)*k,
+  z:current.z+(target.z-current.z)*k
+ });
+}
 function satelliteVisualType(s){
  if(s.group==="stations")return"station";
  if(s.group==="starlink"||s.group==="oneweb"||s.group==="kuiper")return"constellation";
@@ -835,15 +861,16 @@ async function refreshSatellites(force=false){
     rangeKm:prior?.displayRangeKm??rangeKm,detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
     norad:String(raw.norad||"—"),objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
    sat.displayAz=prior?.displayAz??az;sat.displayEl=prior?.displayEl??el;sat.displayRangeKm=prior?.displayRangeKm??rangeKm;
-   sat.targetAz=az;sat.targetEl=el;sat.targetRangeKm=rangeKm;
-   const azModel=Number.isFinite(nextAz)&&Number.isFinite(nextAz2)?satelliteMotionModel(az,nextAz,nextAz2,horizon,true):null;
-   const elModel=Number.isFinite(nextEl)&&Number.isFinite(nextEl2)?satelliteMotionModel(el,nextEl,nextEl2,horizon,false):null;
+   const sample0=satelliteSkyVector(az,el);
+   const sample1=Number.isFinite(nextAz)&&Number.isFinite(nextEl)?satelliteSkyVector(nextAz,nextEl):sample0;
+   const sample2=Number.isFinite(nextAz2)&&Number.isFinite(nextEl2)?satelliteSkyVector(nextAz2,nextEl2):sample1;
+   const vectorModel=satelliteVectorModel(sample0,sample1,sample2,horizon);
+   sat.displayVec=prior?.displayVec??satelliteSkyVector(sat.displayAz,sat.displayEl);
+   sat.targetVec=sample0;
+   sat.vectorRate=vectorModel.rate;sat.vectorAccel=vectorModel.accel;
+   sat.targetRangeKm=rangeKm;
    const rangeModel=Number.isFinite(nextRange)&&Number.isFinite(nextRange2)?satelliteMotionModel(rangeKm,nextRange,nextRange2,horizon,false):null;
-   sat.azRateDegMs=azModel?.rate??(Number.isFinite(nextAz)?satelliteMotionRate(az,nextAz,horizon,true):(prior?.azRateDegMs||0));
-   sat.elRateDegMs=elModel?.rate??(Number.isFinite(nextEl)?satelliteMotionRate(el,nextEl,horizon,false):(prior?.elRateDegMs||0));
    sat.rangeRateKmMs=rangeModel?.rate??(Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0));
-   sat.azAccelDegMs2=azModel?.accel??(prior?.azAccelDegMs2||0);
-   sat.elAccelDegMs2=elModel?.accel??(prior?.elAccelDegMs2||0);
    sat.rangeAccelKmMs2=rangeModel?.accel??(prior?.rangeAccelKmMs2||0);
    sat.lastFrame=prior?.lastFrame??frameNow;sat.lastSeenAt=wallNow;
    next.push(sat);
@@ -871,16 +898,21 @@ function stepSatellites(now){
   const rawDt=Math.max(0,now-(s.lastFrame||now));s.lastFrame=now;
   if(rawDt<=0)continue;
   const dt=Math.min(SATELLITE_MAX_FRAME_DT_MS,rawDt),positionK=1-Math.exp(-dt/SATELLITE_POSITION_RESPONSE_MS);
-  const azRate=Number(s.azRateDegMs)||0,elRate=Number(s.elRateDegMs)||0,rangeRate=Number(s.rangeRateKmMs)||0;
-  const azAccel=Number(s.azAccelDegMs2)||0,elAccel=Number(s.elAccelDegMs2)||0,rangeAccel=Number(s.rangeAccelKmMs2)||0;
-  s.targetAz=norm360((s.targetAz??s.az)+azRate*rawDt+.5*azAccel*rawDt*rawDt);
-  s.targetEl=(s.targetEl??s.el)+elRate*rawDt+.5*elAccel*rawDt*rawDt;
+  const rate=s.vectorRate||{x:0,y:0,z:0},accel=s.vectorAccel||{x:0,y:0,z:0},target=s.targetVec||satelliteSkyVector(s.az,s.el);
+  s.targetVec=normalizeSkyVector({
+   x:target.x+rate.x*rawDt+.5*accel.x*rawDt*rawDt,
+   y:target.y+rate.y*rawDt+.5*accel.y*rawDt*rawDt,
+   z:target.z+rate.z*rawDt+.5*accel.z*rawDt*rawDt
+  });
+  s.vectorRate={x:rate.x+accel.x*rawDt,y:rate.y+accel.y*rawDt,z:rate.z+accel.z*rawDt};
+  s.displayVec=blendSkyVector(s.displayVec||satelliteSkyVector(s.az,s.el),s.targetVec,positionK);
+  const display=satelliteVectorToAltAz(s.displayVec);
+  const rangeRate=Number(s.rangeRateKmMs)||0,rangeAccel=Number(s.rangeAccelKmMs2)||0;
   s.targetRangeKm=Math.max(0,(s.targetRangeKm??s.rangeKm)+rangeRate*rawDt+.5*rangeAccel*rawDt*rawDt);
-  s.azRateDegMs=azRate+azAccel*rawDt;s.elRateDegMs=elRate+elAccel*rawDt;s.rangeRateKmMs=rangeRate+rangeAccel*rawDt;
-  s.displayAz=blendAngle(s.displayAz??s.az,s.targetAz,positionK);
-  s.displayEl=(s.displayEl??s.el)+((s.targetEl??s.el)-(s.displayEl??s.el))*positionK;
+  s.rangeRateKmMs=rangeRate+rangeAccel*rawDt;
   s.displayRangeKm=(s.displayRangeKm??s.rangeKm)+((s.targetRangeKm??s.rangeKm)-(s.displayRangeKm??s.rangeKm))*positionK;
-  s.az=s.displayAz;s.el=s.displayEl;s.rangeKm=s.displayRangeKm;
+  s.displayAz=display.az;s.displayEl=display.el;
+  s.az=display.az;s.el=display.el;s.rangeKm=s.displayRangeKm;
  }
 }
 
