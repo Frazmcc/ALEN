@@ -246,3 +246,47 @@ def test_orbitalwiki_elements_fallback(monkeypatch) -> None:
     assert len(records) == 1
     assert records[0].norad == 25544
     assert records[0].name == "ISS (ZARYA)"
+
+
+def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
+    from alen.aircraft import AircraftProvider
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {
+                "ac": [
+                    {
+                        "hex": "407abc",
+                        "flight": "SHT16E",
+                        "r": "G-TTNY",
+                        "t": "A20N",
+                        "ownOp": "British Airways",
+                        "lat": 55.77,
+                        "lon": -4.09,
+                        "alt_baro": 30000,
+                        "gs": 420,
+                        "track": 329,
+                    }
+                ]
+            }
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str):
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
+    aircraft = AircraftProvider().nearby(55.77, -4.09)
+    assert aircraft[0]["flight"] == "SHT16E"
+    assert aircraft[0]["operator"] == "British Airways"
