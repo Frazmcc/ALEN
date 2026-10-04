@@ -300,6 +300,9 @@ def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
 def test_aircraft_photo_inspector_contract() -> None:
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
     assert 'photo.match==="registration"?"exact registration":"aircraft type"' in APP
-    assert 'appendInspectorLink(credit,"Source",photo.source_url)' in APP
-    assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url)' in APP
+    assert 'function trustedExternalUrl(value,allowedHost)' in APP
+    assert 'url.protocol!=="https:"||url.hostname!==allowedHost' in APP
+    assert 'trustedExternalUrl(photo?.image_url,"upload.wikimedia.org")' in APP
+    assert 'appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org")' in APP
+    assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net")' in APP
     assert "https://upload.wikimedia.org" in HTML
