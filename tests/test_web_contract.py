@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.4.2' in HTML
+    assert './app.js?v=1.5.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -360,3 +360,18 @@ def test_satellite_public_tle_fallback() -> None:
     assert 'payload.get("member")' in source
     assert 'merged[record.norad] = (record, {"visual"})' in source
     assert '"fallback_used": fallback_used' in source
+
+
+def test_richer_aircraft_labels() -> None:
+    assert "const AIRLINE_PREFIXES={" in APP
+    assert 'SHT:"British Airways"' in APP
+    assert 'EZY:"easyJet"' in APP
+    assert 'TOM:"TUI Airways"' in APP
+    assert 'KLM:"KLM"' in APP
+    assert "function aircraftOperator(a)" in APP
+    assert 'const line1="Callsign: "+callsign,line2="Operator: "+operator' in APP
+    assert 'ctx.fillText("Callsign:"' in APP
+    assert 'ctx.fillText("Operator:"' in APP
+    assert '["Callsign",o.callsign||o.name||"—"]' in APP
+    assert '["Operator",aircraftOperator(o)]' in APP
+    assert '["ICAO hex",o.hex||"—"]' in APP
