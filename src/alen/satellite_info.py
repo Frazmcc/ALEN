@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from html import unescape
 import re
 import time
-from urllib.parse import quote
 
 import httpx
 
