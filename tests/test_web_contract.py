@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.5.0' in HTML
+    assert './app.js?v=1.5.1' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -397,3 +397,20 @@ def test_aircraft_route_details_are_inspector_only() -> None:
     assert 'setInspectorDetail("Arrival"' in APP
     assert '["Squawk",o.squawk||"—"]' in APP
     assert '[["Callsign:",callsign],["Squawk:",squawk]' not in APP
+
+
+def test_aircraft_motion_is_continuous_between_network_updates() -> None:
+    assert "function destinationPoint(lat,lon,bearingDeg,distanceKm)" in APP
+    assert "function blendAngle(current,target,k)" in APP
+    assert "seenSeconds=clamp(Number(a.seen)||0,0,30)" in APP
+    assert "measuredGs*1.852*seenSeconds/3600" in APP
+    assert "displayGs:prior?.displayGs??measuredGs" in APP
+    assert "displayTrack:prior?.displayTrack??measuredTrack" in APP
+    assert "displayAltM:prior?.displayAltM??measuredAltM" in APP
+    assert "correctionRemainingMs:prior?5000:0" in APP
+    assert "const travelKm=Math.max(0,a.displayGs)*1.852*dt/3600000" in APP
+    assert "a.displayTrack=blendAngle(a.displayTrack,a.track,motionK)" in APP
+    assert "a.displayAltM+=(a.altM-a.displayAltM)*altitudeK" in APP
+    assert "a.correctionRemainingMs=Math.max(0,a.correctionRemainingMs-dt)" in APP
+    assert "airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM)" in APP
+    assert "ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG)" in APP
