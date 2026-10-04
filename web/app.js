@@ -1042,7 +1042,7 @@ function objectVisualSvg(o){
 }
 let inspectorMediaRequest=0;
 function inspectorCreditText(o){
- return o.kind==="AIRCRAFT"?"Aircraft illustration · live position":o.kind==="SATELLITE"?"Satellite form · live orbital position":o.kind==="PLANET"?"Planet appearance · ALEN illustration":o.kind==="STAR"?"Stellar appearance · ALEN illustration":o.kind==="AIRPORT"?"Airport horizon reference · ALEN":"Object appearance · ALEN";
+ return o.kind==="AIRCRAFT"?"Aircraft illustration · live position":o.kind==="SATELLITE"?"No verified photo loaded · ALEN illustration":o.kind==="PLANET"?"Planet appearance · ALEN illustration":o.kind==="STAR"?"Stellar appearance · ALEN illustration":o.kind==="AIRPORT"?"Airport horizon reference · ALEN":"Object appearance · ALEN";
 }
 function trustedExternalUrl(value,allowedHost){
  try{
@@ -1096,6 +1096,59 @@ function setInspectorDetail(key,value){
  const dd=[...details.querySelectorAll("dd")].find(node=>node.dataset.key===key);
  if(dd)dd.textContent=value;
 }
+function formatSatelliteNumber(value,suffix="",digits=0){
+ const n=Number(value);return Number.isFinite(n)?n.toFixed(digits)+suffix:"Not available";
+}
+async function updateSatelliteInfo(o){
+ const norad=Number(o.norad);
+ if(!Number.isFinite(norad))return;
+ const token=o.id;
+ try{
+  const qs=new URLSearchParams({norad:String(norad),name:o.name||""});
+  const res=await fetch(API_BASE+"/api/v1/satellite/info?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
+  if(!res.ok)throw new Error("satellite info "+res.status);
+  const data=await res.json(),info=data.satellite;
+  if(selected?.id!==token||!info)return;
+
+  setInspectorDetail("What is it?",info.object_type||"Artificial satellite");
+  setInspectorDetail("Owner / operator",info.owner||"Not publicly listed");
+  setInspectorDetail("Country",info.country||"Not publicly listed");
+  setInspectorDetail("Status",info.status||"Unknown");
+  setInspectorDetail("Launch date",info.launch_date||"Not publicly listed");
+  setInspectorDetail("Launch site",info.launch_site||"Not publicly listed");
+  setInspectorDetail("Expected life",info.life_expectancy||"Not publicly specified");
+  setInspectorDetail("Cost",info.cost||"Not publicly specified");
+  setInspectorDetail("Orbital period",formatSatelliteNumber(info.period_minutes," min",2));
+  setInspectorDetail("Apogee",formatSatelliteNumber(info.apogee_km," km",0));
+  setInspectorDetail("Perigee",formatSatelliteNumber(info.perigee_km," km",0));
+  setInspectorDetail("Inclination",formatSatelliteNumber(info.inclination_deg,"°",2));
+  setInspectorDetail("Radar cross-section",formatSatelliteNumber(info.rcs_m2," m²",2));
+
+  const fact=document.querySelector("#inspector-fact");
+  fact.textContent=info.purpose||"No public mission description was available for this object.";
+
+  const photo=info.photo,image=document.querySelector("#inspector-image"),credit=document.querySelector("#inspector-image-credit");
+  const imageUrl=trustedExternalUrl(photo?.image_url,"db-satnogs.freetls.fastly.net")||trustedExternalUrl(photo?.image_url,"upload.wikimedia.org");
+  if(imageUrl){
+   image.src=imageUrl;image.alt=(info.name||o.name)+" photo";
+   credit.replaceChildren(document.createTextNode(`${photo.credit||"Satellite image"} · ${photo.license||"See source for licence"}`));
+   const satnogsSource=trustedExternalUrl(photo.source_url,"db.satnogs.org");
+   const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
+   if(satnogsSource)appendInspectorLink(credit,"Source",satnogsSource,"db.satnogs.org");
+   else if(commonsSource)appendInspectorLink(credit,"Source",commonsSource,"commons.wikimedia.org");
+  }else{
+   credit.textContent="No verified public image found · ALEN illustration";
+  }
+ }catch(e){
+  if(selected?.id===token){
+   for(const key of ["What is it?","Owner / operator","Country","Status","Launch date","Launch site","Expected life","Cost","Orbital period","Apogee","Perigee","Inclination","Radar cross-section"]){
+    const dd=[...document.querySelector("#inspector-details").querySelectorAll("dd")].find(node=>node.dataset.key===key);
+    if(dd&&dd.textContent==="Looking up…")dd.textContent="Unavailable";
+   }
+  }
+  console.warn("ALEN satellite metadata unavailable",e);
+ }
+}
 async function updateAircraftRoute(o){
  const callsign=String(o.callsign||o.name||"").trim();
  if(!callsign)return;
@@ -1135,12 +1188,36 @@ function showObject(o){
  let rows=[];
  if(o.kind==="AIRCRAFT"){const meaning=aircraftSpecialMeaning(o);rows=[["Callsign",o.callsign||o.name||"—"],["Operator",aircraftOperator(o)],["Squawk",o.squawk||"—"],["Meaning",meaning||"Standard ATC assignment / no special operation identified"],["Departure","Looking up…"],["Arrival","Looking up…"],["Military",aircraftIsMilitary(o)?"Yes":"No"],["Type",o.type],["Registration",o.registration],["ICAO hex",o.hex||"—"],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]]}
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
- else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
+ else if(o.kind==="SATELLITE")rows=[
+  ["What is it?","Looking up…"],
+  ["Owner / operator","Looking up…"],
+  ["Country","Looking up…"],
+  ["Status","Looking up…"],
+  ["Launch date","Looking up…"],
+  ["Launch site","Looking up…"],
+  ["Expected life","Looking up…"],
+  ["Cost","Looking up…"],
+  ["NORAD",o.norad||"—"],
+  ["International ID",o.objectId||"—"],
+  ["Category",o.groupLabel||"Satellite"],
+  ["New launch",o.isNew?"Yes · ≤30 days":"No"],
+  ["Debris",o.isDebris?"Yes":"No"],
+  ["Orbital period","Looking up…"],
+  ["Apogee","Looking up…"],
+  ["Perigee","Looking up…"],
+  ["Inclination","Looking up…"],
+  ["Radar cross-section","Looking up…"],
+  ["Current range",Math.round(o.rangeKm)+" km"],
+  ["Current azimuth",o.az.toFixed(1)+"°"],
+  ["Current elevation",o.el.toFixed(1)+"°"],
+  ["Position source",o.detail]
+ ];
  else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"],["Position","Live for your location and current time"]];
  else rows=[["Classification",o.detail||"Star"],["Distance",o.distance||"—"],["Catalogue magnitude",Number.isFinite(o.mag)?o.mag.toFixed(2):"—"],["Apparent magnitude",Number.isFinite(o.apparentMag)?o.apparentMag.toFixed(2):(Number.isFinite(o.mag)?o.mag.toFixed(2):"—")],["Atmospheric extinction",Number.isFinite(o.extinctionMag)?o.extinctionMag.toFixed(2)+" mag":"0.00 mag"],["Temperature",o.temperatureK?Math.round(o.temperatureK)+" K":"—"],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",Number.isFinite(o.ra)?o.ra.toFixed(2)+"°":"—"],["Declination",Number.isFinite(o.dec)?o.dec.toFixed(2)+"°":"—"]];
  for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;dt.dataset.key=k;dd.dataset.key=k;details.append(dt,dd)}
  inspector.hidden=false;
  if(o.kind==="AIRCRAFT")updateAircraftRoute(o);
+ if(o.kind==="SATELLITE")updateSatelliteInfo(o);
 }
 function clearSelection(){selected=null;inspector.hidden=true}
 
