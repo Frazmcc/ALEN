@@ -180,7 +180,7 @@ def test_dense_stars_and_real_planets_are_present() -> None:
 def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
     assert 'satelliteTimer=setInterval(()=>refreshSatellites(false),10000)' in APP
-    assert 'function stepSatellites(_ms){}' in APP
+    assert 'function stepSatellites(now)' in APP
     assert "satelliteDiagnostics=data.diagnostics||null" in APP
     assert "satellite feed unavailable" in APP
 
@@ -270,7 +270,7 @@ def test_unified_sky_object_foundation() -> None:
     assert "aboveGeometricHorizon" in APP
     assert "aboveTerrainHorizon" in APP
     assert 'return makeAstronomySkyObject({id:"planet:"+id' in APP
-    assert 'return makeSkyObject({id:"sat:"+s.norad' in APP
+    assert 'const sat=makeSkyObject({id,kind:"SATELLITE"' in APP
     assert 'return p?makeAstronomySkyObject({...o,az:p.az,el:p.el}):null' in APP
     assert "airports.map(airportDisplayObject).filter(o=>skyObjectVisible" in APP
     assert "skyObjectScreen(o)" in APP
@@ -310,7 +310,7 @@ def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
     assert "if(!observer)return;" in APP
     assert 'satelliteRequestState="requesting"' in APP
     assert 'satelliteRequestState="ok"' in APP
-    assert 'satelliteRequestState="error"' in APP
+    assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
     assert "setTimeout(()=>refreshSatellites(true),1500)" in APP
     assert 'if(key==="satellites"&&layers[key])refreshSatellites(true);' in APP
     assert "await refreshSatellites(true);" in APP
@@ -358,7 +358,7 @@ def test_daylight_contrast_palette() -> None:
     assert 'root.dataset.skyMode=dayMode?"day":"night"' in APP
     assert 'const objectText=dayMode?"#08283f":"#eef8ff"' in APP
     assert 'const aircraftInk=dayMode?"#083a59":"#9fd9ff"' in APP
-    assert 'ctx.strokeText("✈",0,0)' in APP
+    assert "drawAircraftIcon(visualType,iconSize,aircraftInk" in APP
     assert 'data-sky-mode="day"' in css
 
 
@@ -435,7 +435,7 @@ def test_aircraft_motion_is_continuous_between_network_updates() -> None:
     assert "a.displayLon+=lonError*positionK" in APP
     assert "correctionRemainingMs" not in APP
     assert "airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM)" in APP
-    assert "ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG)" in APP
+    assert "ctx.rotate(aircraftScreenRotation(a,q,p))" in APP
 
 
 def test_multistate_layer_label_controls() -> None:
