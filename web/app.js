@@ -706,11 +706,19 @@ let inspectorMediaRequest=0;
 function inspectorCreditText(o){
  return o.kind==="AIRCRAFT"?"Aircraft illustration · live position":o.kind==="SATELLITE"?"Satellite form · live orbital position":o.kind==="PLANET"?"Planet appearance · ALEN illustration":o.kind==="STAR"?"Stellar appearance · ALEN illustration":o.kind==="AIRPORT"?"Airport horizon reference · ALEN":"Object appearance · ALEN";
 }
-function appendInspectorLink(parent,label,url){
- if(!url)return;
+function trustedExternalUrl(value,allowedHost){
+ try{
+  const url=new URL(String(value||""));
+  if(url.protocol!=="https:"||url.hostname!==allowedHost)return "";
+  return url.href;
+ }catch{return ""}
+}
+function appendInspectorLink(parent,label,url,allowedHost){
+ const safeUrl=trustedExternalUrl(url,allowedHost);
+ if(!safeUrl)return;
  const sep=document.createTextNode(" · ");
  const a=document.createElement("a");
- a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;
+ a.href=safeUrl;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;
  parent.append(sep,a);
 }
 async function updateInspectorMedia(o){
@@ -728,12 +736,13 @@ async function updateInspectorMedia(o){
   const res=await fetch(API_BASE+"/api/v1/aircraft/photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
   if(!res.ok)throw new Error("aircraft photo "+res.status);
   const data=await res.json(),photo=data.photo;
-  if(token!==inspectorMediaRequest||selected?.id!==o.id||!photo?.image_url)return;
-  image.src=photo.image_url;
+  const imageUrl=trustedExternalUrl(photo?.image_url,"upload.wikimedia.org");
+  if(token!==inspectorMediaRequest||selected?.id!==o.id||!imageUrl)return;
+  image.src=imageUrl;
   image.alt=`${o.registration&&o.registration!=="—"?o.registration:o.name} aircraft photo`;
   credit.replaceChildren(document.createTextNode(`${photo.artist||"Wikimedia Commons contributor"} · ${photo.license||"See source for licence"} · ${photo.match==="registration"?"exact registration":"aircraft type"}`));
-  appendInspectorLink(credit,"Source",photo.source_url);
-  appendInspectorLink(credit,"More photos",photo.planespotters_url);
+  appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org");
+  appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net");
  }catch(e){
   if(token===inspectorMediaRequest)console.warn("ALEN aircraft photo lookup unavailable",e);
  }
