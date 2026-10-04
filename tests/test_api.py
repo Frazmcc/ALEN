@@ -85,3 +85,34 @@ def test_nearby_aircraft_endpoint(monkeypatch) -> None:
     )
     assert response.status_code == 200
     assert response.json()["aircraft"] == sample
+
+
+def test_aircraft_provider_rounds_radius_for_adsb_api(monkeypatch) -> None:
+    from alen.aircraft import AircraftProvider
+
+    requested = {}
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {"ac": []}
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str):
+            requested["url"] = url
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
+    AircraftProvider().nearby(55.77, -4.09, radius_nm=43.4488)
+    assert requested["url"].endswith("/dist/44")
