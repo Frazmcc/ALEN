@@ -19,7 +19,7 @@ class AircraftProvider:
         url = self.BASE_URL.format(
             lat=f"{latitude_deg:.4f}",
             lon=f"{longitude_deg:.4f}",
-            radius_nm=f"{radius_nm:.4f}",
+            radius_nm=str(max(1, min(250, math.ceil(radius_nm)))),
         )
         try:
             with httpx.Client(
