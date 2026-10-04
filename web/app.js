@@ -399,6 +399,7 @@ function aircraftAltitudeM(a){
  const v=a.alt_geom??a.alt_baro;
  return typeof v==="number"&&Number.isFinite(v)?v*.3048:0;
 }
+const AIRCRAFT_GRACE_MS=20000;
 async function refreshAircraft(force=false){
  if(!observer||!layers.aircraft)return;
  if(!force&&Date.now()-aircraftUpdated<2500)return;
@@ -407,19 +408,33 @@ async function refreshAircraft(force=false){
    const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_nm:String(AIRCRAFT_RADIUS_NM),limit:"450"});
    const res=await fetch(API_BASE+"/api/v1/aircraft?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
    if(!res.ok)throw new Error("aircraft "+res.status);
-   const data=await res.json(),now=performance.now();
-   const old=new Map(aircraft.map(a=>[a.id,a]));
-   aircraft=(Array.isArray(data.aircraft)?data.aircraft:[]).filter(a=>Number.isFinite(Number(a.lat))&&Number.isFinite(Number(a.lon))).map(a=>{
-     const id=String(a.hex||a.flight||a.registration||Math.random().toString(36)).trim(),prior=old.get(id);
-     const lat=Number(a.lat),lon=Number(a.lon);
-     return{
+   const data=await res.json(),frameNow=performance.now(),wallNow=Date.now();
+   const previous=new Map(aircraft.map(a=>[a.id,a]));
+   const next=new Map();
+   for(const a of (Array.isArray(data.aircraft)?data.aircraft:[])){
+     if(!Number.isFinite(Number(a.lat))||!Number.isFinite(Number(a.lon)))continue;
+     const id=String(a.hex||a.flight||a.registration||"").trim();
+     if(!id)continue;
+     const prior=previous.get(id),lat=Number(a.lat),lon=Number(a.lon);
+     next.set(id,{
        id,kind:"AIRCRAFT",name:String(a.flight||a.registration||a.hex||"Aircraft").trim(),lat,lon,
        displayLat:prior?.displayLat??lat,displayLon:prior?.displayLon??lon,
        altM:aircraftAltitudeM({alt_geom:a.alt_geom,alt_baro:a.alt_baro}),gs:Number(a.gs)||0,track:Number(a.track)||0,
-       type:a.type||"Aircraft",registration:a.registration||"—",seen:Number(a.seen)||0,lastFrame:now
-     };
-   });
- }catch(e){aircraft=[];console.warn("ALEN aircraft feed unavailable",e)}
+       type:a.type||"Aircraft",registration:a.registration||"—",seen:Number(a.seen)||0,
+       lastFrame:prior?.lastFrame??frameNow,lastSeenAt:wallNow
+     });
+   }
+   for(const [id,prior] of previous){
+     if(next.has(id))continue;
+     const lastSeenAt=Number(prior.lastSeenAt)||wallNow;
+     if(wallNow-lastSeenAt<=AIRCRAFT_GRACE_MS)next.set(id,prior);
+   }
+   aircraft=[...next.values()];
+ }catch(e){
+   console.warn("ALEN aircraft feed unavailable; retaining recent aircraft",e);
+   const wallNow=Date.now();
+   aircraft=aircraft.filter(a=>wallNow-(Number(a.lastSeenAt)||wallNow)<=AIRCRAFT_GRACE_MS);
+ }
  setLiveStatus();
 }
 function stepAircraft(now){
