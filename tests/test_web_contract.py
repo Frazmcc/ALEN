@@ -557,3 +557,20 @@ def test_star_colours_adapt_to_sky_brightness() -> None:
     assert "ctx.fillStyle=starPalette.fill" in APP
     assert "ctx.strokeStyle=starPalette.outline" in APP
     assert "ctx.fillStyle=isSelected?(dayMode?"#08283f":"#dff9ff"):starPalette.label" in APP
+
+
+def test_bright_stars_remain_visible_in_daylight() -> None:
+    assert "function starVisibilityAlpha(visualMag,sky)" in APP
+    assert "if(sky.daylight<.72)return night" in APP
+    assert "const brightFactor=clamp((2.0-visualMag)/3.2,0,1)" in APP
+    assert "const daylightFloor=.1+.28*brightFactor" in APP
+    assert "const daylightAlpha=starVisibilityAlpha(visualMag,sky)" in APP
+
+
+def test_satellite_group_fetch_has_fast_public_mirror_fallback() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert 'SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"' in source
+    assert "records = self._fetch_group_mirror_json(group)" in source
+    assert "def _fetch_group_mirror_json" in source
+    assert "self.SATVISOR_MIRROR_URL.format(group=group.lower())" in source
+    assert "timeout=10.0" in source
