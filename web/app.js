@@ -648,7 +648,7 @@ document.querySelectorAll("[data-satellite-group]").forEach(input=>input.addEven
  const key=input.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];if(!group)return;
  group.enabled=input.checked;
  input.closest("label")?.classList.toggle("is-on",group.enabled);
- if(layers.satellites&&group.enabled)await refreshSatellites(true);else rebuildSatelliteElements();
+ if(layers.satellites)await refreshSatellites(true);else satellites=[];
 }));
 const satellitePanel=document.querySelector("#satellite-groups");
 const satelliteGroupsButton=document.querySelector("#satellite-groups-button");
