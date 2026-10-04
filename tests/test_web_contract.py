@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.4.0' in HTML
+    assert './app.js?v=1.4.1' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -287,7 +287,7 @@ def test_aircraft_persistence_across_transient_feed_gaps() -> None:
 
 
 def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
-    assert 'let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null,satelliteRequestState="idle"' in APP
+    assert 'satelliteRequestState="idle",satelliteRequestInFlight=false' in APP
     assert "if(!observer)return;" in APP
     assert 'satelliteRequestState="requesting"' in APP
     assert 'satelliteRequestState="ok"' in APP
@@ -320,3 +320,24 @@ def test_sky_colour_tracks_local_solar_elevation() -> None:
     assert "const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el)" in APP
     assert "g.addColorStop(0,sky.top)" in APP
     assert "sky.starVisibility" in APP
+
+
+def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert "ThreadPoolExecutor" in source
+    assert "as_completed" in source
+    assert "max_workers=min(6, len(requested_groups))" in source
+    assert "timeout=8.0" in source
+    assert "if(!observer||satelliteRequestInFlight)return;" in APP
+    assert "const controller=new AbortController()" in APP
+    assert "setTimeout(()=>controller.abort(),20000)" in APP
+    assert "satelliteRequestInFlight=false" in APP
+
+
+def test_daylight_contrast_palette() -> None:
+    css = Path("web/styles.css").read_text(encoding="utf-8")
+    assert 'root.dataset.skyMode=dayMode?"day":"night"' in APP
+    assert 'const objectText=dayMode?"#08283f":"#eef8ff"' in APP
+    assert 'const aircraftInk=dayMode?"#083a59":"#9fd9ff"' in APP
+    assert 'ctx.strokeText("✈",0,0)' in APP
+    assert 'data-sky-mode="day"' in css
