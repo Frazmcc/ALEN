@@ -43,7 +43,25 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert 'href="/favicon.png?v=4"' in HTML
     assert '<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=4">' in HTML
     assert '<link rel="shortcut icon" type="image/png" href="/favicon.png?v=4">' in HTML
-    assert Path("web/assets/alen-logo.png").is_file()
+    logo_path = Path("web/assets/alen-logo.png")
+    assert logo_path.is_file()
+    logo = logo_path.read_bytes()
+    assert logo.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    offset = 8
+    chunk_types = []
+    while offset + 12 <= len(logo):
+        length = int.from_bytes(logo[offset:offset + 4], "big")
+        end = offset + 12 + length
+        assert end <= len(logo), "ALEN logo PNG is truncated"
+        chunk_type = logo[offset + 4:offset + 8]
+        chunk_types.append(chunk_type)
+        offset = end
+        if chunk_type == b"IEND":
+            break
+    assert chunk_types[0] == b"IHDR"
+    assert b"IDAT" in chunk_types
+    assert chunk_types[-1] == b"IEND"
+    assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
     assert './app.js?v=0.9.0' in HTML
 
