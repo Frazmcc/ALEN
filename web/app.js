@@ -140,7 +140,7 @@ function currentPlanetObjects(ms){
  const positions=solarSystemRaDec(ms);
  return Object.entries(positions).map(([id,p])=>{
   const info=PLANET_INFO[id],altaz=raDecToAltAz(p.ra,p.dec,ms);if(!info||!altaz)return null;
-  return makeSkyObject({id:"planet:"+id,kind:"PLANET",name:info.name,ra:p.ra,dec:p.dec,az:altaz.az,el:altaz.el,
+  return makeAstronomySkyObject({id:"planet:"+id,kind:"PLANET",name:info.name,ra:p.ra,dec:p.dec,az:altaz.az,el:altaz.el,
    color:info.color,symbol:info.symbol,detail:info.detail,fact:info.fact});
  }).filter(Boolean);
 }
@@ -289,6 +289,18 @@ function skyObjectVisible(o,{respectLandscape=true,requireScreen=false}={}){
  if(respectLandscape&&layers.landscape&&o.el<=terrainHorizonElevation(o.az))return false;
  if(requireScreen&&!skyObjectScreen(o))return false;
  return true;
+}
+function atmosphericRefractionDeg(geometricEl){
+ if(!layers.atmosphere||!Number.isFinite(geometricEl)||geometricEl<=-1||geometricEl>=90)return 0;
+ const angle=(geometricEl+10.3/(geometricEl+5.11))*DEG;
+ if(!Number.isFinite(angle))return 0;
+ const correction=(1.02/Math.tan(angle))/60;
+ return clamp(correction,0,1);
+}
+function makeAstronomySkyObject(raw){
+ const geometricEl=Number(raw.el);
+ const refractionDeg=atmosphericRefractionDeg(geometricEl);
+ return makeSkyObject({...raw,geometricEl,refractionDeg,el:geometricEl+refractionDeg});
 }
 
 function observerLabel(){
@@ -477,7 +489,7 @@ function currentSkyObjects(ms){
  const catalogue=brightStars.length?brightStars:SKY_OBJECTS;
  return catalogue.map(o=>{
    const p=raDecToAltAz(o.ra,o.dec,ms);
-   return p?makeSkyObject({...o,az:p.az,el:p.el}):null;
+   return p?makeAstronomySkyObject({...o,az:p.az,el:p.el}):null;
  }).filter(Boolean);
 }
 function screenYForElevation(el,az=yaw){
@@ -669,8 +681,8 @@ function showObject(o){
  if(o.kind==="AIRCRAFT")rows=[["Type",o.type],["Registration",o.registration],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
- else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"],["Position","Live for your location and current time"]];
- else rows=[["Classification",o.detail||"Star"],["Distance",o.distance||"—"],["Apparent magnitude",Number.isFinite(o.mag)?o.mag.toFixed(2):"—"],["Temperature",o.temperatureK?Math.round(o.temperatureK)+" K":"—"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Right ascension",Number.isFinite(o.ra)?o.ra.toFixed(2)+"°":"—"],["Declination",Number.isFinite(o.dec)?o.dec.toFixed(2)+"°":"—"]];
+ else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"],["Position","Live for your location and current time"]];
+ else rows=[["Classification",o.detail||"Star"],["Distance",o.distance||"—"],["Apparent magnitude",Number.isFinite(o.mag)?o.mag.toFixed(2):"—"],["Temperature",o.temperatureK?Math.round(o.temperatureK)+" K":"—"],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",Number.isFinite(o.ra)?o.ra.toFixed(2)+"°":"—"],["Declination",Number.isFinite(o.dec)?o.dec.toFixed(2)+"°":"—"]];
  for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;details.append(dt,dd)}
  inspector.hidden=false;
 }
