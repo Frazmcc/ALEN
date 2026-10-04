@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.3' in HTML
+    assert './app.js?v=1.6.4' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -158,8 +158,8 @@ def test_satellite_group_controls_and_visual_categories() -> None:
     assert 'isDebris:memberships.includes("debris")' in APP
     assert 'satellitePrimaryGroup' in APP
     assert 'group.enabled=phaseEnabled(group.phase)' in APP
-    assert 'ctx.fillStyle=s.color' in APP
-    assert 'ctx.fillText(s.glyph||"◇"' in APP
+    assert "drawSatelliteIcon(visualType,satSize,s.color" in APP
+    assert "drawSatelliteIcon(visualType,satSize,s.color" in APP
     assert '["Category",o.groupLabel||"Satellite"]' in APP
     assert '["New launch",o.isNew?"Yes · ≤30 days":"No"]' in APP
     assert '["Debris",o.isDebris?"Yes":"No"]' in APP
@@ -620,10 +620,13 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert '"azimuth_deg_next"' in source
     assert '"elevation_deg_next"' in source
     assert '"range_km_next"' in source
+    assert '"azimuth_deg_next2"' in source
+    assert '"elevation_deg_next2"' in source
+    assert '"range_km_next2"' in source
     assert '"motion_horizon_seconds": 2' in source
 
     assert "const SATELLITE_GRACE_MS=15000" in APP
-    assert "const SATELLITE_POSITION_RESPONSE_MS=1400" in APP
+    assert "const SATELLITE_POSITION_RESPONSE_MS=850" in APP
     assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
     assert "sat.displayAz=prior?.displayAz??az" in APP
     assert "sat.targetAz=az" in APP
@@ -669,3 +672,28 @@ def test_satellite_inspector_supports_real_photos() -> None:
     assert 'appendInspectorLink(credit,"Source",satnogsSource,"db.satnogs.org")' in APP
     assert "img-src 'self' data:" in HTML
     assert "No verified public image found · ALEN illustration" in APP
+
+
+def test_satellite_visuals_are_category_specific_and_labels_declutter() -> None:
+    assert "function satelliteVisualType(s)" in APP
+    for kind in ("station", "constellation", "navigation", "earth", "debris", "cubesat", "satellite"):
+        assert f'return"{kind}"' in APP or f'return "{kind}"' in APP
+    assert "function drawSatelliteIcon(kind,size,fill,stroke)" in APP
+    assert "function labelBoxOverlaps(box,boxes)" in APP
+    assert "const satelliteLabelBoxes=[]" in APP
+    assert "if(active||!labelBoxOverlaps(box,satelliteLabelBoxes))" in APP
+    assert "drawSatelliteIcon(visualType,satSize,s.color" in APP
+
+
+def test_satellite_motion_uses_curved_short_horizon_model() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert "now + timedelta(seconds=4)" in source
+    assert '"azimuth_deg_next2"' in source
+    assert '"elevation_deg_next2"' in source
+    assert '"range_km_next2"' in source
+    assert "function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false)" in APP
+    assert "sat.azAccelDegMs2=" in APP
+    assert "sat.elAccelDegMs2=" in APP
+    assert "sat.rangeAccelKmMs2=" in APP
+    assert ".5*azAccel*rawDt*rawDt" in APP
+    assert "s.azRateDegMs=azRate+azAccel*rawDt" in APP
