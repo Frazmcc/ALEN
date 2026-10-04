@@ -60,6 +60,7 @@ class AircraftProvider:
                     "db_flags": int(aircraft.get("dbFlags") or 0),
                     "registration": str(aircraft.get("r") or "").strip(),
                     "type": str(aircraft.get("t") or "Aircraft").strip(),
+                    "category": str(aircraft.get("category") or "").strip().upper(),
                     "lat": lat,
                     "lon": lon,
                     "alt_baro": aircraft.get("alt_baro"),
