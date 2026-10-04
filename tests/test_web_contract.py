@@ -46,7 +46,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     logo_path = Path("web/assets/alen-logo.png")
     assert logo_path.is_file()
     logo = logo_path.read_bytes()
-    assert logo.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    assert logo.startswith(b"\x89PNG\r\n\x1a\n")
     offset = 8
     chunk_types = []
     while offset + 12 <= len(logo):
