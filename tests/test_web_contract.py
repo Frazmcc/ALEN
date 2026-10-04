@@ -43,7 +43,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert "./assets/alen-logo.png?v=2" in HTML
     assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=0.8.0' in HTML
+    assert './app.js?v=0.8.1' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -147,6 +147,23 @@ def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
     assert 'satelliteTimer=setInterval(()=>refreshSatellites(false),10000)' in APP
     assert 'function stepSatellites(_ms){}' in APP
+
+
+def test_landscape_is_foreground_occlusion_layer() -> None:
+    assert "function drawLandscapeForeground()" in APP
+    assert "function isAboveLandscape(az,el)" in APP
+    assert "drawLandscapeForeground();" in APP
+    assert "isAboveLandscape(o.az,o.el)" in APP
+    assert "isAboveLandscape(q.az,q.el)" in APP
+    assert "isAboveLandscape(s.az,s.el)" in APP
+    draw_start = APP.index("function draw(){")
+    draw_end = APP.index("function allSelectableObjects()", draw_start)
+    draw = APP[draw_start:draw_end]
+    assert draw.index("if(layers.stars)") < draw.index("drawLandscapeForeground();")
+    assert draw.index("if(layers.planets)") < draw.index("drawLandscapeForeground();")
+    assert draw.index("if(layers.aircraft)") < draw.index("drawLandscapeForeground();")
+    assert draw.index("if(layers.satellites)") < draw.index("drawLandscapeForeground();")
+    assert draw.index("drawLandscapeForeground();") < draw.index("if(layers.airports)")
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
