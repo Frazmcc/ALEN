@@ -181,6 +181,8 @@ def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
     assert 'satelliteTimer=setInterval(()=>refreshSatellites(false),10000)' in APP
     assert 'function stepSatellites(_ms){}' in APP
+    assert "satelliteDiagnostics=data.diagnostics||null" in APP
+    assert "satellite feed unavailable" in APP
 
 
 def test_landscape_is_foreground_occlusion_layer() -> None:
@@ -231,7 +233,9 @@ def test_satellite_backend_uses_omm_json() -> None:
     assert "from sgp4 import omm" in source
     assert 'params={"GROUP": group.upper(), "FORMAT": "JSON"}' in source
     assert "omm.initialize(satellite, fields)" in source
-    assert "Satrec.twoline2rv" not in source
+    assert "omm.initialize(satellite, fields)" in source
+    assert "Satrec.twoline2rv" in source
+    assert '"FORMAT": "TLE"' in source
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
