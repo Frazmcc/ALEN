@@ -24,6 +24,7 @@ class SatelliteProvider:
     BASE_URL = "https://celestrak.org/NORAD/elements/gp.php"
     FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"
     ORBITALWIKI_URL = "https://www.orbitalwiki.com/api/v1/elements"
+    SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
     CACHE_SECONDS = 1800
 
     def __init__(self) -> None:
@@ -301,6 +302,9 @@ class SatelliteProvider:
         records = self._fetch_group_json(group)
         if records:
             return records
+        records = self._fetch_group_mirror_json(group)
+        if records:
+            return records
         return self._fetch_group_tle(group)
 
     def _fetch_group_json(self, group: str) -> tuple[OrbitRecord, ...]:
@@ -344,10 +348,50 @@ class SatelliteProvider:
             )
         return tuple(records)
 
+    def _fetch_group_mirror_json(self, group: str) -> tuple[OrbitRecord, ...]:
+        try:
+            with httpx.Client(
+                timeout=8.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
+            ) as client:
+                response = client.get(
+                    self.SATVISOR_MIRROR_URL.format(group=group.lower())
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return ()
+
+        if not isinstance(payload, list):
+            return ()
+
+        records: list[OrbitRecord] = []
+        for fields in payload:
+            if not isinstance(fields, dict):
+                continue
+            try:
+                satellite = Satrec()
+                omm.initialize(satellite, fields)
+                norad = int(fields["NORAD_CAT_ID"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            name = str(fields.get("OBJECT_NAME") or f"NORAD {norad}").strip()
+            international_id = str(fields.get("OBJECT_ID") or "").strip()
+            records.append(
+                OrbitRecord(
+                    name=name,
+                    norad=norad,
+                    international_id=international_id,
+                    satellite=satellite,
+                )
+            )
+        return tuple(records)
+
     def _fetch_group_tle(self, group: str) -> tuple[OrbitRecord, ...]:
         try:
             with httpx.Client(
-                timeout=30.0,
+                timeout=10.0,
                 follow_redirects=True,
                 headers={"User-Agent": "ALEN/0.1", "Accept": "text/plain"},
             ) as client:
