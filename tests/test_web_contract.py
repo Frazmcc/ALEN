@@ -90,7 +90,7 @@ def test_live_aircraft_and_satellite_contract() -> None:
 
 
 def test_airports_are_clickable_selectable_objects_with_media() -> None:
-    assert 'data-layer="airports" aria-pressed="true"' in HTML
+    assert 'data-layer="airports"' not in HTML
     assert 'id="inspector-media"' in HTML
     assert 'id="inspector-image"' in HTML
     assert 'id="inspector-image-credit"' in HTML
@@ -164,6 +164,18 @@ def test_landscape_is_foreground_occlusion_layer() -> None:
     assert draw.index("if(layers.aircraft)") < draw.index("drawLandscapeForeground();")
     assert draw.index("if(layers.satellites)") < draw.index("drawLandscapeForeground();")
     assert draw.index("drawLandscapeForeground();") < draw.index("if(layers.airports)")
+
+
+def test_astronomy_controls_are_grouped() -> None:
+    assert 'class="layer-group" aria-label="Astronomy layers"' in HTML
+    assert '<span class="layer-group-title">Astronomy</span>' in HTML
+    astronomy_start = HTML.index('class="layer-group" aria-label="Astronomy layers"')
+    astronomy_end = HTML.index('</section>', astronomy_start)
+    astronomy = HTML[astronomy_start:astronomy_end]
+    assert 'data-layer="stars"' in astronomy
+    assert 'data-layer="atmosphere"' in astronomy
+    assert 'data-layer="constellations"' in astronomy
+    assert 'data-layer="planets"' not in astronomy
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
