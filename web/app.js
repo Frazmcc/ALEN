@@ -271,7 +271,6 @@ function terrainHorizonElevation(az){
 function makeSkyObject(raw){
  const az=Number(raw.az),el=Number(raw.el);
  const horizonEl=Number.isFinite(az)?terrainHorizonElevation(az):0;
- const screen=Number.isFinite(az)&&Number.isFinite(el)?project(az,el):null;
  return{
   ...raw,
   az,
@@ -279,14 +278,16 @@ function makeSkyObject(raw){
   horizonEl,
   aboveGeometricHorizon:Number.isFinite(el)&&el>=0,
   aboveTerrainHorizon:Number.isFinite(el)&&el>horizonEl,
-  screen,
   selectable:raw.selectable!==false
  };
+}
+function skyObjectScreen(o){
+ return o&&Number.isFinite(o.az)&&Number.isFinite(o.el)?project(o.az,o.el):null;
 }
 function skyObjectVisible(o,{respectLandscape=true,requireScreen=false}={}){
  if(!o||!Number.isFinite(o.az)||!Number.isFinite(o.el)||o.el<0)return false;
  if(respectLandscape&&layers.landscape&&o.el<=terrainHorizonElevation(o.az))return false;
- if(requireScreen&&!project(o.az,o.el))return false;
+ if(requireScreen&&!skyObjectScreen(o))return false;
  return true;
 }
 
@@ -609,7 +610,7 @@ function allSelectableObjects(){
 }
 function nearestObject(x,y){
  let best=null,bestD=Infinity;
- for(const o of allSelectableObjects()){const p=o.screen||project(o.az,o.el);if(!p)continue;const d=Math.hypot(x-p[0],y-p[1]);if(d<30&&d<bestD){best=o;bestD=d}}
+ for(const o of allSelectableObjects()){const p=skyObjectScreen(o);if(!p)continue;const d=Math.hypot(x-p[0],y-p[1]);if(d<30&&d<bestD){best=o;bestD=d}}
  return best;
 }
 function escapeSvgText(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[ch]))}
