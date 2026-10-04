@@ -21,7 +21,7 @@ let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,selecte
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
-let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null,satelliteRequestState="idle";
+let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null,satelliteRequestState="idle",satelliteRequestInFlight=false;
 const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
@@ -171,7 +171,8 @@ function timeOfDaySky(sunEl){
   top:mixRgb(lo.top,hi.top,t),
   mid:mixRgb(lo.mid,hi.mid,t),
   horizon:mixRgb(lo.horizon,hi.horizon,t),
-  starVisibility:lo.stars+(hi.stars-lo.stars)*t
+  starVisibility:lo.stars+(hi.stars-lo.stars)*t,
+  daylight:clamp((sunEl+6)/12,0,1)
  };
 }
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
@@ -516,25 +517,27 @@ function logicalSatelliteMemberships(sourceGroups){
  return memberships;
 }
 async function refreshSatellites(force=false){
- if(!observer)return;
+ if(!observer||satelliteRequestInFlight)return;
  if(!force&&Date.now()-satellitesUpdated<8000)return;
  satellitesUpdated=Date.now();
+ satelliteRequestInFlight=true;
  satelliteRequestState="requesting";
  setLiveStatus();
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),20000);
  try{
   const sources=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))];
   if(!sources.length){
    satellites=[];
    satelliteDiagnostics={unique_orbits:0,visible:0,requested_groups:[]};
    satelliteRequestState="ok";
-   setLiveStatus();
    return;
   }
   const qs=new URLSearchParams({
    lat:String(observer.lat),lon:String(observer.lon),altitude_m:String(observer.altM||0),
    groups:sources.join(","),limit:"320"
   });
-  const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
+  const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal});
   if(!res.ok)throw new Error("satellites "+res.status);
   const data=await res.json();
   satelliteDiagnostics=data.diagnostics||null;
@@ -550,8 +553,11 @@ async function refreshSatellites(force=false){
   satelliteDiagnostics={unique_orbits:0};
   satelliteRequestState="error";
   console.warn("ALEN satellite feed unavailable",e);
+ }finally{
+  clearTimeout(timeout);
+  satelliteRequestInFlight=false;
+  setLiveStatus();
  }
- setLiveStatus();
 }
 function stepSatellites(_ms){}
 
@@ -601,7 +607,10 @@ function isAboveLandscape(az,el){
  return !layers.landscape||el>terrainHorizonElevation(az);
 }
 function draw(){
- const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el);
+ const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el),dayMode=sky.daylight>.45;
+ root.dataset.skyMode=dayMode?"day":"night";
+ const objectText=dayMode?"#08283f":"#eef8ff";
+ const aircraftInk=dayMode?"#083a59":"#9fd9ff";
  const g=ctx.createLinearGradient(0,0,0,height);
  g.addColorStop(0,sky.top);
  g.addColorStop(.62,layers.atmosphere?sky.mid:sky.top);
@@ -635,18 +644,18 @@ function draw(){
   for(const o of currentPlanetObjects(simTime)){
    if(o.el<0||!isAboveLandscape(o.az,o.el))continue;const p=project(o.az,o.el);if(!p)continue;const active=selected?.id===o.id;
    const size=o.name==="Sun"?25:o.name==="Moon"?22:15;
-   ctx.fillStyle=o.color;ctx.font=`${active?"700 ":""}${size}px system-ui`;ctx.textAlign="center";ctx.textBaseline="middle";
-   ctx.fillText(o.symbol,p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
+   ctx.fillStyle=o.color;ctx.strokeStyle=dayMode?"rgba(6,31,48,.72)":"rgba(0,0,0,.36)";ctx.lineWidth=dayMode?2.2:1.2;ctx.font=`${active?"700 ":""}${size}px system-ui`;ctx.textAlign="center";ctx.textBaseline="middle";
+   ctx.strokeText(o.symbol,p[0],p[1]);ctx.fillText(o.symbol,p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
    if(active){ctx.strokeStyle=o.color;ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],size*.72,0,Math.PI*2);ctx.stroke()}
-   ctx.fillStyle="rgba(238,248,255,.88)";ctx.font="10px ui-monospace";ctx.fillText(o.name,p[0]+size*.55,p[1]-size*.45);
+   ctx.fillStyle=objectText;ctx.font="700 10px ui-monospace";ctx.fillText(o.name,p[0]+size*.55,p[1]-size*.45);
   }
  }
  if(layers.aircraft){
   for(const a of aircraft){
    const q=airborneAltAz(a.displayLat,a.displayLon,a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
    const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
-   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle="#9fd9ff";ctx.font=iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✈",0,0);ctx.restore();
-   ctx.globalAlpha=clamp(1.08-q.slantRangeKm/180,.62,1);ctx.fillStyle="rgba(180,225,255,.85)";ctx.font="9px ui-monospace";ctx.fillText(a.name,p[0]+iconSize*.65,p[1]-iconSize*.45);ctx.globalAlpha=1;
+   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
+   ctx.globalAlpha=1;ctx.font="700 9px ui-monospace";const aircraftLabel=a.name;const labelW=ctx.measureText(aircraftLabel).width;if(dayMode){ctx.fillStyle="rgba(255,255,255,.72)";ctx.fillRect(p[0]+iconSize*.55-2,p[1]-iconSize*.92-10,labelW+6,13)}ctx.fillStyle=objectText;ctx.fillText(aircraftLabel,p[0]+iconSize*.65,p[1]-iconSize*.45);ctx.globalAlpha=1;
   }
  }
  if(layers.satellites){
@@ -654,10 +663,10 @@ function draw(){
    if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
    const active=selected?.id===s.id,satScale=clamp(1.3-Math.log10(Math.max(100,s.rangeKm))/4,.72,1.15);
    const satSize=Math.round((active?15:12)*satScale);
-   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.globalAlpha=clamp(1.12-Math.log10(Math.max(100,s.rangeKm))/8,.68,1);ctx.font="700 "+satSize+"px ui-monospace";
-   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.globalAlpha=1;
+   ctx.fillStyle=s.color;ctx.strokeStyle=dayMode?"#08283f":s.color;ctx.globalAlpha=1;ctx.font="700 "+satSize+"px ui-monospace";
+   ctx.textAlign="center";ctx.textBaseline="middle";if(dayMode){ctx.lineWidth=2.2;ctx.strokeText(s.glyph||"◇",p[0],p[1])}ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.globalAlpha=1;
    if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
-   if(s.el>28||active){ctx.globalAlpha=.9;ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
+   if(s.el>28||active){ctx.globalAlpha=1;ctx.fillStyle=objectText;ctx.font="700 9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
   }
  }
 
