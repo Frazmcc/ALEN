@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=6">
   <link rel="shortcut icon" href="/favicon.ico?v=6">
   <link rel="apple-touch-icon" href="/favicon.png?v=6">
-  <link rel="stylesheet" href="./styles.css?v=0.8.0">
+  <link rel="stylesheet" href="./styles.css?v=0.9.0">
 </head>
 <body>
   <main class="sky-shell">
@@ -59,32 +59,47 @@
       <button type="button" data-layer="planets" aria-pressed="true">Planets</button>
       <button type="button" data-layer="landscape" aria-pressed="true">Landscape</button>
       <button type="button" data-layer="aircraft" aria-pressed="true">Aircraft</button>
+      <button id="aircraft-groups-button" type="button" aria-expanded="false" aria-controls="aircraft-groups">Aircraft groups</button>
       <button type="button" data-layer="satellites" aria-pressed="true">Satellites</button>
       <button id="satellite-groups-button" type="button" aria-expanded="false" aria-controls="satellite-groups">Satellite groups</button>
     </nav>
 
 
+    <aside id="aircraft-groups" class="satellite-groups" hidden aria-label="Aircraft groups">
+      <div class="satellite-groups-head">
+        <div><strong>Aircraft groups</strong><span>Click each group to cycle labels on → labels off → off → labels off → labels on</span></div>
+        <button id="aircraft-groups-close" type="button" aria-label="Close aircraft groups">×</button>
+      </div>
+      <div class="satellite-group-grid aircraft-group-grid">
+        <button type="button" class="sat-group is-on aircraft-commercial" data-aircraft-group="commercial" aria-pressed="true"><span class="sat-mark">✈</span><span>Commercial</span></button>
+        <button type="button" class="sat-group is-on aircraft-military" data-aircraft-group="military" aria-pressed="true"><span class="sat-mark">◆</span><span>Military</span></button>
+        <button type="button" class="sat-group is-on aircraft-emergency" data-aircraft-group="emergency" aria-pressed="true"><span class="sat-mark">✚</span><span>Emergency / special</span></button>
+        <button type="button" class="sat-group is-on aircraft-other" data-aircraft-group="other" aria-pressed="true"><span class="sat-mark">•</span><span>Other</span></button>
+      </div>
+      <p class="satellite-groups-note">Each group independently controls both visibility and labels. Aircraft remain live and continue moving even when their labels are hidden.</p>
+    </aside>
+
     <aside id="satellite-groups" class="satellite-groups" hidden aria-label="Satellite groups">
       <div class="satellite-groups-head">
-        <div><strong>Satellite groups</strong><span>Choose what appears in the live sky</span></div>
+        <div><strong>Satellite groups</strong><span>Click each group to cycle labels on → labels off → off → labels off → labels on</span></div>
         <button id="satellite-groups-close" type="button" aria-label="Close satellite groups">×</button>
       </div>
       <div class="satellite-group-grid">
-        <label class="sat-group is-on sat-new"><input type="checkbox" data-satellite-group="new" checked><span class="sat-mark">✦</span><span>New launches <small>≤30 days</small></span></label>
-        <label class="sat-group is-on sat-stations"><input type="checkbox" data-satellite-group="stations" checked><span class="sat-mark">▣</span><span>Space stations</span></label>
-        <label class="sat-group is-on sat-bright"><input type="checkbox" data-satellite-group="bright" checked><span class="sat-mark">◆</span><span>Bright / visual</span></label>
-        <label class="sat-group is-on sat-starlink"><input type="checkbox" data-satellite-group="starlink" checked><span class="sat-mark">●</span><span>Starlink</span></label>
-        <label class="sat-group sat-oneweb"><input type="checkbox" data-satellite-group="oneweb"><span class="sat-mark">●</span><span>OneWeb</span></label>
-        <label class="sat-group sat-kuiper"><input type="checkbox" data-satellite-group="kuiper"><span class="sat-mark">●</span><span>Kuiper</span></label>
-        <label class="sat-group sat-navigation"><input type="checkbox" data-satellite-group="navigation"><span class="sat-mark">◇</span><span>Navigation / GNSS</span></label>
-        <label class="sat-group sat-weather"><input type="checkbox" data-satellite-group="weather"><span class="sat-mark">◐</span><span>Weather</span></label>
-        <label class="sat-group sat-earth"><input type="checkbox" data-satellite-group="earth"><span class="sat-mark">◉</span><span>Earth observation</span></label>
-        <label class="sat-group sat-science"><input type="checkbox" data-satellite-group="science"><span class="sat-mark">✧</span><span>Science</span></label>
-        <label class="sat-group sat-amateur"><input type="checkbox" data-satellite-group="amateur"><span class="sat-mark">○</span><span>Amateur radio</span></label>
-        <label class="sat-group sat-geo"><input type="checkbox" data-satellite-group="geo"><span class="sat-mark">◇</span><span>Geostationary</span></label>
-        <label class="sat-group sat-military"><input type="checkbox" data-satellite-group="military"><span class="sat-mark">◆</span><span>Military</span></label>
-        <label class="sat-group sat-cubesat"><input type="checkbox" data-satellite-group="cubesat"><span class="sat-mark">□</span><span>CubeSats</span></label>
-        <label class="sat-group sat-debris"><input type="checkbox" data-satellite-group="debris"><span class="sat-mark">×</span><span>Space junk / debris</span></label>
+        <button type="button" class="sat-group is-on sat-new" data-satellite-group="new" aria-pressed="true"><span class="sat-mark">✦</span><span>New launches <small>≤30 days</small></span></button>
+        <button type="button" class="sat-group is-on sat-stations" data-satellite-group="stations" aria-pressed="true"><span class="sat-mark">▣</span><span>Space stations</span></button>
+        <button type="button" class="sat-group is-on sat-bright" data-satellite-group="bright" aria-pressed="true"><span class="sat-mark">◆</span><span>Bright / visual</span></button>
+        <button type="button" class="sat-group is-on sat-starlink" data-satellite-group="starlink" aria-pressed="true"><span class="sat-mark">●</span><span>Starlink</span></button>
+        <button type="button" class="sat-group sat-oneweb" data-satellite-group="oneweb" aria-pressed="false"><span class="sat-mark">●</span><span>OneWeb</span></button>
+        <button type="button" class="sat-group sat-kuiper" data-satellite-group="kuiper" aria-pressed="false"><span class="sat-mark">●</span><span>Kuiper</span></button>
+        <button type="button" class="sat-group sat-navigation" data-satellite-group="navigation" aria-pressed="false"><span class="sat-mark">◇</span><span>Navigation / GNSS</span></button>
+        <button type="button" class="sat-group sat-weather" data-satellite-group="weather" aria-pressed="false"><span class="sat-mark">◐</span><span>Weather</span></button>
+        <button type="button" class="sat-group sat-earth" data-satellite-group="earth" aria-pressed="false"><span class="sat-mark">◉</span><span>Earth observation</span></button>
+        <button type="button" class="sat-group sat-science" data-satellite-group="science" aria-pressed="false"><span class="sat-mark">✧</span><span>Science</span></button>
+        <button type="button" class="sat-group sat-amateur" data-satellite-group="amateur" aria-pressed="false"><span class="sat-mark">○</span><span>Amateur radio</span></button>
+        <button type="button" class="sat-group sat-geo" data-satellite-group="geo" aria-pressed="false"><span class="sat-mark">◇</span><span>Geostationary</span></button>
+        <button type="button" class="sat-group sat-military" data-satellite-group="military" aria-pressed="false"><span class="sat-mark">◆</span><span>Military</span></button>
+        <button type="button" class="sat-group sat-cubesat" data-satellite-group="cubesat" aria-pressed="false"><span class="sat-mark">□</span><span>CubeSats</span></button>
+        <button type="button" class="sat-group sat-debris" data-satellite-group="debris" aria-pressed="false"><span class="sat-mark">×</span><span>Space junk / debris</span></button>
       </div>
       <p class="satellite-groups-note">New launches override their normal category colour for 30 days. Debris uses a dedicated warning colour.</p>
     </aside>
@@ -94,6 +109,6 @@
     </div>
     <p class="hint">Live from your location · horizon is the lowest view · drag to look around · wheel to zoom</p>
   </main>
-  <script src="./app.js?v=1.5.1"></script>
+  <script src="./app.js?v=1.6.0"></script>
 </body>
 </html>
