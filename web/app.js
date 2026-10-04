@@ -1198,6 +1198,8 @@ function showObject(o){
   ["NORAD",o.norad||"—"],
   ["International ID",o.objectId||"—"],
   ["Category",o.groupLabel||"Satellite"],
+  ["New launch",o.isNew?"Yes · ≤30 days":"No"],
+  ["Debris",o.isDebris?"Yes":"No"],
   ["Orbital period","Looking up…"],
   ["Apogee","Looking up…"],
   ["Perigee","Looking up…"],
