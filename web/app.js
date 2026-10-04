@@ -453,9 +453,11 @@ function currentSkyObjects(ms){
    return p?{...o,az:p.az,el:p.el}:null;
  }).filter(Boolean);
 }
-function screenYForElevation(el){
- const vfov=fov*height/Math.max(width,1);
- return height*.55-(el-pitch)/vfov*height*.82;
+function screenYForElevation(el,az=yaw){
+ const p=project(az,el);
+ if(p)return p[1];
+ const vfov=verticalFovRad(),delta=(el-pitch)*DEG;
+ return height*.5-Math.tan(delta)/Math.tan(vfov/2)*height*.5;
 }
 function drawLandscapeLayer(fill){
  ctx.beginPath();
@@ -464,7 +466,7 @@ function drawLandscapeLayer(fill){
  for(let x=-step;x<=width+step;x+=step){
    const az=norm360(yaw+(x-width*.5)/width*fov);
    const el=terrainHorizonElevation(az);
-   const y=screenYForElevation(el);
+   const y=screenYForElevation(el,az);
    if(first){ctx.moveTo(x,y);first=false}else ctx.lineTo(x,y);
  }
  ctx.lineTo(width+step,height+2);ctx.lineTo(-step,height+2);ctx.closePath();
