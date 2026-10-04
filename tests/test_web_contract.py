@@ -293,7 +293,7 @@ def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
     assert 'satelliteRequestState="ok"' in APP
     assert 'satelliteRequestState="error"' in APP
     assert "setTimeout(()=>refreshSatellites(true),1500)" in APP
-    assert 'if(key==="satellites")refreshSatellites(true);' in APP
+    assert 'if(key==="satellites"&&layers[key])refreshSatellites(true);' in APP
     assert "await refreshSatellites(true);" in APP
 
 
@@ -417,3 +417,39 @@ def test_aircraft_motion_is_continuous_between_network_updates() -> None:
     assert "correctionRemainingMs" not in APP
     assert "airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM)" in APP
     assert "ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG)" in APP
+
+
+def test_multistate_layer_label_controls() -> None:
+    assert 'const MULTISTATE_LAYERS=new Set(["stars","planets","airports","aircraft","satellites"])' in APP
+    assert "function advancePhase(phase)" in APP
+    assert 'function layerLabelsOn(key)' in APP
+    assert 'btn.dataset.state=state' in APP
+    assert 'state==="off"?"false":state==="labels"?"true":"mixed"' in APP
+    assert 'if(layerLabelsOn("stars")' in APP
+    assert 'if(layerLabelsOn("planets"))' in APP
+    assert 'if(layerLabelsOn("airports"))' in APP
+    assert 'layerLabelsOn("satellites")&&satGroup?.labels' in APP
+
+
+def test_aircraft_groups_and_label_modes() -> None:
+    assert "const AIRCRAFT_GROUPS={" in APP
+    assert 'commercial:{label:"Commercial"' in APP
+    assert 'military:{label:"Military"' in APP
+    assert 'emergency:{label:"Emergency / special"' in APP
+    assert 'other:{label:"Other"' in APP
+    assert "function aircraftGroupKey(a)" in APP
+    assert "function aircraftGroupEnabled(a)" in APP
+    assert "function aircraftLabelsOn(a)" in APP
+    assert 'data-aircraft-group="commercial"' in HTML
+    assert 'data-aircraft-group="military"' in HTML
+    assert 'data-aircraft-group="emergency"' in HTML
+    assert 'data-aircraft-group="other"' in HTML
+    assert 'id="aircraft-groups-button"' in HTML
+
+
+def test_satellite_groups_use_multistate_buttons() -> None:
+    assert '<button type="button" class="sat-group is-on sat-new" data-satellite-group="new"' in HTML
+    assert '<input type="checkbox" data-satellite-group=' not in HTML
+    assert "group.phase=advancePhase(group.phase)" in APP
+    assert "group.enabled=phaseEnabled(group.phase)" in APP
+    assert "group.labels=phaseLabels(group.phase)" in APP
