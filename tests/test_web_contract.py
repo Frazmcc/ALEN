@@ -472,3 +472,74 @@ def test_satellite_groups_use_multistate_buttons() -> None:
     assert "group.phase=advancePhase(group.phase)" in APP
     assert "group.enabled=phaseEnabled(group.phase)" in APP
     assert "group.labels=phaseLabels(group.phase)" in APP
+
+
+def test_all_footer_group_buttons_are_wired_to_panels() -> None:
+    pairs = (
+        ("astronomy-groups-button", "astronomy-groups", "astronomy-groups-close"),
+        ("aircraft-groups-button", "aircraft-groups", "aircraft-groups-close"),
+        ("satellite-groups-button", "satellite-groups", "satellite-groups-close"),
+        ("display-groups-button", "display-groups", "display-groups-close"),
+    )
+    for button_id, panel_id, close_id in pairs:
+        assert f'id="{button_id}"' in HTML
+        assert f'aria-controls="{panel_id}"' in HTML
+        assert f'id="{panel_id}"' in HTML
+        assert f'id="{close_id}"' in HTML
+        mapping = f'["{panel_id}","{button_id}","{close_id}"]'
+        assert mapping in APP
+
+    assert 'entry.button?.addEventListener("click",()=>{' in APP
+    assert 'entry.close?.addEventListener("click",()=>{' in APP
+    assert 'if(entry.panel)entry.panel.hidden=!opening' in APP
+    assert 'entry.button.setAttribute("aria-expanded",String(opening))' in APP
+    assert 'function closeControlPanels(except=null)' in APP
+
+
+def test_every_nested_footer_control_has_an_active_click_handler() -> None:
+    astronomy_start = HTML.index('id="astronomy-groups"')
+    astronomy_end = HTML.index('</aside>', astronomy_start)
+    astronomy = HTML[astronomy_start:astronomy_end]
+    for key in ("stars", "constellations", "planets"):
+        assert f'data-layer="{key}"' in astronomy
+
+    display_start = HTML.index('id="display-groups"')
+    display_end = HTML.index('</aside>', display_start)
+    display = HTML[display_start:display_end]
+    for key in ("landscape", "atmosphere"):
+        assert f'data-layer="{key}"' in display
+
+    assert 'document.querySelectorAll("[data-layer]").forEach(btn=>{' in APP
+    assert 'btn.addEventListener("click",()=>{' in APP
+    assert 'layers[key]=!layers[key]' in APP
+    assert 'layerPhases[key]=advancePhase(layerPhases[key])' in APP
+    assert 'syncLayerButton(btn,key)' in APP
+
+    aircraft_start = HTML.index('id="aircraft-groups"')
+    aircraft_end = HTML.index('</aside>', aircraft_start)
+    aircraft = HTML[aircraft_start:aircraft_end]
+    for key in ("commercial", "military", "emergency", "other"):
+        assert f'data-aircraft-group="{key}"' in aircraft
+    assert 'document.querySelectorAll("[data-aircraft-group]").forEach(btn=>{' in APP
+    assert 'group.phase=advancePhase(group.phase)' in APP
+    assert 'group.enabled=phaseEnabled(group.phase)' in APP
+    assert 'group.labels=phaseLabels(group.phase)' in APP
+
+    satellite_start = HTML.index('id="satellite-groups"')
+    satellite_end = HTML.index('</aside>', satellite_start)
+    satellite = HTML[satellite_start:satellite_end]
+    for key in (
+        "new", "stations", "bright", "starlink", "oneweb", "kuiper",
+        "navigation", "weather", "earth", "science", "amateur", "geo",
+        "military", "cubesat", "debris",
+    ):
+        assert f'data-satellite-group="{key}"' in satellite
+    assert 'document.querySelectorAll("[data-satellite-group]").forEach(btn=>{' in APP
+    assert 'await refreshSatellites(true)' in APP
+
+
+def test_four_step_label_cycle_is_complete() -> None:
+    assert 'function advancePhase(phase){return ((Number(phase)||0)+1)%4}' in APP
+    assert 'function phaseState(phase){return phase===2?"off":phase===0?"labels":"plain"}' in APP
+    assert 'function phaseEnabled(phase){return phase!==2}' in APP
+    assert 'function phaseLabels(phase){return phase===0}' in APP
