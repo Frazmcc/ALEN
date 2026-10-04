@@ -386,19 +386,24 @@ function stepAircraft(now){
 async function refreshAirports(){
  if(!observer||!layers.airports)return;
  try{
-   const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_km:String(AIRPORT_RADIUS_KM),limit:"14"});
+   const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_km:String(AIRPORT_RADIUS_KM),limit:"30"});
    const res=await fetch(API_BASE+"/api/v1/airports?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
    if(!res.ok)throw new Error("airports "+res.status);
    const data=await res.json();
-   airports=(Array.isArray(data.airports)?data.airports:[]).filter(a=>Number(a.distance_km)<=AIRPORT_RADIUS_KM).map(a=>({
+   const next=(Array.isArray(data.airports)?data.airports:[]).filter(a=>Number(a.distance_km)<=AIRPORT_RADIUS_KM).map(a=>({
      id:"airport:"+(a.icao||a.iata||a.name),kind:"AIRPORT",name:a.name||a.icao||"Airport",
      iata:a.iata||"",icao:a.icao||"",distanceKm:Number(a.distance_km)||0,
      az:Number(a.bearing_deg)||0,type:a.type||"airport",lat:Number(a.latitude),lon:Number(a.longitude)
    }));
- }catch(e){airports=[];console.warn("ALEN airport feed unavailable",e)}
+   airports=next;
+ }catch(e){
+   console.warn("ALEN airport feed unavailable",e);
+   setTimeout(()=>refreshAirports(),5000);
+ }
 }
 function airportDisplayObject(a){
- return{...a,el:terrainHorizonElevation(a.az)+.75};
+ const horizonEl=terrainHorizonElevation(a.az);
+ return{...a,horizonEl,el:horizonEl+1.6};
 }
 
 function satelliteGroupEntries(){
@@ -543,13 +548,19 @@ function draw(){
 
  if(layers.airports){
   for(const raw of airports){
-   const a=airportDisplayObject(raw),p=project(a.az,a.el);if(!p)continue;
-   const active=selected?.id===a.id;
-   ctx.strokeStyle=active?"#dff9ff":"rgba(123,229,255,.78)";ctx.fillStyle=active?"#dff9ff":"rgba(123,229,255,.78)";
-   ctx.lineWidth=active?1.5:1;
-   ctx.beginPath();ctx.moveTo(p[0],p[1]-8);ctx.lineTo(p[0]-5,p[1]+1);ctx.lineTo(p[0]+5,p[1]+1);ctx.closePath();ctx.stroke();
-   ctx.beginPath();ctx.moveTo(p[0],p[1]+1);ctx.lineTo(p[0],p[1]+8);ctx.stroke();
-   ctx.font="9px ui-monospace,monospace";ctx.fillText(a.iata||a.icao,p[0]+8,p[1]-6);
+   const a=airportDisplayObject(raw),p=project(a.az,a.el),h=project(a.az,a.horizonEl);if(!p)continue;
+   const active=selected?.id===a.id,label=a.iata||a.icao||"APT";
+   ctx.save();
+   ctx.strokeStyle=active?"#ffffff":"rgba(123,229,255,.95)";ctx.fillStyle=active?"#ffffff":"rgba(123,229,255,.95)";
+   ctx.lineWidth=active?2:1.4;
+   if(h){ctx.beginPath();ctx.moveTo(p[0],p[1]+7);ctx.lineTo(h[0],h[1]);ctx.stroke()}
+   ctx.beginPath();ctx.moveTo(p[0],p[1]-9);ctx.lineTo(p[0]-6,p[1]+2);ctx.lineTo(p[0]+6,p[1]+2);ctx.closePath();ctx.stroke();
+   ctx.beginPath();ctx.moveTo(p[0],p[1]+2);ctx.lineTo(p[0],p[1]+9);ctx.stroke();
+   ctx.font="700 10px ui-monospace,monospace";
+   const tw=ctx.measureText(label).width;
+   ctx.fillStyle="rgba(2,7,12,.82)";ctx.fillRect(p[0]+8,p[1]-17,tw+8,15);
+   ctx.fillStyle=active?"#ffffff":"#9feaff";ctx.fillText(label,p[0]+12,p[1]-6);
+   ctx.restore();
   }
  }
 
