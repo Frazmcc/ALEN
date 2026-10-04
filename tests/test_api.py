@@ -118,3 +118,28 @@ def test_aircraft_provider_rounds_radius_for_adsb_api(monkeypatch) -> None:
     monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
     AircraftProvider().nearby(55.77, -4.09, radius_nm=43.4488)
     assert requested["url"].endswith("/dist/44")
+
+
+def test_aircraft_photo_endpoint(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhoto
+
+    sample = AircraftPhoto(
+        image_url="https://upload.wikimedia.org/example.jpg",
+        source_url="https://commons.wikimedia.org/wiki/File:Example.jpg",
+        title="G-TEST aircraft",
+        artist="Example Photographer",
+        license_name="CC BY-SA 4.0",
+        match="registration",
+        planespotters_url="https://www.planespotters.net/photos?registration=G-TEST",
+    )
+    monkeypatch.setattr("alen.api._aircraft_photos.find", lambda *args, **kwargs: sample)
+    response = TestClient(app).get(
+        "/api/v1/aircraft/photo?registration=G-TEST&aircraft_type=A320"
+    )
+    assert response.status_code == 200
+    payload = response.json()["photo"]
+    assert payload["image_url"] == sample.image_url
+    assert payload["artist"] == "Example Photographer"
+    assert payload["license"] == "CC BY-SA 4.0"
+    assert payload["match"] == "registration"
+    assert payload["planespotters_url"].endswith("registration=G-TEST")
