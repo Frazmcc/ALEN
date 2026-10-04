@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.4' in HTML
+    assert './app.js?v=1.6.5' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -629,15 +629,16 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert "const SATELLITE_POSITION_RESPONSE_MS=850" in APP
     assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
     assert "sat.displayAz=prior?.displayAz??az" in APP
-    assert "sat.targetAz=az" in APP
-    assert "sat.azRateDegMs=" in APP
-    assert "sat.elRateDegMs=" in APP
+    assert "sat.displayVec=prior?.displayVec??satelliteSkyVector" in APP
+    assert "sat.targetVec=sample0" in APP
+    assert "sat.vectorRate=vectorModel.rate" in APP
+    assert "sat.vectorAccel=vectorModel.accel" in APP
     assert "sat.rangeRateKmMs=" in APP
     assert "function stepSatellites(now)" in APP
-    assert "s.targetAz=norm360" in APP
-    assert "s.displayAz=blendAngle" in APP
-    assert "s.displayEl=" in APP
-    assert "s.az=s.displayAz;s.el=s.displayEl;s.rangeKm=s.displayRangeKm" in APP
+    assert "s.targetVec=normalizeSkyVector" in APP
+    assert "s.displayVec=blendSkyVector" in APP
+    assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
+    assert "s.az=display.az;s.el=display.el;s.rangeKm=s.displayRangeKm" in APP
     assert "stepAircraft(now);stepSatellites(now);draw()" in APP
     assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
     assert "retaining recent satellites" in APP
@@ -692,8 +693,22 @@ def test_satellite_motion_uses_curved_short_horizon_model() -> None:
     assert '"elevation_deg_next2"' in source
     assert '"range_km_next2"' in source
     assert "function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false)" in APP
-    assert "sat.azAccelDegMs2=" in APP
-    assert "sat.elAccelDegMs2=" in APP
+    assert "sat.vectorRate=vectorModel.rate" in APP
+    assert "sat.vectorAccel=vectorModel.accel" in APP
     assert "sat.rangeAccelKmMs2=" in APP
-    assert ".5*azAccel*rawDt*rawDt" in APP
-    assert "s.azRateDegMs=azRate+azAccel*rawDt" in APP
+    assert ".5*accel.x*rawDt*rawDt" in APP
+    assert "s.vectorRate={x:rate.x+accel.x*rawDt" in APP
+
+
+def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
+    assert "function satelliteSkyVector(az,el)" in APP
+    assert "function normalizeSkyVector(v)" in APP
+    assert "function satelliteVectorToAltAz(v)" in APP
+    assert "function satelliteVectorModel(v0,v1,v2,horizonSeconds)" in APP
+    assert "function blendSkyVector(current,target,k)" in APP
+    assert "sat.displayVec=prior?.displayVec??satelliteSkyVector" in APP
+    assert "sat.targetVec=sample0" in APP
+    assert "s.displayVec=blendSkyVector" in APP
+    assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
+    assert "s.displayAz=display.az;s.displayEl=display.el" in APP
+    assert "s.displayAz=blendAngle" not in APP
