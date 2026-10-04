@@ -12,6 +12,7 @@ from .aircraft_photos import AircraftPhotoProvider
 from .aircraft_routes import AircraftRouteProvider
 from .airports import AirportProvider
 from .satellites import SatelliteProvider
+from .satellite_info import SatelliteInfoProvider
 
 app = FastAPI(
     title="ALEN API",
@@ -32,6 +33,7 @@ _aircraft_photos = AircraftPhotoProvider()
 _aircraft_routes = AircraftRouteProvider()
 _airports = AirportProvider()
 _satellites = SatelliteProvider()
+_satellite_info = SatelliteInfoProvider()
 _logger = logging.getLogger("alen.satellites")
 
 
@@ -86,6 +88,14 @@ def visible_satellites(
         "satellites": satellites,
         "diagnostics": diagnostics,
     }
+
+
+@app.get("/api/v1/satellite/info")
+def satellite_info(
+    norad: int = Query(ge=1, le=999999999),
+    name: str = Query(default="", max_length=120),
+) -> dict[str, object]:
+    return {"satellite": _satellite_info.lookup(norad, name)}
 
 
 @app.get("/api/v1/aircraft")
