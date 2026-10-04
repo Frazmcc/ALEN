@@ -105,6 +105,13 @@ class SatelliteProvider:
                 longitude_deg,
                 altitude_m,
             ) or position
+            future_position_2 = _topocentric_from_tle(
+                record,
+                now + timedelta(seconds=4),
+                latitude_deg,
+                longitude_deg,
+                altitude_m,
+            ) or future_position
             visible.append(
                 {
                     "norad": satnum,
@@ -116,6 +123,9 @@ class SatelliteProvider:
                     "azimuth_deg_next": round(future_position["azimuth_deg"], 3),
                     "elevation_deg_next": round(future_position["elevation_deg"], 3),
                     "range_km_next": round(future_position["range_km"], 1),
+                    "azimuth_deg_next2": round(future_position_2["azimuth_deg"], 3),
+                    "elevation_deg_next2": round(future_position_2["elevation_deg"], 3),
+                    "range_km_next2": round(future_position_2["range_km"], 1),
                     "motion_horizon_seconds": 2,
                     "groups": sorted(memberships),
                 }
