@@ -7,14 +7,16 @@ from threading import Lock
 from time import time
 
 import httpx
+from sgp4 import omm
 from sgp4.api import Satrec, jday
 
 
 @dataclass(frozen=True, slots=True)
-class TleRecord:
+class OrbitRecord:
     name: str
-    line1: str
-    line2: str
+    norad: int
+    international_id: str
+    satellite: Satrec
 
 
 class SatelliteProvider:
@@ -22,7 +24,7 @@ class SatelliteProvider:
     CACHE_SECONDS = 1800
 
     def __init__(self) -> None:
-        self._cache: dict[str, tuple[float, tuple[TleRecord, ...]]] = {}
+        self._cache: dict[str, tuple[float, tuple[OrbitRecord, ...]]] = {}
         self._lock = Lock()
 
     def visible(
@@ -35,13 +37,10 @@ class SatelliteProvider:
         limit: int = 260,
     ) -> list[dict[str, object]]:
         now = datetime.now(timezone.utc)
-        merged: dict[int, tuple[TleRecord, set[str]]] = {}
+        merged: dict[int, tuple[OrbitRecord, set[str]]] = {}
         for group in groups:
             for record in self._load_group(group):
-                try:
-                    satnum = int(record.line1[2:7])
-                except ValueError:
-                    continue
+                satnum = record.norad
                 prior = merged.get(satnum)
                 if prior is None:
                     merged[satnum] = (record, {group})
@@ -63,7 +62,7 @@ class SatelliteProvider:
                 {
                     "norad": satnum,
                     "name": record.name,
-                    "international_id": _international_id(record.line1),
+                    "international_id": record.international_id or "—",
                     "azimuth_deg": round(position["azimuth_deg"], 3),
                     "elevation_deg": round(position["elevation_deg"], 3),
                     "range_km": round(position["range_km"], 1),
@@ -74,7 +73,7 @@ class SatelliteProvider:
         visible.sort(key=lambda item: float(item["elevation_deg"]), reverse=True)
         return visible[: max(1, min(int(limit), 500))]
 
-    def _load_group(self, group: str) -> tuple[TleRecord, ...]:
+    def _load_group(self, group: str) -> tuple[OrbitRecord, ...]:
         now = time()
         cached = self._cache.get(group)
         if cached and now - cached[0] < self.CACHE_SECONDS:
@@ -90,58 +89,57 @@ class SatelliteProvider:
                 return records
             return cached[1] if cached else ()
 
-    def _fetch_group(self, group: str) -> tuple[TleRecord, ...]:
+    def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
         try:
             with httpx.Client(
                 timeout=30.0,
                 follow_redirects=True,
-                headers={"User-Agent": "ALEN/0.1", "Accept": "text/plain"},
+                headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
             ) as client:
                 response = client.get(
                     self.BASE_URL,
-                    params={"GROUP": group, "FORMAT": "TLE"},
+                    params={"GROUP": group.upper(), "FORMAT": "JSON"},
                 )
                 response.raise_for_status()
-        except httpx.HTTPError:
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
             return ()
 
-        lines = [line.rstrip() for line in response.text.splitlines() if line.strip()]
-        records: list[TleRecord] = []
-        index = 0
-        while index + 2 < len(lines):
-            name, line1, line2 = lines[index], lines[index + 1], lines[index + 2]
-            if line1.startswith("1 ") and line2.startswith("2 "):
-                records.append(TleRecord(name=name.strip(), line1=line1, line2=line2))
-                index += 3
-            else:
-                index += 1
+        if not isinstance(payload, list):
+            return ()
+
+        records: list[OrbitRecord] = []
+        for fields in payload:
+            if not isinstance(fields, dict):
+                continue
+            try:
+                satellite = Satrec()
+                omm.initialize(satellite, fields)
+                norad = int(fields["NORAD_CAT_ID"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            name = str(fields.get("OBJECT_NAME") or f"NORAD {norad}").strip()
+            international_id = str(fields.get("OBJECT_ID") or "").strip()
+            records.append(
+                OrbitRecord(
+                    name=name,
+                    norad=norad,
+                    international_id=international_id,
+                    satellite=satellite,
+                )
+            )
         return tuple(records)
 
 
-def _international_id(line1: str) -> str:
-    raw = line1[9:17].strip()
-    if not raw:
-        return "—"
-    year = raw[:2]
-    launch = raw[2:5]
-    piece = raw[5:].strip()
-    try:
-        yy = int(year)
-        full_year = 1900 + yy if yy >= 57 else 2000 + yy
-        return f"{full_year}-{launch}{piece}"
-    except ValueError:
-        return raw
-
-
 def _topocentric_from_tle(
-    record: TleRecord,
+    record: OrbitRecord,
     when: datetime,
     latitude_deg: float,
     longitude_deg: float,
     altitude_m: float,
 ) -> dict[str, float] | None:
     try:
-        satellite = Satrec.twoline2rv(record.line1, record.line2)
+        satellite = record.satellite
         second = when.second + when.microsecond / 1_000_000
         jd, fraction = jday(
             when.year,

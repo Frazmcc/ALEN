@@ -165,10 +165,14 @@ function raDecToAltAz(ra,dec,ms){
 function horizonBottomGap(){
  return width<=900?70:72;
 }
+function verticalFovRad(){
+ const hfov=clamp(fov,1,170)*DEG;
+ return 2*Math.atan(Math.tan(hfov/2)*height/Math.max(width,1));
+}
 function updateMinPitch(){
- const vfov=fov*height/Math.max(width,1);
- const targetY=Math.max(0,height-horizonBottomGap());
- minPitch=((targetY/height)-.55)/.82*vfov;
+ const vfov=verticalFovRad(),targetY=Math.max(0,height-horizonBottomGap());
+ const normalized=(targetY-height*.5)/Math.max(1,height*.5);
+ minPitch=Math.atan(normalized*Math.tan(vfov/2))*RAD;
 }
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
@@ -181,9 +185,19 @@ function resize(){
 new ResizeObserver(resize).observe(canvas);resize();
 
 function project(az,el){
- const dx=adiff(az,yaw),vfov=fov*height/Math.max(width,1),dy=el-pitch;
- if(Math.abs(dx)>fov*.62||Math.abs(dy)>vfov*.72)return null;
- return[width*.5+dx/fov*width,height*.55-dy/vfov*height*.82];
+ const azr=az*DEG,elr=el*DEG,yawr=yaw*DEG,pitchr=pitch*DEG;
+ const target=[Math.cos(elr)*Math.sin(azr),Math.cos(elr)*Math.cos(azr),Math.sin(elr)];
+ const forward=[Math.cos(pitchr)*Math.sin(yawr),Math.cos(pitchr)*Math.cos(yawr),Math.sin(pitchr)];
+ const right=[Math.cos(yawr),-Math.sin(yawr),0];
+ const up=[-Math.sin(yawr)*Math.sin(pitchr),-Math.cos(yawr)*Math.sin(pitchr),Math.cos(pitchr)];
+ const z=target[0]*forward[0]+target[1]*forward[1]+target[2]*forward[2];
+ if(z<=0)return null;
+ const x=target[0]*right[0]+target[1]*right[1];
+ const y=target[0]*up[0]+target[1]*up[1]+target[2]*up[2];
+ const hfov=clamp(fov,1,170)*DEG,vfov=verticalFovRad();
+ const nx=x/(z*Math.tan(hfov/2)),ny=y/(z*Math.tan(vfov/2));
+ if(Math.abs(nx)>1.08||Math.abs(ny)>1.08)return null;
+ return[width*.5+nx*width*.5,height*.5-ny*height*.5];
 }
 
 function latLonToTilePixel(lat,lon,z=9){
@@ -304,13 +318,33 @@ function greatCircle(lat1,lon1,lat2,lon2){
  const x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
  return{distanceKm:EARTH_KM*central,bearing:norm360(Math.atan2(y,x)*RAD)};
 }
+function geodeticToEcef(latDeg,lonDeg,altM){
+ const a=6378137,e2=6.69437999014e-3,lat=latDeg*DEG,lon=lonDeg*DEG;
+ const sinLat=Math.sin(lat),cosLat=Math.cos(lat),n=a/Math.sqrt(1-e2*sinLat*sinLat);
+ return{
+  x:(n+altM)*cosLat*Math.cos(lon),
+  y:(n+altM)*cosLat*Math.sin(lon),
+  z:(n*(1-e2)+altM)*sinLat
+ };
+}
 function airborneAltAz(lat,lon,altM){
  if(!observer)return null;
- const g=greatCircle(observer.lat,observer.lon,lat,lon);
- const obsAltKm=(observer.altM||0)/1000,targetAltKm=Math.max(0,altM||0)/1000;
- const curvature=(g.distanceKm*g.distanceKm)/(2*EARTH_KM);
- const el=Math.atan2(targetAltKm-obsAltKm-curvature,Math.max(.001,g.distanceKm))*RAD;
- return{az:g.bearing,el,distanceKm:g.distanceKm};
+ const obs=geodeticToEcef(observer.lat,observer.lon,observer.altM||0);
+ const target=geodeticToEcef(lat,lon,Math.max(0,altM||0));
+ const dx=target.x-obs.x,dy=target.y-obs.y,dz=target.z-obs.z;
+ const latr=observer.lat*DEG,lonr=observer.lon*DEG;
+ const east=-Math.sin(lonr)*dx+Math.cos(lonr)*dy;
+ const north=-Math.sin(latr)*Math.cos(lonr)*dx-Math.sin(latr)*Math.sin(lonr)*dy+Math.cos(latr)*dz;
+ const up=Math.cos(latr)*Math.cos(lonr)*dx+Math.cos(latr)*Math.sin(lonr)*dy+Math.sin(latr)*dz;
+ const horizontalM=Math.hypot(east,north),slantRangeM=Math.hypot(horizontalM,up);
+ if(slantRangeM<1)return{az:0,el:90,distanceKm:0,slantRangeKm:0,horizontalKm:0};
+ return{
+  az:norm360(Math.atan2(east,north)*RAD),
+  el:Math.atan2(up,horizontalM)*RAD,
+  distanceKm:greatCircle(observer.lat,observer.lon,lat,lon).distanceKm,
+  slantRangeKm:slantRangeM/1000,
+  horizontalKm:horizontalM/1000
+ };
 }
 function aircraftAltitudeM(a){
  const v=a.alt_geom??a.alt_baro;
@@ -485,16 +519,18 @@ function draw(){
  if(layers.aircraft){
   for(const a of aircraft){
    const q=airborneAltAz(a.displayLat,a.displayLon,a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
-   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle="#9fd9ff";ctx.font="17px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✈",0,0);ctx.restore();
-   ctx.fillStyle="rgba(180,225,255,.85)";ctx.font="9px ui-monospace";ctx.fillText(a.name,p[0]+11,p[1]-8);
+   const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
+   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle="#9fd9ff";ctx.font=iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✈",0,0);ctx.restore();
+   ctx.globalAlpha=clamp(1.08-q.slantRangeKm/180,.62,1);ctx.fillStyle="rgba(180,225,255,.85)";ctx.font="9px ui-monospace";ctx.fillText(a.name,p[0]+iconSize*.65,p[1]-iconSize*.45);ctx.globalAlpha=1;
   }
  }
  if(layers.satellites){
   for(const s of satellites){
    if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
-   const active=selected?.id===s.id;
-   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.font=active?"700 15px ui-monospace":"700 12px ui-monospace";
-   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
+   const active=selected?.id===s.id,satScale=clamp(1.3-Math.log10(Math.max(100,s.rangeKm))/4,.72,1.15);
+   const satSize=Math.round((active?15:12)*satScale);
+   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.globalAlpha=clamp(1.12-Math.log10(Math.max(100,s.rangeKm))/8,.68,1);ctx.font="700 "+satSize+"px ui-monospace";
+   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.globalAlpha=1;
    if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
    if(s.el>28||active){ctx.globalAlpha=.9;ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
   }
@@ -564,7 +600,7 @@ function showObject(o){
  );
  const details=document.querySelector("#inspector-details");details.replaceChildren();
  let rows=[];
- if(o.kind==="AIRCRAFT")rows=[["Type",o.type],["Registration",o.registration],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
+ if(o.kind==="AIRCRAFT")rows=[["Type",o.type],["Registration",o.registration],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
  else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"]];
@@ -612,7 +648,7 @@ document.querySelectorAll("[data-satellite-group]").forEach(input=>input.addEven
  const key=input.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];if(!group)return;
  group.enabled=input.checked;
  input.closest("label")?.classList.toggle("is-on",group.enabled);
- if(layers.satellites&&group.enabled)await refreshSatellites(true);else rebuildSatelliteElements();
+ if(layers.satellites)await refreshSatellites(true);else satellites=[];
 }));
 const satellitePanel=document.querySelector("#satellite-groups");
 const satelliteGroupsButton=document.querySelector("#satellite-groups-button");
