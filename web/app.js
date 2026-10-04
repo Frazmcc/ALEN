@@ -527,9 +527,10 @@ function draw(){
  if(layers.satellites){
   for(const s of satellites){
    if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
-   const active=selected?.id===s.id;
-   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.font=active?"700 15px ui-monospace":"700 12px ui-monospace";
-   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
+   const active=selected?.id===s.id,satScale=clamp(1.3-Math.log10(Math.max(100,s.rangeKm))/4,.72,1.15);
+   const satSize=Math.round((active?15:12)*satScale);
+   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.globalAlpha=clamp(1.12-Math.log10(Math.max(100,s.rangeKm))/8,.68,1);ctx.font="700 "+satSize+"px ui-monospace";
+   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.globalAlpha=1;
    if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
    if(s.el>28||active){ctx.globalAlpha=.9;ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
   }
