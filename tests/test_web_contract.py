@@ -13,7 +13,6 @@ def test_web_identity_and_security_contract() -> None:
         "script-src 'self'",
         "style-src 'self'",
         "connect-src 'self'",
-        "https://api.adsb.lol",
         "https://celestrak.org",
         "https://s3.amazonaws.com",
         "https://alen-api-lquw.onrender.com",
@@ -67,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=0.9.0' in HTML
+    assert './app.js?v=1.0.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -75,7 +74,8 @@ def test_live_location_and_horizon_contract() -> None:
     assert "navigator.geolocation.watchPosition" in APP
     assert 'id="location-status"' in HTML
     assert "function horizonBottomGap()" in APP
-    assert "return width<=900?70:72" in APP
+    assert 'document.querySelector(".layerbar")' in APP
+    assert "footerHeight+10" in APP
     assert "function updateMinPitch()" in APP
     assert "pitch=minPitch" in APP
     assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
@@ -98,19 +98,20 @@ def test_live_view_has_no_time_transport_controls() -> None:
 
 
 def test_live_aircraft_and_satellite_contract() -> None:
-    assert "https://api.adsb.lol/v2/lat/" in APP
+    assert 'API_BASE+"/api/v1/aircraft?"+qs' in APP
     assert "AIRCRAFT_RADIUS_MILES=50" in APP
     assert "AIRCRAFT_RADIUS_KM=80.4672" in APP
     assert "AIRCRAFT_RADIUS_NM=43.4488" in APP
     assert "AIRPORT_RADIUS_MILES=50" in APP
     assert "AIRPORT_RADIUS_KM=80.4672" in APP
-    assert "dist/${AIRCRAFT_RADIUS_NM}" in APP
-    assert "distanceKm<=AIRCRAFT_RADIUS_KM" in APP
+    assert 'radius_nm:String(AIRCRAFT_RADIUS_NM)' in APP
     assert "requestAnimationFrame(tick)" in APP
     assert "API_BASE+\"/api/v1/satellites?\"" in APP
     assert "SGP4 · CelesTrak orbital elements" in APP
     assert 'data-layer="aircraft" aria-pressed="true"' in HTML
     assert 'data-layer="satellites" aria-pressed="true"' in HTML
+    assert 'data-satellite-group="starlink" checked' in HTML
+    assert "fov=130" in APP
 
 
 def test_airports_are_clickable_selectable_objects_with_media() -> None:
@@ -122,12 +123,19 @@ def test_airports_are_clickable_selectable_objects_with_media() -> None:
     assert 'kind:"AIRPORT"' in APP
     assert "function refreshAirports()" in APP
     assert "radius_km:String(AIRPORT_RADIUS_KM)" in APP
+    assert 'limit:"30"' in APP
     assert "Number(a.distance_km)<=AIRPORT_RADIUS_KM" in APP
+    assert "setTimeout(()=>refreshAirports(),5000)" in APP
+    assert "horizonEl+1.6" in APP
     assert "function airportDisplayObject" in APP
     assert "airports.map(airportDisplayObject)" in APP
     assert 'o.kind==="AIRPORT"' in APP
     assert "function updateInspectorMedia(o)" in APP
     assert "function objectVisualSvg(o)" in APP
+    assert 'o.kind==="PLANET"' in APP
+    assert 'o.kind==="STAR"' in APP
+    assert "Apparent magnitude" in APP
+    assert "Temperature" in APP
 
 
 def test_satellite_group_controls_and_visual_categories() -> None:
