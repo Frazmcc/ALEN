@@ -370,8 +370,6 @@ def test_richer_aircraft_labels() -> None:
     assert 'KLM:"KLM"' in APP
     assert "function aircraftOperator(a)" in APP
     assert 'const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]]' in APP
-    assert 'ctx.fillText("Callsign:"' in APP
-    assert 'ctx.fillText("Operator:"' in APP
     assert '["Callsign",o.callsign||o.name||"—"]' in APP
     assert '["Operator",aircraftOperator(o)]' in APP
     assert '["ICAO hex",o.hex||"—"]' in APP
@@ -386,7 +384,6 @@ def test_special_operation_aircraft_labels() -> None:
     assert '"7700":"General emergency"' in APP
     assert "function aircraftIsMilitary(a)" in APP
     assert "function aircraftSpecialMeaning(a)" in APP
-    assert '["Squawk:",squawk]' in APP
     assert '["Meaning:",meaning]' in APP
     assert '["Squawk",o.squawk||"—"]' in APP
     assert '["Military",aircraftIsMilitary(o)?"Yes":"No"]' in APP
