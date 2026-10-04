@@ -80,6 +80,8 @@ def test_live_location_and_horizon_contract() -> None:
     assert "pitch=minPitch" in APP
     assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
     assert "function drawLandscapeLayer" in APP
+    assert "function screenYForElevation(el,az=yaw)" in APP
+    assert "const p=project(az,el)" in APP
     assert "function terrainElevationAt" in APP
     assert "function refreshTerrainProfile" in APP
     assert "function terrainHorizonElevation" in APP
