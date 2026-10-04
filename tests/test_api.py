@@ -246,3 +246,68 @@ def test_orbitalwiki_elements_fallback(monkeypatch) -> None:
     assert len(records) == 1
     assert records[0].norad == 25544
     assert records[0].name == "ISS (ZARYA)"
+
+
+def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
+    from alen.aircraft import AircraftProvider
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {
+                "ac": [
+                    {
+                        "hex": "407abc",
+                        "flight": "SHT16E",
+                        "r": "G-TTNY",
+                        "t": "A20N",
+                        "ownOp": "British Airways",
+                        "squawk": "0032",
+                        "dbFlags": 1,
+                        "lat": 55.77,
+                        "lon": -4.09,
+                        "alt_baro": 30000,
+                        "gs": 420,
+                        "track": 329,
+                    }
+                ]
+            }
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str):
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
+    aircraft = AircraftProvider().nearby(55.77, -4.09)
+    assert aircraft[0]["flight"] == "SHT16E"
+    assert aircraft[0]["operator"] == "British Airways"
+    assert aircraft[0]["squawk"] == "0032"
+    assert aircraft[0]["db_flags"] == 1
+
+
+def test_aircraft_route_endpoint(monkeypatch) -> None:
+    sample = {
+        "callsign": "SHT16E",
+        "airline_code": "BAW",
+        "departure": {"name": "London Heathrow Airport", "iata": "LHR", "icao": "EGLL", "location": "London", "country": "GB"},
+        "arrival": {"name": "Glasgow Airport", "iata": "GLA", "icao": "EGPF", "location": "Glasgow", "country": "GB"},
+        "via": [],
+        "source": "ADSB.lol VRS standing data",
+    }
+    monkeypatch.setattr("alen.api._aircraft_routes.lookup", lambda callsign: sample)
+    response = TestClient(app).get("/api/v1/aircraft/route?callsign=SHT16E")
+    assert response.status_code == 200
+    route = response.json()["route"]
+    assert route["departure"]["iata"] == "LHR"
+    assert route["arrival"]["iata"] == "GLA"

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__
 from .aircraft import AircraftProvider
 from .aircraft_photos import AircraftPhotoProvider
+from .aircraft_routes import AircraftRouteProvider
 from .airports import AirportProvider
 from .satellites import SatelliteProvider
 
@@ -28,6 +29,7 @@ app.add_middleware(
 
 _aircraft = AircraftProvider()
 _aircraft_photos = AircraftPhotoProvider()
+_aircraft_routes = AircraftRouteProvider()
 _airports = AirportProvider()
 _satellites = SatelliteProvider()
 _logger = logging.getLogger("alen.satellites")
@@ -122,3 +124,10 @@ def aircraft_photo(
             "planespotters_url": photo.planespotters_url,
         }
     }
+
+
+@app.get("/api/v1/aircraft/route")
+def aircraft_route(
+    callsign: str = Query(default="", max_length=32),
+) -> dict[str, object]:
+    return {"route": _aircraft_routes.lookup(callsign)}

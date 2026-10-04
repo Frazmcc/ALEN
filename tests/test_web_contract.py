@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.4.2' in HTML
+    assert './app.js?v=1.5.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -360,3 +360,40 @@ def test_satellite_public_tle_fallback() -> None:
     assert 'payload.get("member")' in source
     assert 'merged[record.norad] = (record, {"visual"})' in source
     assert '"fallback_used": fallback_used' in source
+
+
+def test_richer_aircraft_labels() -> None:
+    assert "const AIRLINE_PREFIXES={" in APP
+    assert 'SHT:"British Airways"' in APP
+    assert 'EZY:"easyJet"' in APP
+    assert 'TOM:"TUI Airways"' in APP
+    assert 'KLM:"KLM"' in APP
+    assert "function aircraftOperator(a)" in APP
+    assert 'const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]]' in APP
+    assert '["Callsign",o.callsign||o.name||"—"]' in APP
+    assert '["Operator",aircraftOperator(o)]' in APP
+    assert '["ICAO hex",o.hex||"—"]' in APP
+
+
+def test_special_operation_aircraft_labels() -> None:
+    assert '"0020":"HEMS / Air Ambulance"' in APP
+    assert '"0023":"Search and Rescue (SAR)"' in APP
+    assert '"0026":"Special Tasks"' in APP
+    assert '"0032":"Police air support"' in APP
+    assert '"0033":"Parachute dropping"' in APP
+    assert '"7700":"General emergency"' in APP
+    assert "function aircraftIsMilitary(a)" in APP
+    assert "function aircraftSpecialMeaning(a)" in APP
+    assert '["Meaning:",meaning]' in APP
+    assert '["Squawk",o.squawk||"—"]' in APP
+    assert '["Military",aircraftIsMilitary(o)?"Yes":"No"]' in APP
+
+
+def test_aircraft_route_details_are_inspector_only() -> None:
+    assert 'API_BASE+"/api/v1/aircraft/route?"+qs' in APP
+    assert '["Departure","Looking up…"]' in APP
+    assert '["Arrival","Looking up…"]' in APP
+    assert 'setInspectorDetail("Departure"' in APP
+    assert 'setInspectorDetail("Arrival"' in APP
+    assert '["Squawk",o.squawk||"—"]' in APP
+    assert '[["Callsign:",callsign],["Squawk:",squawk]' not in APP
