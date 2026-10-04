@@ -17,7 +17,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://frazmcc.github.io"],
+    allow_origins=["https://frazmcc.github.io", "https://alen.observer"],
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["Accept", "Content-Type"],
