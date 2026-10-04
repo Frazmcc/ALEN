@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +28,7 @@ app.add_middleware(
 _aircraft = AircraftProvider()
 _airports = AirportProvider()
 _satellites = SatelliteProvider()
+_logger = logging.getLogger("alen.satellites")
 
 
 @app.get("/api/v1/health")
@@ -66,14 +68,19 @@ def visible_satellites(
 ) -> dict[str, object]:
     requested = [value.strip() for value in groups.split(",") if value.strip()]
     requested = requested[:12]
+    satellites = _satellites.visible(
+        lat,
+        lon,
+        altitude_m,
+        requested,
+        limit=limit,
+    )
+    diagnostics = _satellites.last_diagnostics
+    if not satellites:
+        _logger.warning("Satellite request returned no visible objects: %s", diagnostics)
     return {
-        "satellites": _satellites.visible(
-            lat,
-            lon,
-            altitude_m,
-            requested,
-            limit=limit,
-        )
+        "satellites": satellites,
+        "diagnostics": diagnostics,
     }
 
 
