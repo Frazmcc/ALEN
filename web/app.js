@@ -578,14 +578,14 @@ function screenYForElevation(el,az=yaw){
 function drawLandscapeLayer(fill){
  ctx.beginPath();
  let first=true;
- const step=5;
- for(let x=-step;x<=width+step;x+=step){
+ const step=5,margin=Math.max(80,width*.08);
+ for(let x=-margin;x<=width+margin;x+=step){
    const az=norm360(yaw+(x-width*.5)/width*fov);
    const el=terrainHorizonElevation(az);
    const y=screenYForElevation(el,az);
    if(first){ctx.moveTo(x,y);first=false}else ctx.lineTo(x,y);
  }
- ctx.lineTo(width+step,height+2);ctx.lineTo(-step,height+2);ctx.closePath();
+ ctx.lineTo(width+margin,height+2);ctx.lineTo(-margin,height+2);ctx.closePath();
  ctx.fillStyle=fill;ctx.fill();
 }
 function drawHorizon(){
