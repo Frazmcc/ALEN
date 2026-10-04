@@ -198,3 +198,51 @@ def test_aircraft_photo_prefers_commons_registration_category(monkeypatch) -> No
     assert photo.match == "registration"
     assert photo.image_url == "https://upload.wikimedia.org/example.jpg"
     assert photo.planespotters_url.endswith("/photos/reg/G-TTNY")
+
+
+def test_orbitalwiki_elements_fallback(monkeypatch) -> None:
+    from alen.satellites import SatelliteProvider
+
+    payload = {
+        "norad_cat_id": [25544],
+        "name": ["ISS (ZARYA)"],
+        "object_id": ["1998-067A"],
+        "epoch": ["2026-10-04T12:00:00.000000Z"],
+        "mean_motion": [15.49],
+        "eccentricity": [0.0007],
+        "inclination": [51.64],
+        "raan": [100.0],
+        "arg_perigee": [20.0],
+        "mean_anomaly": [340.0],
+        "bstar": [0.0001],
+        "mean_motion_dot": [0.00001],
+        "mean_motion_ddot": [0.0],
+        "rev_at_epoch": [12345],
+    }
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return payload
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str, params=None):
+            assert url == "https://www.orbitalwiki.com/api/v1/elements"
+            return Response()
+
+    monkeypatch.setattr("alen.satellites.httpx.Client", Client)
+    records = SatelliteProvider()._fetch_orbitalwiki_catalog()
+    assert len(records) == 1
+    assert records[0].norad == 25544
+    assert records[0].name == "ISS (ZARYA)"
