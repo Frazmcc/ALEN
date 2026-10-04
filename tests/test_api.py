@@ -264,6 +264,8 @@ def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
                         "r": "G-TTNY",
                         "t": "A20N",
                         "ownOp": "British Airways",
+                        "squawk": "0032",
+                        "dbFlags": 1,
                         "lat": 55.77,
                         "lon": -4.09,
                         "alt_baro": 30000,
@@ -290,3 +292,5 @@ def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
     aircraft = AircraftProvider().nearby(55.77, -4.09)
     assert aircraft[0]["flight"] == "SHT16E"
     assert aircraft[0]["operator"] == "British Airways"
+    assert aircraft[0]["squawk"] == "0032"
+    assert aircraft[0]["db_flags"] == 1
