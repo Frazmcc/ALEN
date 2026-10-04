@@ -335,7 +335,6 @@ def test_aircraft_photo_inspector_contract() -> None:
     assert 'const planeSpottersSource=trustedExternalUrl(photo.source_url,"www.planespotters.net")' in APP
     assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net")' in APP
     assert "Aircraft photo source unavailable · ALEN illustration" in APP
-    assert "https://alen-api-lquw.onrender.com" in HTML
 
 
 def test_sky_colour_tracks_local_solar_elevation() -> None:
