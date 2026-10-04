@@ -448,6 +448,33 @@ function aircraftOperator(a){
  const prefix=callsign.match(/^[A-Z]{3}/)?.[0];
  return AIRLINE_PREFIXES[prefix]||"Unknown";
 }
+const SPECIAL_SQUAWK_MEANINGS={
+ "0020":"HEMS / Air Ambulance",
+ "0023":"Search and Rescue (SAR)",
+ "0026":"Special Tasks",
+ "0032":"Police air support",
+ "0033":"Parachute dropping",
+ "0034":"Antenna / target / glider towing",
+ "7500":"Unlawful interference",
+ "7600":"Radio communication failure",
+ "7700":"General emergency"
+};
+function aircraftIsMilitary(a){
+ const op=String(a.operator||"").toUpperCase();
+ const callsign=String(a.callsign||a.name||"").toUpperCase();
+ return Boolean((Number(a.dbFlags)||0)&1)||/(ROYAL AIR FORCE|RAF|ROYAL NAVY|ARMY AIR|MILITARY)/.test(op)||/^(RFR|RRR|NVY|AAC)/.test(callsign);
+}
+function aircraftSpecialMeaning(a){
+ const squawk=String(a.squawk||"").padStart(4,"0");
+ if(SPECIAL_SQUAWK_MEANINGS[squawk])return SPECIAL_SQUAWK_MEANINGS[squawk];
+ const callsign=String(a.callsign||a.name||"").trim().toUpperCase();
+ const op=String(a.operator||"").toUpperCase();
+ if(/^(UKP|POLICE)/.test(callsign)||op.includes("POLICE"))return "Police operations";
+ if(/^(HLE|HELIMED)/.test(callsign)||op.includes("AIR AMBULANCE"))return "HEMS / Air Ambulance";
+ if(/^(COASTGUARD|RESCUE|BRITISH RESCUE)/.test(callsign)||op.includes("COASTGUARD"))return "Search and Rescue (SAR)";
+ if(aircraftIsMilitary(a))return "Military operation";
+ return "";
+}
 const AIRCRAFT_GRACE_MS=20000;
 async function refreshAircraft(force=false){
  if(!observer||!layers.aircraft)return;
@@ -466,7 +493,7 @@ async function refreshAircraft(force=false){
      if(!id)continue;
      const prior=previous.get(id),lat=Number(a.lat),lon=Number(a.lon);
      next.set(id,{
-       id,kind:"AIRCRAFT",name:String(a.flight||a.registration||a.hex||"Aircraft").trim(),callsign:String(a.flight||"").trim(),operator:String(a.operator||"").trim(),hex:String(a.hex||"").trim(),lat,lon,
+       id,kind:"AIRCRAFT",name:String(a.flight||a.registration||a.hex||"Aircraft").trim(),callsign:String(a.flight||"").trim(),operator:String(a.operator||"").trim(),squawk:String(a.squawk||"").trim(),dbFlags:Number(a.db_flags)||0,hex:String(a.hex||"").trim(),lat,lon,
        displayLat:prior?.displayLat??lat,displayLon:prior?.displayLon??lon,
        altM:aircraftAltitudeM({alt_geom:a.alt_geom,alt_baro:a.alt_baro}),gs:Number(a.gs)||0,track:Number(a.track)||0,
        type:a.type||"Aircraft",registration:a.registration||"—",seen:Number(a.seen)||0,
@@ -671,18 +698,21 @@ function draw(){
    const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
    ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
    ctx.globalAlpha=1;
-   const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a);
-   const line1="Callsign: "+callsign,line2="Operator: "+operator;
+   const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a),squawk=String(a.squawk||"—");
+   const lines=meaning?[["Callsign:",callsign],["Squawk:",squawk],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
    ctx.font="700 9px ui-monospace";
-   const boxW=Math.max(ctx.measureText(line1).width,ctx.measureText(line2).width)+12;
-   const boxX=p[0]+iconSize*.62,boxY=p[1]-iconSize*.82-24,boxH=30;
-   ctx.fillStyle=dayMode?"rgba(5,30,47,.90)":"rgba(2,8,14,.90)";
-   ctx.strokeStyle=dayMode?"rgba(255,255,255,.74)":"rgba(123,229,255,.38)";
-   ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,4);ctx.fill();ctx.stroke();
-   ctx.fillStyle="#7be5ff";ctx.fillText("Callsign:",boxX+6,boxY+11);
-   ctx.fillStyle="#ffffff";ctx.fillText(callsign,boxX+58,boxY+11);
-   ctx.fillStyle="#7be5ff";ctx.fillText("Operator:",boxX+6,boxY+24);
-   ctx.fillStyle="#ffffff";ctx.fillText(operator,boxX+58,boxY+24);
+   const lineWidths=lines.map(([label,value])=>ctx.measureText(label+" "+value).width);
+   const boxW=Math.max(...lineWidths)+12,boxH=lines.length*13+4;
+   const boxX=p[0]+iconSize*.62,boxY=p[1]-iconSize*.82-boxH+5;
+   ctx.fillStyle=dayMode?"rgba(5,30,47,.92)":"rgba(2,8,14,.92)";
+   ctx.strokeStyle=meaning?"rgba(255,197,72,.92)":(dayMode?"rgba(255,255,255,.74)":"rgba(123,229,255,.38)");
+   ctx.lineWidth=meaning?1.5:1;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,4);ctx.fill();ctx.stroke();
+   lines.forEach(([label,value],index)=>{
+    const y=boxY+12+index*13;
+    ctx.fillStyle=meaning&&label==="Meaning:"?"#ffd166":"#7be5ff";ctx.fillText(label,boxX+6,y);
+    const labelWidth=ctx.measureText(label+" ").width;
+    ctx.fillStyle="#ffffff";ctx.fillText(value,boxX+6+labelWidth,y);
+   });
    ctx.globalAlpha=1;
   }
  }
@@ -830,7 +860,7 @@ function showObject(o){
  );
  const details=document.querySelector("#inspector-details");details.replaceChildren();
  let rows=[];
- if(o.kind==="AIRCRAFT")rows=[["Callsign",o.callsign||o.name||"—"],["Operator",aircraftOperator(o)],["Type",o.type],["Registration",o.registration],["ICAO hex",o.hex||"—"],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]];
+ if(o.kind==="AIRCRAFT"){const meaning=aircraftSpecialMeaning(o);rows=[["Callsign",o.callsign||o.name||"—"],["Operator",aircraftOperator(o)],["Squawk",o.squawk||"—"],["Meaning",meaning||"Standard ATC assignment / no special operation identified"],["Military",aircraftIsMilitary(o)?"Yes":"No"],["Type",o.type],["Registration",o.registration],["ICAO hex",o.hex||"—"],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]]};
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
  else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"],["Position","Live for your location and current time"]];
