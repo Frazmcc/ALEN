@@ -40,9 +40,13 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert 'class="brand-mark"' in HTML
     assert 'rel="icon"' in HTML
     assert 'rel="apple-touch-icon"' in HTML
-    assert 'href="/favicon.png?v=4"' in HTML
-    assert '<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=4">' in HTML
-    assert '<link rel="shortcut icon" type="image/png" href="/favicon.png?v=4">' in HTML
+    assert 'href="/favicon.ico?v=6"' in HTML
+    assert '<link rel="icon" href="/favicon.ico?v=6" sizes="any">' in HTML
+    assert '<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=6">' in HTML
+    assert '<link rel="shortcut icon" href="/favicon.ico?v=6">' in HTML
+    favicon_ico = Path("web/favicon.ico")
+    assert favicon_ico.is_file()
+    assert favicon_ico.read_bytes().startswith(b"\x00\x00\x01\x00")
     logo_path = Path("web/assets/alen-logo.png")
     assert logo_path.is_file()
     logo = logo_path.read_bytes()
