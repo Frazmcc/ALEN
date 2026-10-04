@@ -375,3 +375,18 @@ def test_richer_aircraft_labels() -> None:
     assert '["Callsign",o.callsign||o.name||"—"]' in APP
     assert '["Operator",aircraftOperator(o)]' in APP
     assert '["ICAO hex",o.hex||"—"]' in APP
+
+
+def test_special_operation_aircraft_labels() -> None:
+    assert '"0020":"HEMS / Air Ambulance"' in APP
+    assert '"0023":"Search and Rescue (SAR)"' in APP
+    assert '"0026":"Special Tasks"' in APP
+    assert '"0032":"Police air support"' in APP
+    assert '"0033":"Parachute dropping"' in APP
+    assert '"7700":"General emergency"' in APP
+    assert "function aircraftIsMilitary(a)" in APP
+    assert "function aircraftSpecialMeaning(a)" in APP
+    assert '["Squawk:",squawk]' in APP
+    assert '["Meaning:",meaning]' in APP
+    assert '["Squawk",o.squawk||"—"]' in APP
+    assert '["Military",aircraftIsMilitary(o)?"Yes":"No"]' in APP
