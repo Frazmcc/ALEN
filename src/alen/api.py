@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -124,8 +125,12 @@ def aircraft_photo(
     photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
     if photo is None:
         return {"photo": None}
-    image_query = (
-        f"?registration={registration}&aircraft_type={aircraft_type}&icao_hex={icao_hex}"
+    image_query = "?" + urlencode(
+        {
+            "registration": registration,
+            "aircraft_type": aircraft_type,
+            "icao_hex": icao_hex,
+        }
     )
     return {
         "photo": {
