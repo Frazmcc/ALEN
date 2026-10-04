@@ -55,6 +55,7 @@ class AircraftProvider:
                 {
                     "hex": str(aircraft.get("hex") or "").strip(),
                     "flight": str(aircraft.get("flight") or "").strip(),
+                    "operator": str(aircraft.get("ownOp") or "").strip(),
                     "registration": str(aircraft.get("r") or "").strip(),
                     "type": str(aircraft.get("t") or "Aircraft").strip(),
                     "lat": lat,
