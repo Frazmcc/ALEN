@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.2.1' in HTML
+    assert './app.js?v=1.2.2' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -284,3 +284,14 @@ def test_aircraft_persistence_across_transient_feed_gaps() -> None:
     assert "if(wallNow-lastSeenAt<=AIRCRAFT_GRACE_MS)next.set(id,prior)" in APP
     assert "retaining recent aircraft" in APP
     assert "aircraft=aircraft.filter" in APP
+
+
+def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
+    assert 'let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null,satelliteRequestState="idle"' in APP
+    assert "if(!observer)return;" in APP
+    assert 'satelliteRequestState="requesting"' in APP
+    assert 'satelliteRequestState="ok"' in APP
+    assert 'satelliteRequestState="error"' in APP
+    assert "setTimeout(()=>refreshSatellites(true),1500)" in APP
+    assert 'if(key==="satellites")refreshSatellites(true);' in APP
+    assert "await refreshSatellites(true);" in APP
