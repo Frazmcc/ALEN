@@ -140,8 +140,8 @@ function currentPlanetObjects(ms){
  const positions=solarSystemRaDec(ms);
  return Object.entries(positions).map(([id,p])=>{
   const info=PLANET_INFO[id],altaz=raDecToAltAz(p.ra,p.dec,ms);if(!info||!altaz)return null;
-  return{id:"planet:"+id,kind:"PLANET",name:info.name,ra:p.ra,dec:p.dec,az:altaz.az,el:altaz.el,
-   color:info.color,symbol:info.symbol,detail:info.detail,fact:info.fact};
+  return makeSkyObject({id:"planet:"+id,kind:"PLANET",name:info.name,ra:p.ra,dec:p.dec,az:altaz.az,el:altaz.el,
+   color:info.color,symbol:info.symbol,detail:info.detail,fact:info.fact});
  }).filter(Boolean);
 }
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
@@ -266,6 +266,28 @@ function terrainHorizonElevation(az){
  const step=360/terrainProfile.length,pos=norm360(az)/step,i=Math.floor(pos)%terrainProfile.length,f=pos-Math.floor(pos);
  const a=terrainProfile[i].el,b=terrainProfile[(i+1)%terrainProfile.length].el;
  return a+(b-a)*f;
+}
+
+function makeSkyObject(raw){
+ const az=Number(raw.az),el=Number(raw.el);
+ const horizonEl=Number.isFinite(az)?terrainHorizonElevation(az):0;
+ const screen=Number.isFinite(az)&&Number.isFinite(el)?project(az,el):null;
+ return{
+  ...raw,
+  az,
+  el,
+  horizonEl,
+  aboveGeometricHorizon:Number.isFinite(el)&&el>=0,
+  aboveTerrainHorizon:Number.isFinite(el)&&el>horizonEl,
+  screen,
+  selectable:raw.selectable!==false
+ };
+}
+function skyObjectVisible(o,{respectLandscape=true,requireScreen=false}={}){
+ if(!o||!Number.isFinite(o.az)||!Number.isFinite(o.el)||o.el<0)return false;
+ if(respectLandscape&&layers.landscape&&o.el<=terrainHorizonElevation(o.az))return false;
+ if(requireScreen&&!project(o.az,o.el))return false;
+ return true;
 }
 
 function observerLabel(){
@@ -406,7 +428,7 @@ async function refreshAirports(){
 }
 function airportDisplayObject(a){
  const horizonEl=terrainHorizonElevation(a.az);
- return{...a,horizonEl,el:horizonEl+1.6};
+ return makeSkyObject({...a,horizonEl,el:horizonEl+1.6});
 }
 
 function satelliteGroupEntries(){
@@ -440,9 +462,9 @@ async function refreshSatellites(force=false){
   satelliteDiagnostics=data.diagnostics||null;
   satellites=(Array.isArray(data.satellites)?data.satellites:[]).map(s=>{
    const memberships=logicalSatelliteMemberships(s.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
-   return{id:"sat:"+s.norad,kind:"SATELLITE",name:s.name||("NORAD "+s.norad),az:Number(s.azimuth_deg),el:Number(s.elevation_deg),
+   return makeSkyObject({id:"sat:"+s.norad,kind:"SATELLITE",name:s.name||("NORAD "+s.norad),az:Number(s.azimuth_deg),el:Number(s.elevation_deg),
     rangeKm:Number(s.range_km),detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
-    norad:String(s.norad||"—"),objectId:s.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")};
+    norad:String(s.norad||"—"),objectId:s.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
   }).filter(s=>Number.isFinite(s.az)&&Number.isFinite(s.el)&&s.el>=0);
  }catch(e){satellites=[];satelliteDiagnostics={unique_orbits:0};console.warn("ALEN satellite feed unavailable",e)}
  setLiveStatus();
@@ -454,7 +476,7 @@ function currentSkyObjects(ms){
  const catalogue=brightStars.length?brightStars:SKY_OBJECTS;
  return catalogue.map(o=>{
    const p=raDecToAltAz(o.ra,o.dec,ms);
-   return p?{...o,az:p.az,el:p.el}:null;
+   return p?makeSkyObject({...o,az:p.az,el:p.el}):null;
  }).filter(Boolean);
 }
 function screenYForElevation(el,az=yaw){
@@ -578,16 +600,16 @@ function draw(){
 }
 
 function allSelectableObjects(){
- const stars=currentSkyObjects(simTime).filter(o=>o.el>=0&&isAboveLandscape(o.az,o.el));
- const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?{...a,az:p.az,el:p.el}:null}).filter(o=>o&&isAboveLandscape(o.az,o.el));
- const aps=layers.airports?airports.map(airportDisplayObject):[];
- const planets=currentPlanetObjects(simTime).filter(o=>o.el>=0&&isAboveLandscape(o.az,o.el));
- const visibleSatellites=satellites.filter(o=>isAboveLandscape(o.az,o.el));
+ const stars=currentSkyObjects(simTime).filter(o=>skyObjectVisible(o));
+ const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?makeSkyObject({...a,az:p.az,el:p.el,distanceKm:p.distanceKm,slantRangeKm:p.slantRangeKm,horizontalKm:p.horizontalKm}):null}).filter(o=>skyObjectVisible(o));
+ const aps=layers.airports?airports.map(airportDisplayObject).filter(o=>skyObjectVisible(o,{respectLandscape:false})):[];
+ const planets=currentPlanetObjects(simTime).filter(o=>skyObjectVisible(o));
+ const visibleSatellites=satellites.filter(o=>skyObjectVisible(o));
  return [...stars,...planets,...aps,...ac,...visibleSatellites];
 }
 function nearestObject(x,y){
  let best=null,bestD=Infinity;
- for(const o of allSelectableObjects()){const p=project(o.az,o.el);if(!p)continue;const d=Math.hypot(x-p[0],y-p[1]);if(d<30&&d<bestD){best=o;bestD=d}}
+ for(const o of allSelectableObjects()){const p=o.screen||project(o.az,o.el);if(!p)continue;const d=Math.hypot(x-p[0],y-p[1]);if(d<30&&d<bestD){best=o;bestD=d}}
  return best;
 }
 function escapeSvgText(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[ch]))}
