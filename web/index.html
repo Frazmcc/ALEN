@@ -10,7 +10,7 @@
   <title>ALEN — Astronomical Live Environment & Navigation</title>
   <link rel="icon" type="image/png" sizes="64x64" href="./assets/alen-logo.png?v=2">
   <link rel="apple-touch-icon" href="./assets/alen-logo.png?v=2">
-  <link rel="stylesheet" href="./styles.css?v=0.7.0">
+  <link rel="stylesheet" href="./styles.css?v=0.7.1">
 </head>
 <body>
   <main class="sky-shell">
@@ -45,12 +45,17 @@
     </aside>
 
     <nav class="layerbar" aria-label="Sky layers">
-      <button type="button" data-layer="stars" aria-pressed="true">Stars</button>
-      <button type="button" data-layer="constellations" aria-pressed="true">Constellations</button>
+      <section class="layer-group" aria-label="Astronomy layers">
+        <span class="layer-group-title">Astronomy</span>
+        <div class="layer-group-buttons">
+          <button type="button" data-layer="stars" aria-pressed="true">Stars</button>
+          <button type="button" data-layer="atmosphere" aria-pressed="true">Atmosphere</button>
+          <button type="button" data-layer="constellations" aria-pressed="true">Constellations</button>
+        </div>
+      </section>
+      <div class="layerbar-divider" aria-hidden="true"></div>
       <button type="button" data-layer="planets" aria-pressed="true">Planets</button>
-      <button type="button" data-layer="atmosphere" aria-pressed="true">Atmosphere</button>
       <button type="button" data-layer="landscape" aria-pressed="true">Landscape</button>
-      <button type="button" data-layer="airports" aria-pressed="true">Airports</button>
       <button type="button" data-layer="aircraft" aria-pressed="true">Aircraft</button>
       <button type="button" data-layer="satellites" aria-pressed="true">Satellites</button>
       <button id="satellite-groups-button" type="button" aria-expanded="false" aria-controls="satellite-groups">Satellite groups</button>
