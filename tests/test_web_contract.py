@@ -369,7 +369,7 @@ def test_richer_aircraft_labels() -> None:
     assert 'TOM:"TUI Airways"' in APP
     assert 'KLM:"KLM"' in APP
     assert "function aircraftOperator(a)" in APP
-    assert 'const line1="Callsign: "+callsign,line2="Operator: "+operator' in APP
+    assert 'const lines=meaning?[["Callsign:",callsign],["Squawk:",squawk],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]]' in APP
     assert 'ctx.fillText("Callsign:"' in APP
     assert 'ctx.fillText("Operator:"' in APP
     assert '["Callsign",o.callsign||o.name||"—"]' in APP
