@@ -574,3 +574,29 @@ def test_satellite_group_fetch_has_fast_public_mirror_fallback() -> None:
     assert "def _fetch_group_mirror_json" in source
     assert "self.SATVISOR_MIRROR_URL.format(group=group.lower())" in source
     assert "timeout=10.0" in source
+
+
+def test_aircraft_payload_exposes_adsb_category() -> None:
+    source = Path("src/alen/aircraft.py").read_text(encoding="utf-8")
+    assert '"category": str(aircraft.get("category") or "").strip().upper()' in source
+
+
+def test_aircraft_icons_are_type_specific_and_heading_aware() -> None:
+    assert "function aircraftVisualType(a)" in APP
+    for kind in ("military", "helicopter", "glider", "balloon", "drone", "turboprop", "light", "jet"):
+        assert f'return "{kind}"' in APP
+    assert "function aircraftScreenRotation(a,q,p)" in APP
+    assert "const ahead=destinationPoint(a.displayLat,a.displayLon,heading,lookAheadKm)" in APP
+    assert "const aheadPoint=aheadAltAz?project(aheadAltAz.az,aheadAltAz.el):null" in APP
+    assert "return Math.atan2(dx,-dy)" in APP
+    assert "function drawAircraftIcon(kind,size,fill,stroke)" in APP
+    assert 'if(kind==="helicopter")' in APP
+    assert 'else if(kind==="glider")' in APP
+    assert 'else if(kind==="military")' in APP
+    assert 'else if(kind==="turboprop")' in APP
+    assert 'else if(kind==="light")' in APP
+    assert 'else if(kind==="balloon")' in APP
+    assert 'else if(kind==="drone")' in APP
+    assert "ctx.rotate(aircraftScreenRotation(a,q,p))" in APP
+    assert "drawAircraftIcon(visualType,iconSize,aircraftInk" in APP
+    assert 'strokeText("✈"' not in APP
