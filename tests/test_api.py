@@ -294,3 +294,20 @@ def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
     assert aircraft[0]["operator"] == "British Airways"
     assert aircraft[0]["squawk"] == "0032"
     assert aircraft[0]["db_flags"] == 1
+
+
+def test_aircraft_route_endpoint(monkeypatch) -> None:
+    sample = {
+        "callsign": "SHT16E",
+        "airline_code": "BAW",
+        "departure": {"name": "London Heathrow Airport", "iata": "LHR", "icao": "EGLL", "location": "London", "country": "GB"},
+        "arrival": {"name": "Glasgow Airport", "iata": "GLA", "icao": "EGPF", "location": "Glasgow", "country": "GB"},
+        "via": [],
+        "source": "ADSB.lol VRS standing data",
+    }
+    monkeypatch.setattr("alen.api._aircraft_routes.lookup", lambda callsign: sample)
+    response = TestClient(app).get("/api/v1/aircraft/route?callsign=SHT16E")
+    assert response.status_code == 200
+    route = response.json()["route"]
+    assert route["departure"]["iata"] == "LHR"
+    assert route["arrival"]["iata"] == "GLA"
