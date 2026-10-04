@@ -130,7 +130,7 @@ def test_aircraft_photo_endpoint(monkeypatch) -> None:
         artist="Example Photographer",
         license_name="CC BY-SA 4.0",
         match="registration",
-        planespotters_url="https://www.planespotters.net/photos?registration=G-TEST",
+        planespotters_url="https://www.planespotters.net/photos/reg/G-TEST",
     )
     monkeypatch.setattr("alen.api._aircraft_photos.find", lambda *args, **kwargs: sample)
     response = TestClient(app).get(
