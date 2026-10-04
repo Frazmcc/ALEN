@@ -40,7 +40,14 @@ function phaseLabels(phase){return phase===0}
 function advancePhase(phase){return ((Number(phase)||0)+1)%4}
 function layerLabelsOn(key){return !MULTISTATE_LAYERS.has(key)||phaseLabels(layerPhases[key])}
 function syncLayerButton(btn,key){
- const phase=MULTISTATE_LAYERS.has(key)?layerPhases[key]:(layers[key]?0:2),state=phaseState(phase);
+ if(!MULTISTATE_LAYERS.has(key)){
+  const state=layers[key]?"on":"off";
+  btn.dataset.state=state;
+  btn.setAttribute("aria-pressed",String(layers[key]));
+  btn.title=`${btn.textContent}: ${layers[key]?"on":"off"}`;
+  return;
+ }
+ const phase=layerPhases[key],state=phaseState(phase);
  btn.dataset.state=state;
  btn.setAttribute("aria-pressed",state==="off"?"false":state==="labels"?"true":"mixed");
  btn.title=state==="labels"?`${btn.textContent}: on with labels`:state==="plain"?`${btn.textContent}: on without labels`:`${btn.textContent}: off`;
@@ -1076,18 +1083,35 @@ document.querySelectorAll("[data-aircraft-group]").forEach(btn=>{
   syncGroupButton(btn,group);
  });
 });
-const satellitePanel=document.querySelector("#satellite-groups");
-const satelliteGroupsButton=document.querySelector("#satellite-groups-button");
-const aircraftPanel=document.querySelector("#aircraft-groups");
-const aircraftGroupsButton=document.querySelector("#aircraft-groups-button");
-satelliteGroupsButton?.addEventListener("click",()=>{
- const opening=satellitePanel.hidden;satellitePanel.hidden=!opening;satelliteGroupsButton.setAttribute("aria-expanded",String(opening));
-});
-document.querySelector("#satellite-groups-close")?.addEventListener("click",()=>{satellitePanel.hidden=true;satelliteGroupsButton?.setAttribute("aria-expanded","false")});
-aircraftGroupsButton?.addEventListener("click",()=>{
- const opening=aircraftPanel.hidden;aircraftPanel.hidden=!opening;aircraftGroupsButton.setAttribute("aria-expanded",String(opening));
-});
-document.querySelector("#aircraft-groups-close")?.addEventListener("click",()=>{aircraftPanel.hidden=true;aircraftGroupsButton?.setAttribute("aria-expanded","false")});
+const GROUP_PANELS=[
+ ["astronomy-groups","astronomy-groups-button","astronomy-groups-close"],
+ ["aircraft-groups","aircraft-groups-button","aircraft-groups-close"],
+ ["satellite-groups","satellite-groups-button","satellite-groups-close"],
+ ["display-groups","display-groups-button","display-groups-close"]
+].map(([panelId,buttonId,closeId])=>({
+ panel:document.querySelector("#"+panelId),
+ button:document.querySelector("#"+buttonId),
+ close:document.querySelector("#"+closeId)
+}));
+function closeControlPanels(except=null){
+ for(const entry of GROUP_PANELS){
+  if(entry===except)continue;
+  if(entry.panel)entry.panel.hidden=true;
+  entry.button?.setAttribute("aria-expanded","false");
+ }
+}
+for(const entry of GROUP_PANELS){
+ entry.button?.addEventListener("click",()=>{
+  const opening=entry.panel?.hidden!==false;
+  closeControlPanels(entry);
+  if(entry.panel)entry.panel.hidden=!opening;
+  entry.button.setAttribute("aria-expanded",String(opening));
+ });
+ entry.close?.addEventListener("click",()=>{
+  if(entry.panel)entry.panel.hidden=true;
+  entry.button?.setAttribute("aria-expanded","false");
+ });
+}
 
 function renderSearch(){
  const q=searchInput.value.trim().toLowerCase();if(!q){searchResults.hidden=true;searchResults.replaceChildren();return}
