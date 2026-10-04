@@ -297,10 +297,19 @@ function atmosphericRefractionDeg(geometricEl){
  const correction=(1.02/Math.tan(angle))/60;
  return clamp(correction,0,1);
 }
+function atmosphericExtinctionMagnitude(geometricEl){
+ if(!layers.atmosphere||!Number.isFinite(geometricEl)||geometricEl>=90)return 0;
+ if(geometricEl<=0)return 2.5;
+ const altitude=Math.max(.1,geometricEl);
+ const airmass=1/(Math.sin(altitude*DEG)+.50572*Math.pow(altitude+6.07995,-1.6364));
+ return clamp((airmass-1)*.18,0,2.5);
+}
 function makeAstronomySkyObject(raw){
  const geometricEl=Number(raw.el);
  const refractionDeg=atmosphericRefractionDeg(geometricEl);
- return makeSkyObject({...raw,geometricEl,refractionDeg,el:geometricEl+refractionDeg});
+ const extinctionMag=raw.kind==="STAR"?atmosphericExtinctionMagnitude(geometricEl):0;
+ const apparentMag=raw.kind==="STAR"&&Number.isFinite(raw.mag)?Number(raw.mag)+extinctionMag:null;
+ return makeSkyObject({...raw,geometricEl,refractionDeg,extinctionMag,apparentMag,el:geometricEl+refractionDeg});
 }
 
 function observerLabel(){
@@ -548,11 +557,12 @@ function draw(){
  if(layers.stars){
   for(const o of liveObjects){
    if(o.el<0||!isAboveLandscape(o.az,o.el))continue;const p=project(o.az,o.el);if(!p)continue;
-   const r=Math.max(1.2,3.8-o.mag*.42)*(90/fov),isSelected=selected?.id===o.id;
+   const visualMag=Number.isFinite(o.apparentMag)?o.apparentMag:o.mag;
+   const r=Math.max(1.05,3.8-visualMag*.42)*(90/fov),isSelected=selected?.id===o.id;
    if(isSelected){ctx.strokeStyle="#7be5ff";ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],r+8,0,Math.PI*2);ctx.stroke()}
-   ctx.globalAlpha=Math.max(.35,1-o.mag*.11);ctx.shadowBlur=10;ctx.shadowColor=o.color;ctx.fillStyle=o.color;
+   ctx.globalAlpha=Math.max(.15,1-visualMag*.11);ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=o.color;ctx.fillStyle=o.color;
    ctx.beginPath();ctx.arc(p[0],p[1],r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;
-   if(o.mag<.5||isSelected){ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2)}
+   if(visualMag<.5||isSelected){ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2)}
   }
  }
  if(layers.planets){
@@ -682,7 +692,7 @@ function showObject(o){
  else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
  else if(o.kind==="SATELLITE")rows=[["Category",o.groupLabel||"Satellite"],["NORAD",o.norad||"—"],["International ID",o.objectId||"—"],["New launch",o.isNew?"Yes · ≤30 days":"No"],["Debris",o.isDebris?"Yes":"No"],["Range",Math.round(o.rangeKm)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"],["Source",o.detail]];
  else if(o.kind==="PLANET")rows=[["Type",o.detail],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",o.ra.toFixed(2)+"°"],["Declination",o.dec.toFixed(2)+"°"],["Position","Live for your location and current time"]];
- else rows=[["Classification",o.detail||"Star"],["Distance",o.distance||"—"],["Apparent magnitude",Number.isFinite(o.mag)?o.mag.toFixed(2):"—"],["Temperature",o.temperatureK?Math.round(o.temperatureK)+" K":"—"],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",Number.isFinite(o.ra)?o.ra.toFixed(2)+"°":"—"],["Declination",Number.isFinite(o.dec)?o.dec.toFixed(2)+"°":"—"]];
+ else rows=[["Classification",o.detail||"Star"],["Distance",o.distance||"—"],["Catalogue magnitude",Number.isFinite(o.mag)?o.mag.toFixed(2):"—"],["Apparent magnitude",Number.isFinite(o.apparentMag)?o.apparentMag.toFixed(2):(Number.isFinite(o.mag)?o.mag.toFixed(2):"—")],["Atmospheric extinction",Number.isFinite(o.extinctionMag)?o.extinctionMag.toFixed(2)+" mag":"0.00 mag"],["Temperature",o.temperatureK?Math.round(o.temperatureK)+" K":"—"],["Azimuth",o.az.toFixed(1)+"°"],["Apparent elevation",o.el.toFixed(1)+"°"],["Geometric elevation",Number.isFinite(o.geometricEl)?o.geometricEl.toFixed(1)+"°":o.el.toFixed(1)+"°"],["Refraction",Number.isFinite(o.refractionDeg)?o.refractionDeg.toFixed(2)+"°":"0.00°"],["Right ascension",Number.isFinite(o.ra)?o.ra.toFixed(2)+"°":"—"],["Declination",Number.isFinite(o.dec)?o.dec.toFixed(2)+"°":"—"]];
  for(const [k,v] of rows){const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;details.append(dt,dd)}
  inspector.hidden=false;
 }
