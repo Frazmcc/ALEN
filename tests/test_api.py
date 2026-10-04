@@ -60,3 +60,28 @@ def test_custom_domain_cors_is_allowed() -> None:
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://alen.observer"
+
+
+def test_nearby_aircraft_endpoint(monkeypatch) -> None:
+    sample = [
+        {
+            "hex": "406abc",
+            "flight": "BAW123",
+            "registration": "G-TEST",
+            "type": "A320",
+            "lat": 55.90,
+            "lon": -4.20,
+            "alt_baro": 14000,
+            "alt_geom": 14200,
+            "gs": 310,
+            "track": 95,
+            "seen": 0.4,
+            "distance_km": 8.2,
+        }
+    ]
+    monkeypatch.setattr("alen.api._aircraft.nearby", lambda *args, **kwargs: sample)
+    response = TestClient(app).get(
+        "/api/v1/aircraft?lat=55.86&lon=-4.25&radius_nm=43.4488&limit=450"
+    )
+    assert response.status_code == 200
+    assert response.json()["aircraft"] == sample
