@@ -414,3 +414,15 @@ def test_aircraft_motion_is_continuous_between_network_updates() -> None:
     assert "a.correctionRemainingMs=Math.max(0,a.correctionRemainingMs-dt)" in APP
     assert "airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM)" in APP
     assert "ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG)" in APP
+
+
+def test_aircraft_motion_is_frame_driven_and_refresh_independent() -> None:
+    assert "const AIRCRAFT_POSITION_RESPONSE_MS=4200" in APP
+    assert "const AIRCRAFT_MAX_FRAME_DT_MS=250" in APP
+    assert "targetLat:projected.lat,targetLon:projected.lon" in APP
+    assert "const positionK=1-Math.exp(-dt/AIRCRAFT_POSITION_RESPONSE_MS)" in APP
+    assert "const displayAdvanced=destinationPoint" in APP
+    assert "const targetAdvanced=destinationPoint" in APP
+    assert "a.displayLat+=latError*positionK" in APP
+    assert "a.displayLon+=lonError*positionK" in APP
+    assert "correctionRemainingMs" not in APP
