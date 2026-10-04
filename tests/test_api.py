@@ -134,14 +134,17 @@ def test_aircraft_photo_endpoint(monkeypatch) -> None:
     )
     monkeypatch.setattr("alen.api._aircraft_photos.find", lambda *args, **kwargs: sample)
     response = TestClient(app).get(
-        "/api/v1/aircraft/photo?registration=G-TEST&aircraft_type=A320"
+        "/api/v1/aircraft/photo?registration=G-TEST&aircraft_type=A320&icao_hex=400001"
     )
     assert response.status_code == 200
     payload = response.json()["photo"]
-    assert payload["image_url"] == sample.image_url
+    assert payload["image_path"].startswith("/api/v1/aircraft/photo/image?")
+    assert "registration=G-TEST" in payload["image_path"]
+    assert "icao_hex=400001" in payload["image_path"]
     assert payload["artist"] == "Example Photographer"
     assert payload["license"] == "CC BY-SA 4.0"
     assert payload["match"] == "registration"
+    assert payload["provider"] == "wikimedia"
     assert payload["planespotters_url"].endswith("/photos/reg/G-TEST")
 
 
@@ -191,6 +194,11 @@ def test_aircraft_photo_prefers_commons_registration_category(monkeypatch) -> No
             return Response()
 
     monkeypatch.setattr("alen.aircraft_photos.httpx.Client", Client)
+    monkeypatch.setattr(
+        AircraftPhotoProvider,
+        "_search_planespotters",
+        lambda self, *args, **kwargs: None,
+    )
     photo = AircraftPhotoProvider().find("G-TTNY", "A20N")
     assert photo is not None
     assert calls[0]["generator"] == "categorymembers"
@@ -198,6 +206,96 @@ def test_aircraft_photo_prefers_commons_registration_category(monkeypatch) -> No
     assert photo.match == "registration"
     assert photo.image_url == "https://upload.wikimedia.org/example.jpg"
     assert photo.planespotters_url.endswith("/photos/reg/G-TTNY")
+
+
+def test_aircraft_photo_prefers_planespotters_exact_hex(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhotoProvider
+
+    requested = {}
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {
+                "photos": [
+                    {
+                        "thumbnail": {
+                            "src": "https://t.plnspttrs.net/43495/1864265_b4e8176cfe_280.jpg"
+                        },
+                        "link": "https://www.planespotters.net/photo/1864265",
+                        "photographer": "Example Photographer",
+                    }
+                ]
+            }
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str, params=None):
+            requested["url"] = url
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft_photos.httpx.Client", Client)
+    provider = AircraftPhotoProvider()
+    photo = provider.find("EI-IKT", "B38M", "4cae9b")
+    assert photo is not None
+    assert requested["url"].endswith("/hex/4CAE9B")
+    assert photo.provider == "planespotters"
+    assert photo.match == "icao"
+    assert photo.image_url.startswith("https://t.plnspttrs.net/")
+    assert photo.source_url.startswith("https://www.planespotters.net/")
+
+
+def test_aircraft_photo_proxy_serves_verified_image(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhoto
+
+    sample = AircraftPhoto(
+        image_url="https://t.plnspttrs.net/example/aircraft.jpg",
+        source_url="https://www.planespotters.net/photo/123",
+        title="EI-IKT aircraft",
+        artist="Example Photographer",
+        license_name="Planespotters.net — see source for photo usage terms",
+        match="icao",
+        planespotters_url="https://www.planespotters.net/photos/reg/EI-IKT",
+        provider="planespotters",
+    )
+    monkeypatch.setattr("alen.api._aircraft_photos.find", lambda *args, **kwargs: sample)
+    monkeypatch.setattr(
+        "alen.api._aircraft_photos.image_bytes",
+        lambda photo: (b"fake-jpeg", "image/jpeg"),
+    )
+    response = TestClient(app).get(
+        "/api/v1/aircraft/photo/image?registration=EI-IKT&aircraft_type=B38M&icao_hex=4cae9b"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["cache-control"] == "public, max-age=21600"
+    assert response.content == b"fake-jpeg"
+
+
+def test_aircraft_photo_rejects_untrusted_image_host() -> None:
+    from alen.aircraft_photos import AircraftPhoto, AircraftPhotoProvider
+
+    photo = AircraftPhoto(
+        image_url="https://evil.example/aircraft.jpg",
+        source_url="https://www.planespotters.net/photo/123",
+        title="Aircraft",
+        artist="Photographer",
+        license_name="See source",
+        match="registration",
+        planespotters_url="https://www.planespotters.net/photos",
+        provider="planespotters",
+    )
+    assert AircraftPhotoProvider().image_bytes(photo) is None
 
 
 def test_orbitalwiki_elements_fallback(monkeypatch) -> None:

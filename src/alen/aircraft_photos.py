@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from html import unescape
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -18,36 +18,59 @@ class AircraftPhoto:
     license_name: str
     match: str
     planespotters_url: str
+    provider: str = "wikimedia"
 
 
 class AircraftPhotoProvider:
-    API_URL = "https://commons.wikimedia.org/w/api.php"
-    CACHE_TTL_SECONDS = 21600
+    COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
+    PLANESPOTTERS_API_BASE = "https://api.planespotters.net/pub/photos"
+    CACHE_TTL_SECONDS = 86400
+    IMAGE_CACHE_TTL_SECONDS = 21600
+    MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, AircraftPhoto | None]] = {}
+        self._image_cache: dict[str, tuple[float, bytes, str]] = {}
 
-    def find(self, registration: str, aircraft_type: str = "") -> AircraftPhoto | None:
-        reg = registration.strip().upper()
+    def find(
+        self,
+        registration: str,
+        aircraft_type: str = "",
+        icao_hex: str = "",
+    ) -> AircraftPhoto | None:
+        reg = _clean_registration(registration)
         type_name = aircraft_type.strip().upper()
-        key = f"{reg}|{type_name}"
+        hex_code = _clean_hex(icao_hex)
+        key = f"{hex_code}|{reg}|{type_name}"
         cached = self._cache.get(key)
         now = time.monotonic()
         if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
             return cached[1]
 
         photo = None
-        if reg and reg != "—":
-            photo = self._search_registration_category(reg)
-        if photo is None and reg and reg != "—":
-            photo = self._search(f'"{reg}" aircraft', exact_token=reg, match="registration")
-        if photo is None and type_name and type_name not in {"AIRCRAFT", "—"}:
-            photo = self._search(f'"{type_name}" aircraft', exact_token="", match="type")
+        if hex_code:
+            photo = self._search_planespotters("hex", hex_code, reg, "icao")
+        if photo is None and reg:
+            photo = self._search_planespotters("reg", reg, reg, "registration")
 
-        if photo is not None:
-            planespotters_url = (
+        if photo is None and reg:
+            photo = self._search_registration_category(reg)
+        if photo is None and reg:
+            photo = self._search_commons(
+                f'"{reg}" aircraft',
+                exact_token=reg,
+                match="registration",
+            )
+        if photo is None and type_name and type_name not in {"AIRCRAFT", "—"}:
+            for query in _type_search_queries(type_name):
+                photo = self._search_commons(query, exact_token="", match="type")
+                if photo is not None:
+                    break
+
+        if photo is not None and not photo.planespotters_url:
+            gallery = (
                 f"https://www.planespotters.net/photos/reg/{quote(reg, safe='')}"
-                if reg and reg != "—"
+                if reg
                 else "https://www.planespotters.net/photos"
             )
             photo = AircraftPhoto(
@@ -57,11 +80,105 @@ class AircraftPhotoProvider:
                 artist=photo.artist,
                 license_name=photo.license_name,
                 match=photo.match,
-                planespotters_url=planespotters_url,
+                planespotters_url=gallery,
+                provider=photo.provider,
             )
 
         self._cache[key] = (now, photo)
         return photo
+
+    def image_bytes(self, photo: AircraftPhoto) -> tuple[bytes, str] | None:
+        if not _trusted_image_url(photo.image_url):
+            return None
+        now = time.monotonic()
+        cached = self._image_cache.get(photo.image_url)
+        if cached and now - cached[0] < self.IMAGE_CACHE_TTL_SECONDS:
+            return cached[1], cached[2]
+
+        try:
+            with httpx.Client(
+                timeout=20.0,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "ALEN/0.1 (aircraft photo proxy)",
+                    "Accept": "image/avif,image/webp,image/png,image/jpeg,image/*",
+                    "Referer": "https://alen.observer/",
+                },
+            ) as client:
+                response = client.get(photo.image_url)
+                response.raise_for_status()
+                mime = response.headers.get("content-type", "").split(";", 1)[0].lower()
+                body = response.content
+        except httpx.HTTPError:
+            return None
+
+        if mime not in {"image/jpeg", "image/png", "image/webp", "image/avif"}:
+            return None
+        if not body or len(body) > self.MAX_IMAGE_BYTES:
+            return None
+        self._image_cache[photo.image_url] = (now, body, mime)
+        return body, mime
+
+    def _search_planespotters(
+        self,
+        mode: str,
+        value: str,
+        registration: str,
+        match: str,
+    ) -> AircraftPhoto | None:
+        if mode not in {"hex", "reg"}:
+            return None
+        url = f"{self.PLANESPOTTERS_API_BASE}/{mode}/{quote(value, safe='')}"
+        try:
+            with httpx.Client(
+                timeout=12.0,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "ALEN/0.1 (aircraft photo lookup)",
+                    "Accept": "application/json",
+                },
+            ) as client:
+                response = client.get(url)
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+
+        photos = payload.get("photos") if isinstance(payload, dict) else None
+        if not isinstance(photos, list):
+            return None
+        for item in photos:
+            if not isinstance(item, dict):
+                continue
+            thumbnail = item.get("thumbnail")
+            if not isinstance(thumbnail, dict):
+                continue
+            image_url = str(thumbnail.get("src") or "").strip()
+            source_url = _planespotters_source_url(item.get("link"), registration)
+            if not _trusted_image_url(image_url) or not source_url:
+                continue
+            photographer = str(item.get("photographer") or "").strip()
+            title = (
+                f"{registration} aircraft"
+                if registration
+                else "Aircraft photo"
+            )
+            gallery = (
+                f"https://www.planespotters.net/photos/reg/{quote(registration, safe='')}"
+                if registration
+                else "https://www.planespotters.net/photos"
+            )
+            return AircraftPhoto(
+                image_url=image_url,
+                source_url=source_url,
+                title=title,
+                artist=photographer or "Planespotters.net contributor",
+                license_name="Planespotters.net — see source for photo usage terms",
+                match=match,
+                planespotters_url=gallery,
+                provider="planespotters",
+            )
+        return None
 
     def _search_registration_category(self, registration: str) -> AircraftPhoto | None:
         params = {
@@ -76,57 +193,56 @@ class AircraftPhotoProvider:
             "format": "json",
             "formatversion": "2",
         }
-        try:
-            with httpx.Client(
-                timeout=20.0,
-                follow_redirects=True,
-                headers={
-                    "User-Agent": "ALEN/0.1 (aircraft photo lookup)",
-                    "Accept": "application/json",
-                },
-            ) as client:
-                response = client.get(self.API_URL, params=params)
-                response.raise_for_status()
-                payload = response.json()
-        except (httpx.HTTPError, ValueError):
+        payload = self._commons_request(params)
+        if payload is None:
             return None
-
         return self._photo_from_pages(
             payload.get("query", {}).get("pages", []),
             exact_token="",
             match="registration",
         )
 
-    def _search(self, query: str, *, exact_token: str, match: str) -> AircraftPhoto | None:
+    def _search_commons(
+        self,
+        query: str,
+        *,
+        exact_token: str,
+        match: str,
+    ) -> AircraftPhoto | None:
         params = {
             "action": "query",
             "generator": "search",
             "gsrsearch": query,
             "gsrnamespace": "6",
-            "gsrlimit": "8",
+            "gsrlimit": "12",
             "prop": "imageinfo",
             "iiprop": "url|mime|extmetadata",
             "iiurlwidth": "900",
             "format": "json",
             "formatversion": "2",
         }
+        payload = self._commons_request(params)
+        if payload is None:
+            return None
+        pages = payload.get("query", {}).get("pages", [])
+        return self._photo_from_pages(pages, exact_token=exact_token, match=match)
+
+    def _commons_request(self, params: dict[str, object]) -> dict[str, object] | None:
         try:
             with httpx.Client(
-                timeout=20.0,
+                timeout=15.0,
                 follow_redirects=True,
                 headers={
                     "User-Agent": "ALEN/0.1 (aircraft photo lookup)",
                     "Accept": "application/json",
                 },
             ) as client:
-                response = client.get(self.API_URL, params=params)
+                response = client.get(self.COMMONS_API_URL, params=params)
                 response.raise_for_status()
                 payload = response.json()
         except (httpx.HTTPError, ValueError):
             return None
-
-        pages = payload.get("query", {}).get("pages", [])
-        return self._photo_from_pages(pages, exact_token=exact_token, match=match)
+        return payload if isinstance(payload, dict) else None
 
     def _photo_from_pages(
         self,
@@ -156,7 +272,9 @@ class AircraftPhotoProvider:
                 continue
             image_url = str(info.get("thumburl") or info.get("url") or "")
             source_url = str(info.get("descriptionurl") or "")
-            if not image_url or not source_url:
+            if not _trusted_image_url(image_url):
+                continue
+            if not _is_exact_host(source_url, "commons.wikimedia.org"):
                 continue
             metadata = info.get("extmetadata") if isinstance(info.get("extmetadata"), dict) else {}
             artist = _metadata_text(metadata, "Artist") or "Wikimedia Commons contributor"
@@ -169,8 +287,73 @@ class AircraftPhotoProvider:
                 license_name=license_name,
                 match=match,
                 planespotters_url="",
+                provider="wikimedia",
             )
         return None
+
+
+def _clean_registration(value: str) -> str:
+    reg = value.strip().upper()
+    if reg in {"", "—", "N/A", "UNKNOWN"}:
+        return ""
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{1,14}", reg):
+        return ""
+    return reg
+
+
+def _clean_hex(value: str) -> str:
+    code = re.sub(r"[^0-9A-F]", "", value.upper())
+    return code if re.fullmatch(r"[0-9A-F]{6}", code) else ""
+
+
+def _type_search_queries(type_name: str) -> tuple[str, ...]:
+    aliases = {
+        "B38M": ("Boeing 737 MAX 8 aircraft", "Boeing 737-8-200 aircraft"),
+        "B39M": ("Boeing 737 MAX 9 aircraft",),
+        "A20N": ("Airbus A320neo aircraft",),
+        "A21N": ("Airbus A321neo aircraft",),
+        "A19N": ("Airbus A319neo aircraft",),
+    }
+    return aliases.get(type_name, (f'"{type_name}" aircraft',))
+
+
+def _planespotters_source_url(value: object, registration: str) -> str:
+    text = str(value or "").strip()
+    if text.startswith("/"):
+        text = "https://www.planespotters.net" + text
+    if _is_host_or_subdomain(text, "planespotters.net"):
+        return text
+    if registration:
+        return f"https://www.planespotters.net/photos/reg/{quote(registration, safe='')}"
+    return "https://www.planespotters.net/photos"
+
+
+def _trusted_image_url(value: str) -> bool:
+    if _is_exact_host(value, "upload.wikimedia.org"):
+        return True
+    if _is_host_or_subdomain(value, "plnspttrs.net"):
+        return True
+    if _is_host_or_subdomain(value, "planespotters.net"):
+        return True
+    return False
+
+
+def _is_exact_host(value: object, host: str) -> bool:
+    try:
+        parsed = urlparse(str(value or ""))
+    except ValueError:
+        return False
+    return parsed.scheme == "https" and (parsed.hostname or "").lower() == host.lower()
+
+
+def _is_host_or_subdomain(value: object, host: str) -> bool:
+    try:
+        parsed = urlparse(str(value or ""))
+    except ValueError:
+        return False
+    hostname = (parsed.hostname or "").lower()
+    root = host.lower()
+    return parsed.scheme == "https" and (hostname == root or hostname.endswith("." + root))
 
 
 def _normalize(value: str) -> str:
