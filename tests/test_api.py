@@ -311,3 +311,57 @@ def test_aircraft_route_endpoint(monkeypatch) -> None:
     route = response.json()["route"]
     assert route["departure"]["iata"] == "LHR"
     assert route["arrival"]["iata"] == "GLA"
+
+
+def test_satellite_info_endpoint(monkeypatch) -> None:
+    sample = {
+        "name": "CZ-2C R/B",
+        "norad": 54039,
+        "object_type": "Rocket body",
+        "owner": "People's Republic of China",
+        "launch_date": "2022-10-12",
+        "purpose": "Spent launch-vehicle stage.",
+        "cost": "Not separately published",
+        "life_expectancy": "Not applicable",
+    }
+    monkeypatch.setattr("alen.api._satellite_info.lookup", lambda *args, **kwargs: sample)
+    response = TestClient(app).get("/api/v1/satellite/info?norad=54039&name=CZ-2C%20R%2FB")
+    assert response.status_code == 200
+    assert response.json()["satellite"] == sample
+
+
+def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) -> None:
+    from alen.satellite_info import SatelliteInfoProvider
+
+    provider = SatelliteInfoProvider()
+    monkeypatch.setattr(
+        provider,
+        "_satcat",
+        lambda norad: {
+            "OBJECT_NAME": "CZ-2C R/B",
+            "OBJECT_ID": "2022-132E",
+            "NORAD_CAT_ID": 54039,
+            "OBJECT_TYPE": "R/B",
+            "OWNER": "PRC",
+            "LAUNCH_DATE": "2022-10-12",
+            "LAUNCH_SITE": "TSC",
+            "PERIOD": 90.93,
+            "INCLINATION": 97.29,
+            "APOGEE": 329,
+            "PERIGEE": 311,
+            "RCS": 23.715,
+        },
+    )
+    monkeypatch.setattr(provider, "_satnogs", lambda norad: None)
+    monkeypatch.setattr(provider, "_commons_photo", lambda *args, **kwargs: None)
+
+    info = provider.lookup(54039, "CZ-2C R/B")
+    assert info is not None
+    assert info["object_type"] == "Rocket body"
+    assert info["owner"] == "People's Republic of China"
+    assert info["launch_site"] == "Taiyuan Satellite Launch Center, China"
+    assert "Spent launch-vehicle stage" in str(info["purpose"])
+    assert "Not applicable" in str(info["life_expectancy"])
+    assert "spent stage" in str(info["cost"])
+    assert info["period_minutes"] == 90.93
+    assert info["apogee_km"] == 329.0
