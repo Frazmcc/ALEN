@@ -419,6 +419,7 @@ function setLiveStatus(){
  if(layers.satellites){
    const loaded=satelliteDiagnostics?.unique_orbits;
    if(satelliteRequestState==="error")parts.push("satellite feed unavailable");
+   else if(satelliteRequestState==="stale")parts.push(`${s} satellites · feed reconnecting`);
    else if(satelliteRequestState==="requesting"&&satelliteDiagnostics===null)parts.push("satellites loading…");
    else parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
  }
@@ -744,6 +745,13 @@ function logicalSatelliteMemberships(sourceGroups){
  for(const [key,group] of satelliteGroupEntries())if(group.sources.some(source=>sourceSet.has(source)))memberships.push(key);
  return memberships;
 }
+const SATELLITE_GRACE_MS=15000;
+const SATELLITE_POSITION_RESPONSE_MS=1400;
+const SATELLITE_MAX_FRAME_DT_MS=250;
+function satelliteMotionRate(current,next,horizonSeconds,isAngle=false){
+ const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
+ return (isAngle?adiff(next,current):(next-current))/h;
+}
 async function refreshSatellites(force=false){
  if(!observer||satelliteRequestInFlight)return;
  if(!force&&Date.now()-satellitesUpdated<8000)return;
@@ -770,24 +778,56 @@ async function refreshSatellites(force=false){
   const data=await res.json();
   satelliteDiagnostics=data.diagnostics||null;
   satelliteRequestState="ok";
-  satellites=(Array.isArray(data.satellites)?data.satellites:[]).map(s=>{
-   const memberships=logicalSatelliteMemberships(s.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
-   return makeSkyObject({id:"sat:"+s.norad,kind:"SATELLITE",name:s.name||("NORAD "+s.norad),az:Number(s.azimuth_deg),el:Number(s.elevation_deg),
-    rangeKm:Number(s.range_km),detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
-    norad:String(s.norad||"—"),objectId:s.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
-  }).filter(s=>Number.isFinite(s.az)&&Number.isFinite(s.el)&&s.el>=0);
+  const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[];
+  for(const raw of (Array.isArray(data.satellites)?data.satellites:[])){
+   const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
+   const id="sat:"+raw.norad,prior=previous.get(id);
+   const az=Number(raw.azimuth_deg),el=Number(raw.elevation_deg),rangeKm=Number(raw.range_km);
+   const nextAz=Number(raw.azimuth_deg_next),nextEl=Number(raw.elevation_deg_next),nextRange=Number(raw.range_km_next),horizon=Number(raw.motion_horizon_seconds)||2;
+   if(!Number.isFinite(az)||!Number.isFinite(el)||el<0)continue;
+   const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+raw.norad),az:prior?.displayAz??az,el:prior?.displayEl??el,
+    rangeKm:prior?.displayRangeKm??rangeKm,detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
+    norad:String(raw.norad||"—"),objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
+   sat.displayAz=prior?.displayAz??az;sat.displayEl=prior?.displayEl??el;sat.displayRangeKm=prior?.displayRangeKm??rangeKm;
+   sat.targetAz=az;sat.targetEl=el;sat.targetRangeKm=rangeKm;
+   sat.azRateDegMs=Number.isFinite(nextAz)?satelliteMotionRate(az,nextAz,horizon,true):(prior?.azRateDegMs||0);
+   sat.elRateDegMs=Number.isFinite(nextEl)?satelliteMotionRate(el,nextEl,horizon,false):(prior?.elRateDegMs||0);
+   sat.rangeRateKmMs=Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0);
+   sat.lastFrame=prior?.lastFrame??frameNow;sat.lastSeenAt=wallNow;
+   next.push(sat);
+  }
+  const nextIds=new Set(next.map(s=>s.id));
+  for(const prior of previous.values()){
+   if(nextIds.has(prior.id))continue;
+   if(wallNow-(Number(prior.lastSeenAt)||wallNow)<=SATELLITE_GRACE_MS)next.push(prior);
+  }
+  satellites=next;
  }catch(e){
-  satellites=[];
-  satelliteDiagnostics={unique_orbits:0};
-  satelliteRequestState="error";
-  console.warn("ALEN satellite feed unavailable",e);
+  const wallNow=Date.now();
+  satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)<=SATELLITE_GRACE_MS);
+  satelliteDiagnostics=satelliteDiagnostics||{unique_orbits:satellites.length};
+  satelliteRequestState=satellites.length?"stale":"error";
+  console.warn("ALEN satellite feed unavailable; retaining recent satellites",e);
  }finally{
   clearTimeout(timeout);
   satelliteRequestInFlight=false;
   setLiveStatus();
  }
 }
-function stepSatellites(_ms){}
+function stepSatellites(now){
+ for(const s of satellites){
+  const rawDt=Math.max(0,now-(s.lastFrame||now));s.lastFrame=now;
+  if(rawDt<=0)continue;
+  const dt=Math.min(SATELLITE_MAX_FRAME_DT_MS,rawDt),positionK=1-Math.exp(-dt/SATELLITE_POSITION_RESPONSE_MS);
+  s.targetAz=norm360((s.targetAz??s.az)+(Number(s.azRateDegMs)||0)*rawDt);
+  s.targetEl=(s.targetEl??s.el)+(Number(s.elRateDegMs)||0)*rawDt;
+  s.targetRangeKm=Math.max(0,(s.targetRangeKm??s.rangeKm)+(Number(s.rangeRateKmMs)||0)*rawDt);
+  s.displayAz=blendAngle(s.displayAz??s.az,s.targetAz,positionK);
+  s.displayEl=(s.displayEl??s.el)+((s.targetEl??s.el)-(s.displayEl??s.el))*positionK;
+  s.displayRangeKm=(s.displayRangeKm??s.rangeKm)+((s.targetRangeKm??s.rangeKm)-(s.displayRangeKm??s.rangeKm))*positionK;
+  s.az=s.displayAz;s.el=s.displayEl;s.rangeKm=s.displayRangeKm;
+ }
+}
 
 function currentSkyObjects(ms){
  if(!observer)return[];
