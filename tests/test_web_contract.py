@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.2.0' in HTML
+    assert './app.js?v=1.2.1' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -276,3 +276,11 @@ def test_star_atmospheric_extinction() -> None:
     assert "visualMag=Number.isFinite(o.apparentMag)?o.apparentMag:o.mag" in APP
     assert '"Catalogue magnitude"' in APP
     assert '"Atmospheric extinction"' in APP
+
+
+def test_aircraft_persistence_across_transient_feed_gaps() -> None:
+    assert "const AIRCRAFT_GRACE_MS=20000" in APP
+    assert "lastSeenAt:wallNow" in APP
+    assert "if(wallNow-lastSeenAt<=AIRCRAFT_GRACE_MS)next.set(id,prior)" in APP
+    assert "retaining recent aircraft" in APP
+    assert "aircraft=aircraft.filter" in APP
