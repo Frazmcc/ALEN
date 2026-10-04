@@ -21,7 +21,7 @@ let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,selecte
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
-let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null;
+let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null,satelliteRequestState="idle";
 const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
@@ -327,7 +327,9 @@ function setLiveStatus(){
  if(layers.aircraft)parts.push(`${a} aircraft`);
  if(layers.satellites){
    const loaded=satelliteDiagnostics?.unique_orbits;
-   parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
+   if(satelliteRequestState==="error")parts.push("satellite feed unavailable");
+   else if(satelliteRequestState==="requesting"&&satelliteDiagnostics===null)parts.push("satellites loading…");
+   else parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
  }
  liveEl.textContent=observer?`LIVE · ${parts.join(" · ")}`:"WAITING FOR LOCATION";
 }
@@ -348,6 +350,7 @@ function onLocation(pos){
    pitch=minPitch;
    refreshAircraft(true);
    refreshSatellites(true);
+   setTimeout(()=>refreshSatellites(true),1500);
    refreshTerrainProfile();
    refreshAirports();
  }
@@ -483,12 +486,20 @@ function logicalSatelliteMemberships(sourceGroups){
  return memberships;
 }
 async function refreshSatellites(force=false){
- if(!observer||!layers.satellites)return;
+ if(!observer)return;
  if(!force&&Date.now()-satellitesUpdated<8000)return;
  satellitesUpdated=Date.now();
+ satelliteRequestState="requesting";
+ setLiveStatus();
  try{
   const sources=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))];
-  if(!sources.length){satellites=[];setLiveStatus();return}
+  if(!sources.length){
+   satellites=[];
+   satelliteDiagnostics={unique_orbits:0,visible:0,requested_groups:[]};
+   satelliteRequestState="ok";
+   setLiveStatus();
+   return;
+  }
   const qs=new URLSearchParams({
    lat:String(observer.lat),lon:String(observer.lon),altitude_m:String(observer.altM||0),
    groups:sources.join(","),limit:"320"
@@ -497,13 +508,19 @@ async function refreshSatellites(force=false){
   if(!res.ok)throw new Error("satellites "+res.status);
   const data=await res.json();
   satelliteDiagnostics=data.diagnostics||null;
+  satelliteRequestState="ok";
   satellites=(Array.isArray(data.satellites)?data.satellites:[]).map(s=>{
    const memberships=logicalSatelliteMemberships(s.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    return makeSkyObject({id:"sat:"+s.norad,kind:"SATELLITE",name:s.name||("NORAD "+s.norad),az:Number(s.azimuth_deg),el:Number(s.elevation_deg),
     rangeKm:Number(s.range_km),detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
     norad:String(s.norad||"—"),objectId:s.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
   }).filter(s=>Number.isFinite(s.az)&&Number.isFinite(s.el)&&s.el>=0);
- }catch(e){satellites=[];satelliteDiagnostics={unique_orbits:0};console.warn("ALEN satellite feed unavailable",e)}
+ }catch(e){
+  satellites=[];
+  satelliteDiagnostics={unique_orbits:0};
+  satelliteRequestState="error";
+  console.warn("ALEN satellite feed unavailable",e);
+ }
  setLiveStatus();
 }
 function stepSatellites(_ms){}
@@ -742,7 +759,7 @@ canvas.addEventListener("keydown",e=>{
 document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
  const key=btn.dataset.layer;layers[key]=!layers[key];btn.setAttribute("aria-pressed",String(layers[key]));
  if(key==="aircraft"&&layers[key])refreshAircraft(true);
- if(key==="satellites"&&layers[key])refreshSatellites(true);
+ if(key==="satellites")refreshSatellites(true);
  if(key==="airports"&&layers[key])refreshAirports();
  setLiveStatus();
 }));
@@ -751,7 +768,7 @@ document.querySelectorAll("[data-satellite-group]").forEach(input=>input.addEven
  const key=input.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];if(!group)return;
  group.enabled=input.checked;
  input.closest("label")?.classList.toggle("is-on",group.enabled);
- if(layers.satellites)await refreshSatellites(true);else satellites=[];
+ await refreshSatellites(true);
 }));
 const satellitePanel=document.querySelector("#satellite-groups");
 const satelliteGroupsButton=document.querySelector("#satellite-groups-button");
