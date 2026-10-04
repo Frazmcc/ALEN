@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .aircraft import AircraftProvider
+from .aircraft_photos import AircraftPhotoProvider
 from .airports import AirportProvider
 from .satellites import SatelliteProvider
 
@@ -26,6 +27,7 @@ app.add_middleware(
 )
 
 _aircraft = AircraftProvider()
+_aircraft_photos = AircraftPhotoProvider()
 _airports = AirportProvider()
 _satellites = SatelliteProvider()
 _logger = logging.getLogger("alen.satellites")
@@ -98,4 +100,25 @@ def nearby_aircraft(
             radius_nm=radius_nm,
             limit=limit,
         )
+    }
+
+
+@app.get("/api/v1/aircraft/photo")
+def aircraft_photo(
+    registration: str = Query(default="", max_length=32),
+    aircraft_type: str = Query(default="", max_length=64),
+) -> dict[str, object]:
+    photo = _aircraft_photos.find(registration, aircraft_type)
+    if photo is None:
+        return {"photo": None}
+    return {
+        "photo": {
+            "image_url": photo.image_url,
+            "source_url": photo.source_url,
+            "title": photo.title,
+            "artist": photo.artist,
+            "license": photo.license_name,
+            "match": photo.match,
+            "planespotters_url": photo.planespotters_url,
+        }
     }

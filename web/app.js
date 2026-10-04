@@ -702,11 +702,50 @@ function objectVisualSvg(o){
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#07111d"/><stop offset="1" stop-color="#010308"/></linearGradient></defs><rect width="720" height="360" fill="url(#bg)"/>${art}<text x="28" y="302" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#eef8ff">${title}</text><text x="28" y="331" font-family="system-ui,sans-serif" font-size="15" fill="#88a4b5">${kind} · ${sub}</text></svg>`;
  return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
 }
-function updateInspectorMedia(o){
+let inspectorMediaRequest=0;
+function inspectorCreditText(o){
+ return o.kind==="AIRCRAFT"?"Aircraft illustration · live position":o.kind==="SATELLITE"?"Satellite form · live orbital position":o.kind==="PLANET"?"Planet appearance · ALEN illustration":o.kind==="STAR"?"Stellar appearance · ALEN illustration":o.kind==="AIRPORT"?"Airport horizon reference · ALEN":"Object appearance · ALEN";
+}
+function trustedExternalUrl(value,allowedHost){
+ try{
+  const url=new URL(String(value||""));
+  if(url.protocol!=="https:"||url.hostname!==allowedHost)return "";
+  return url.href;
+ }catch{return ""}
+}
+function appendInspectorLink(parent,label,url,allowedHost){
+ const safeUrl=trustedExternalUrl(url,allowedHost);
+ if(!safeUrl)return;
+ const sep=document.createTextNode(" · ");
+ const a=document.createElement("a");
+ a.href=safeUrl;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;
+ parent.append(sep,a);
+}
+async function updateInspectorMedia(o){
  const image=document.querySelector("#inspector-image");
  const credit=document.querySelector("#inspector-image-credit");
+ const token=++inspectorMediaRequest;
  image.src=objectVisualSvg(o);image.alt=(o.name||o.kind)+" visual";
- credit.textContent=o.kind==="AIRCRAFT"?"Aircraft form · live position":o.kind==="SATELLITE"?"Satellite form · live orbital position":o.kind==="PLANET"?"Planet appearance · ALEN illustration":o.kind==="STAR"?"Stellar appearance · ALEN illustration":o.kind==="AIRPORT"?"Airport horizon reference · ALEN":"Object appearance · ALEN";
+ credit.textContent=inspectorCreditText(o);
+ if(o.kind!=="AIRCRAFT")return;
+ const registration=o.registration&&o.registration!=="—"?o.registration:"";
+ const aircraftType=o.type&&o.type!=="Aircraft"?o.type:"";
+ if(!registration&&!aircraftType)return;
+ try{
+  const qs=new URLSearchParams({registration,aircraft_type:aircraftType});
+  const res=await fetch(API_BASE+"/api/v1/aircraft/photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
+  if(!res.ok)throw new Error("aircraft photo "+res.status);
+  const data=await res.json(),photo=data.photo;
+  const imageUrl=trustedExternalUrl(photo?.image_url,"upload.wikimedia.org");
+  if(token!==inspectorMediaRequest||selected?.id!==o.id||!imageUrl)return;
+  image.src=imageUrl;
+  image.alt=`${o.registration&&o.registration!=="—"?o.registration:o.name} aircraft photo`;
+  credit.replaceChildren(document.createTextNode(`${photo.artist||"Wikimedia Commons contributor"} · ${photo.license||"See source for licence"} · ${photo.match==="registration"?"exact registration":"aircraft type"}`));
+  appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org");
+  appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net");
+ }catch(e){
+  if(token===inspectorMediaRequest)console.warn("ALEN aircraft photo lookup unavailable",e);
+ }
 }
 function showObject(o){
  selected=o;

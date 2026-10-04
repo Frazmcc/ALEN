@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.2.2' in HTML
+    assert './app.js?v=1.3.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -295,3 +295,14 @@ def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
     assert "setTimeout(()=>refreshSatellites(true),1500)" in APP
     assert 'if(key==="satellites")refreshSatellites(true);' in APP
     assert "await refreshSatellites(true);" in APP
+
+
+def test_aircraft_photo_inspector_contract() -> None:
+    assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
+    assert 'photo.match==="registration"?"exact registration":"aircraft type"' in APP
+    assert 'function trustedExternalUrl(value,allowedHost)' in APP
+    assert 'url.protocol!=="https:"||url.hostname!==allowedHost' in APP
+    assert 'trustedExternalUrl(photo?.image_url,"upload.wikimedia.org")' in APP
+    assert 'appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org")' in APP
+    assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net")' in APP
+    assert "https://upload.wikimedia.org" in HTML
