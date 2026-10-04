@@ -26,6 +26,32 @@ const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
 const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,airports:true,aircraft:true,satellites:true};
+const MULTISTATE_LAYERS=new Set(["stars","planets","airports","aircraft","satellites"]);
+const layerPhases={stars:0,planets:0,airports:0,aircraft:0,satellites:0};
+const AIRCRAFT_GROUPS={
+ commercial:{label:"Commercial",enabled:true,labels:true,phase:0},
+ military:{label:"Military",enabled:true,labels:true,phase:0},
+ emergency:{label:"Emergency / special",enabled:true,labels:true,phase:0},
+ other:{label:"Other",enabled:true,labels:true,phase:0}
+};
+function phaseState(phase){return phase===2?"off":phase===0?"labels":"plain"}
+function phaseEnabled(phase){return phase!==2}
+function phaseLabels(phase){return phase===0}
+function advancePhase(phase){return ((Number(phase)||0)+1)%4}
+function layerLabelsOn(key){return !MULTISTATE_LAYERS.has(key)||phaseLabels(layerPhases[key])}
+function syncLayerButton(btn,key){
+ const phase=MULTISTATE_LAYERS.has(key)?layerPhases[key]:(layers[key]?0:2),state=phaseState(phase);
+ btn.dataset.state=state;
+ btn.setAttribute("aria-pressed",state==="off"?"false":state==="labels"?"true":"mixed");
+ btn.title=state==="labels"?`${btn.textContent}: on with labels`:state==="plain"?`${btn.textContent}: on without labels`:`${btn.textContent}: off`;
+}
+function syncGroupButton(btn,group){
+ const state=phaseState(group.phase);
+ btn.dataset.state=state;
+ btn.classList.toggle("is-on",group.enabled);
+ btn.setAttribute("aria-pressed",state==="off"?"false":state==="labels"?"true":"mixed");
+ btn.title=state==="labels"?`${group.label}: on with labels`:state==="plain"?`${group.label}: on without labels`:`${group.label}: off`;
+}
 const SATELLITE_GROUPS={
  new:{label:"New launches · ≤30 days",sources:["last-30-days"],enabled:true,color:"#68ff9a",glyph:"✦",priority:100,limit:900},
  stations:{label:"Space stations",sources:["stations"],enabled:true,color:"#ffffff",glyph:"▣",priority:90,limit:120},
@@ -43,6 +69,7 @@ const SATELLITE_GROUPS={
  cubesat:{label:"CubeSats",sources:["cubesat"],enabled:false,color:"#b7f7d0",glyph:"□",priority:50,limit:900},
  debris:{label:"Space junk / debris",sources:["fengyun-1c-debris","iridium-33-debris","cosmos-2251-debris","cosmos-1408-debris"],enabled:false,color:"#ff6262",glyph:"×",priority:95,limit:2200}
 };
+for(const group of Object.values(SATELLITE_GROUPS)){group.labels=group.enabled;group.phase=group.enabled?0:2}
 
 const STAR_CATALOG=[
 {id:"vega",kind:"STAR",name:"Vega",ra:279.23473479,dec:38.78368896,mag:.03,color:"#dcecff",distance:"25.0 ly",detail:"A0 V",fact:"Vega is a rapidly rotating A-type star and one of the brightest stars in the northern sky."},
@@ -487,6 +514,24 @@ function aircraftSpecialMeaning(a){
  if(aircraftIsMilitary(a))return "Military operation";
  return "";
 }
+function aircraftGroupKey(a){
+ if(aircraftIsMilitary(a))return "military";
+ const special=aircraftSpecialMeaning(a);
+ if(special&&special!=="Military operation")return "emergency";
+ const callsign=String(a.callsign||a.name||"").trim().toUpperCase();
+ const prefix=callsign.match(/^[A-Z]{3}/)?.[0];
+ if(prefix&&AIRLINE_PREFIXES[prefix])return "commercial";
+ return "other";
+}
+function aircraftGroupEnabled(a){
+ const group=AIRCRAFT_GROUPS[aircraftGroupKey(a)];
+ return !group||group.enabled;
+}
+function aircraftLabelsOn(a){
+ const group=AIRCRAFT_GROUPS[aircraftGroupKey(a)];
+ return layerLabelsOn("aircraft")&&(!group||group.labels);
+}
+
 const AIRCRAFT_GRACE_MS=20000;
 const AIRCRAFT_POSITION_RESPONSE_MS=4200;
 const AIRCRAFT_MOTION_RESPONSE_MS=1800;
@@ -734,7 +779,7 @@ function draw(){
    const daylightAlpha=sky.starVisibility;
    ctx.globalAlpha=Math.max(0,Math.max(.15,1-visualMag*.11)*daylightAlpha);ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=o.color;ctx.fillStyle=o.color;
    ctx.beginPath();ctx.arc(p[0],p[1],r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;
-   if((visualMag<.5||isSelected)&&daylightAlpha>.08){ctx.globalAlpha=daylightAlpha;ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2);ctx.globalAlpha=1}
+   if(layerLabelsOn("stars")&&(visualMag<.5||isSelected)&&daylightAlpha>.08){ctx.globalAlpha=daylightAlpha;ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2);ctx.globalAlpha=1}
   }
  }
  if(layers.planets){
@@ -744,31 +789,34 @@ function draw(){
    ctx.fillStyle=o.color;ctx.strokeStyle=dayMode?"rgba(6,31,48,.72)":"rgba(0,0,0,.36)";ctx.lineWidth=dayMode?2.2:1.2;ctx.font=`${active?"700 ":""}${size}px system-ui`;ctx.textAlign="center";ctx.textBaseline="middle";
    ctx.strokeText(o.symbol,p[0],p[1]);ctx.fillText(o.symbol,p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
    if(active){ctx.strokeStyle=o.color;ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],size*.72,0,Math.PI*2);ctx.stroke()}
-   ctx.fillStyle=objectText;ctx.font="700 10px ui-monospace";ctx.fillText(o.name,p[0]+size*.55,p[1]-size*.45);
+   if(layerLabelsOn("planets")){ctx.fillStyle=objectText;ctx.font="700 10px ui-monospace";ctx.fillText(o.name,p[0]+size*.55,p[1]-size*.45);}
   }
  }
  if(layers.aircraft){
   for(const a of aircraft){
+   if(!aircraftGroupEnabled(a))continue;
    const q=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
    const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
    ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
    ctx.globalAlpha=1;
-   const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a);
-   const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
-   ctx.font="700 9px ui-monospace";
-   const lineWidths=lines.map(([label,value])=>ctx.measureText(label+" "+value).width);
-   const boxW=Math.max(...lineWidths)+12,boxH=lines.length*13+4;
-   const boxX=p[0]+iconSize*.62,boxY=p[1]-iconSize*.82-boxH+5;
-   ctx.fillStyle=dayMode?"rgba(5,30,47,.92)":"rgba(2,8,14,.92)";
-   ctx.strokeStyle=meaning?"rgba(255,197,72,.92)":(dayMode?"rgba(255,255,255,.74)":"rgba(123,229,255,.38)");
-   ctx.lineWidth=meaning?1.5:1;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,4);ctx.fill();ctx.stroke();
-   lines.forEach(([label,value],index)=>{
-    const y=boxY+12+index*13;
-    ctx.fillStyle=meaning&&label==="Meaning:"?"#ffd166":"#7be5ff";ctx.fillText(label,boxX+6,y);
-    const labelWidth=ctx.measureText(label+" ").width;
-    ctx.fillStyle="#ffffff";ctx.fillText(value,boxX+6+labelWidth,y);
-   });
-   ctx.globalAlpha=1;
+   if(aircraftLabelsOn(a)){
+    const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a);
+    const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
+    ctx.font="700 9px ui-monospace";
+    const lineWidths=lines.map(([label,value])=>ctx.measureText(label+" "+value).width);
+    const boxW=Math.max(...lineWidths)+12,boxH=lines.length*13+4;
+    const boxX=p[0]+iconSize*.62,boxY=p[1]-iconSize*.82-boxH+5;
+    ctx.fillStyle=dayMode?"rgba(5,30,47,.92)":"rgba(2,8,14,.92)";
+    ctx.strokeStyle=meaning?"rgba(255,197,72,.92)":(dayMode?"rgba(255,255,255,.74)":"rgba(123,229,255,.38)");
+    ctx.lineWidth=meaning?1.5:1;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,4);ctx.fill();ctx.stroke();
+    lines.forEach(([label,value],index)=>{
+     const y=boxY+12+index*13;
+     ctx.fillStyle=meaning&&label==="Meaning:"?"#ffd166":"#7be5ff";ctx.fillText(label,boxX+6,y);
+     const labelWidth=ctx.measureText(label+" ").width;
+     ctx.fillStyle="#ffffff";ctx.fillText(value,boxX+6+labelWidth,y);
+    });
+    ctx.globalAlpha=1;
+   }
   }
  }
  if(layers.satellites){
@@ -779,7 +827,8 @@ function draw(){
    ctx.fillStyle=s.color;ctx.strokeStyle=dayMode?"#08283f":s.color;ctx.globalAlpha=1;ctx.font="700 "+satSize+"px ui-monospace";
    ctx.textAlign="center";ctx.textBaseline="middle";if(dayMode){ctx.lineWidth=2.2;ctx.strokeText(s.glyph||"◇",p[0],p[1])}ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.globalAlpha=1;
    if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
-   if(s.el>28||active){ctx.globalAlpha=1;ctx.fillStyle=objectText;ctx.font="700 9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
+   const satGroup=SATELLITE_GROUPS[s.group];
+   if(layerLabelsOn("satellites")&&satGroup?.labels&&(s.el>28||active)){ctx.globalAlpha=1;ctx.fillStyle=objectText;ctx.font="700 9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
   }
  }
 
@@ -795,10 +844,12 @@ function draw(){
    if(h){ctx.beginPath();ctx.moveTo(p[0],p[1]+7);ctx.lineTo(h[0],h[1]);ctx.stroke()}
    ctx.beginPath();ctx.moveTo(p[0],p[1]-9);ctx.lineTo(p[0]-6,p[1]+2);ctx.lineTo(p[0]+6,p[1]+2);ctx.closePath();ctx.stroke();
    ctx.beginPath();ctx.moveTo(p[0],p[1]+2);ctx.lineTo(p[0],p[1]+9);ctx.stroke();
-   ctx.font="700 10px ui-monospace,monospace";
-   const tw=ctx.measureText(label).width;
-   ctx.fillStyle="rgba(2,7,12,.82)";ctx.fillRect(p[0]+8,p[1]-17,tw+8,15);
-   ctx.fillStyle=active?"#ffffff":"#9feaff";ctx.fillText(label,p[0]+12,p[1]-6);
+   if(layerLabelsOn("airports")){
+    ctx.font="700 10px ui-monospace,monospace";
+    const tw=ctx.measureText(label).width;
+    ctx.fillStyle="rgba(2,7,12,.82)";ctx.fillRect(p[0]+8,p[1]-17,tw+8,15);
+    ctx.fillStyle=active?"#ffffff":"#9feaff";ctx.fillText(label,p[0]+12,p[1]-6);
+   }
    ctx.restore();
   }
  }
@@ -812,10 +863,10 @@ function draw(){
 
 function allSelectableObjects(){
  const stars=currentSkyObjects(simTime).filter(o=>skyObjectVisible(o));
- const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);return p?makeSkyObject({...a,az:p.az,el:p.el,distanceKm:p.distanceKm,slantRangeKm:p.slantRangeKm,horizontalKm:p.horizontalKm}):null}).filter(o=>skyObjectVisible(o));
+ const ac=layers.aircraft?aircraft.filter(aircraftGroupEnabled).map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);return p?makeSkyObject({...a,az:p.az,el:p.el,distanceKm:p.distanceKm,slantRangeKm:p.slantRangeKm,horizontalKm:p.horizontalKm}):null}).filter(o=>skyObjectVisible(o)):[];
  const aps=layers.airports?airports.map(airportDisplayObject).filter(o=>skyObjectVisible(o,{respectLandscape:false})):[];
  const planets=currentPlanetObjects(simTime).filter(o=>skyObjectVisible(o));
- const visibleSatellites=satellites.filter(o=>skyObjectVisible(o));
+ const visibleSatellites=layers.satellites?satellites.filter(o=>SATELLITE_GROUPS[o.group]?.enabled!==false&&skyObjectVisible(o)):[];
  return [...stars,...planets,...aps,...ac,...visibleSatellites];
 }
 function nearestObject(x,y){
@@ -988,26 +1039,55 @@ canvas.addEventListener("keydown",e=>{
  if(e.key==="ArrowDown")pitch=clamp(pitch-step,minPitch,89);
 });
 
-document.querySelectorAll("[data-layer]").forEach(btn=>btn.addEventListener("click",()=>{
- const key=btn.dataset.layer;layers[key]=!layers[key];btn.setAttribute("aria-pressed",String(layers[key]));
- if(key==="aircraft"&&layers[key])refreshAircraft(true);
- if(key==="satellites")refreshSatellites(true);
- if(key==="airports"&&layers[key])refreshAirports();
- setLiveStatus();
-}));
+document.querySelectorAll("[data-layer]").forEach(btn=>{
+ const key=btn.dataset.layer;
+ syncLayerButton(btn,key);
+ btn.addEventListener("click",()=>{
+  if(MULTISTATE_LAYERS.has(key)){
+   layerPhases[key]=advancePhase(layerPhases[key]);
+   layers[key]=phaseEnabled(layerPhases[key]);
+  }else layers[key]=!layers[key];
+  syncLayerButton(btn,key);
+  if(key==="aircraft"&&layers[key])refreshAircraft(true);
+  if(key==="satellites"&&layers[key])refreshSatellites(true);
+  if(key==="airports"&&layers[key])refreshAirports();
+  setLiveStatus();
+ });
+});
 
-document.querySelectorAll("[data-satellite-group]").forEach(input=>input.addEventListener("change",async()=>{
- const key=input.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];if(!group)return;
- group.enabled=input.checked;
- input.closest("label")?.classList.toggle("is-on",group.enabled);
- await refreshSatellites(true);
-}));
+document.querySelectorAll("[data-satellite-group]").forEach(btn=>{
+ const key=btn.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];if(!group)return;
+ syncGroupButton(btn,group);
+ btn.addEventListener("click",async()=>{
+  group.phase=advancePhase(group.phase);
+  group.enabled=phaseEnabled(group.phase);
+  group.labels=phaseLabels(group.phase);
+  syncGroupButton(btn,group);
+  await refreshSatellites(true);
+ });
+});
+document.querySelectorAll("[data-aircraft-group]").forEach(btn=>{
+ const key=btn.dataset.aircraftGroup,group=AIRCRAFT_GROUPS[key];if(!group)return;
+ syncGroupButton(btn,group);
+ btn.addEventListener("click",()=>{
+  group.phase=advancePhase(group.phase);
+  group.enabled=phaseEnabled(group.phase);
+  group.labels=phaseLabels(group.phase);
+  syncGroupButton(btn,group);
+ });
+});
 const satellitePanel=document.querySelector("#satellite-groups");
 const satelliteGroupsButton=document.querySelector("#satellite-groups-button");
+const aircraftPanel=document.querySelector("#aircraft-groups");
+const aircraftGroupsButton=document.querySelector("#aircraft-groups-button");
 satelliteGroupsButton?.addEventListener("click",()=>{
  const opening=satellitePanel.hidden;satellitePanel.hidden=!opening;satelliteGroupsButton.setAttribute("aria-expanded",String(opening));
 });
 document.querySelector("#satellite-groups-close")?.addEventListener("click",()=>{satellitePanel.hidden=true;satelliteGroupsButton?.setAttribute("aria-expanded","false")});
+aircraftGroupsButton?.addEventListener("click",()=>{
+ const opening=aircraftPanel.hidden;aircraftPanel.hidden=!opening;aircraftGroupsButton.setAttribute("aria-expanded",String(opening));
+});
+document.querySelector("#aircraft-groups-close")?.addEventListener("click",()=>{aircraftPanel.hidden=true;aircraftGroupsButton?.setAttribute("aria-expanded","false")});
 
 function renderSearch(){
  const q=searchInput.value.trim().toLowerCase();if(!q){searchResults.hidden=true;searchResults.replaceChildren();return}
