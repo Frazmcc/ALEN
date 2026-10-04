@@ -144,6 +144,36 @@ function currentPlanetObjects(ms){
    color:info.color,symbol:info.symbol,detail:info.detail,fact:info.fact});
  }).filter(Boolean);
 }
+function currentSunAltAz(ms){
+ if(!observer)return null;
+ const sun=solarSystemRaDec(ms).sun;
+ return sun?raDecToAltAz(sun.ra,sun.dec,ms):null;
+}
+function mixRgb(a,b,t){
+ const u=clamp(t,0,1);
+ return `rgb(${Math.round(a[0]+(b[0]-a[0])*u)} ${Math.round(a[1]+(b[1]-a[1])*u)} ${Math.round(a[2]+(b[2]-a[2])*u)})`;
+}
+function timeOfDaySky(sunEl){
+ const stops=[
+  {el:-18,top:[1,3,10],mid:[7,17,29],horizon:[16,35,52],stars:1},
+  {el:-12,top:[4,10,25],mid:[18,36,64],horizon:[61,70,94],stars:.92},
+  {el:-6,top:[14,30,65],mid:[52,76,111],horizon:[153,96,91],stars:.62},
+  {el:-1,top:[42,82,136],mid:[103,131,171],horizon:[241,157,104],stars:.16},
+  {el:6,top:[74,132,190],mid:[116,169,216],horizon:[185,210,229],stars:.02},
+  {el:25,top:[71,138,204],mid:[111,174,224],horizon:[176,210,235],stars:0},
+  {el:90,top:[65,132,202],mid:[105,169,222],horizon:[169,206,234],stars:0}
+ ];
+ if(!Number.isFinite(sunEl))sunEl=-18;
+ let lo=stops[0],hi=stops[stops.length-1];
+ for(let i=1;i<stops.length;i++){if(sunEl<=stops[i].el){lo=stops[i-1];hi=stops[i];break}}
+ const t=hi.el===lo.el?0:clamp((sunEl-lo.el)/(hi.el-lo.el),0,1);
+ return{
+  top:mixRgb(lo.top,hi.top,t),
+  mid:mixRgb(lo.mid,hi.mid,t),
+  horizon:mixRgb(lo.horizon,hi.horizon,t),
+  starVisibility:lo.stars+(hi.stars-lo.stars)*t
+ };
+}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function norm360(v){v%=360;return v<0?v+360:v}
 function adiff(a,b){return ((a-b+540)%360)-180}
@@ -571,8 +601,11 @@ function isAboveLandscape(az,el){
  return !layers.landscape||el>terrainHorizonElevation(az);
 }
 function draw(){
+ const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el);
  const g=ctx.createLinearGradient(0,0,0,height);
- g.addColorStop(0,"#01030a");g.addColorStop(.62,layers.atmosphere?"#07111d":"#02050a");g.addColorStop(1,layers.atmosphere?"#102334":"#02050a");
+ g.addColorStop(0,sky.top);
+ g.addColorStop(.62,layers.atmosphere?sky.mid:sky.top);
+ g.addColorStop(1,layers.atmosphere?sky.horizon:sky.mid);
  ctx.fillStyle=g;ctx.fillRect(0,0,width,height);
  drawHorizon();
 
@@ -592,9 +625,10 @@ function draw(){
    const visualMag=Number.isFinite(o.apparentMag)?o.apparentMag:o.mag;
    const r=Math.max(1.05,3.8-visualMag*.42)*(90/fov),isSelected=selected?.id===o.id;
    if(isSelected){ctx.strokeStyle="#7be5ff";ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],r+8,0,Math.PI*2);ctx.stroke()}
-   ctx.globalAlpha=Math.max(.15,1-visualMag*.11);ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=o.color;ctx.fillStyle=o.color;
+   const daylightAlpha=sky.starVisibility;
+   ctx.globalAlpha=Math.max(0,Math.max(.15,1-visualMag*.11)*daylightAlpha);ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=o.color;ctx.fillStyle=o.color;
    ctx.beginPath();ctx.arc(p[0],p[1],r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;
-   if(visualMag<.5||isSelected){ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2)}
+   if((visualMag<.5||isSelected)&&daylightAlpha>.08){ctx.globalAlpha=daylightAlpha;ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2);ctx.globalAlpha=1}
   }
  }
  if(layers.planets){
