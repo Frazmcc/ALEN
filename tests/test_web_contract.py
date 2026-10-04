@@ -267,3 +267,12 @@ def test_astronomical_refraction_and_apparent_elevation() -> None:
     assert '"Apparent elevation"' in APP
     assert '"Geometric elevation"' in APP
     assert '"Refraction"' in APP
+
+
+def test_star_atmospheric_extinction() -> None:
+    assert "function atmosphericExtinctionMagnitude(geometricEl)" in APP
+    assert "apparentMag" in APP
+    assert "extinctionMag" in APP
+    assert "visualMag=Number.isFinite(o.apparentMag)?o.apparentMag:o.mag" in APP
+    assert '"Catalogue magnitude"' in APP
+    assert '"Atmospheric extinction"' in APP
