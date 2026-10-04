@@ -600,3 +600,29 @@ def test_aircraft_icons_are_type_specific_and_heading_aware() -> None:
     assert "ctx.rotate(aircraftScreenRotation(a,q,p))" in APP
     assert "drawAircraftIcon(visualType,iconSize,aircraftInk" in APP
     assert 'strokeText("✈"' not in APP
+
+
+def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert "now + timedelta(seconds=2)" in source
+    assert '"azimuth_deg_next"' in source
+    assert '"elevation_deg_next"' in source
+    assert '"range_km_next"' in source
+    assert '"motion_horizon_seconds": 2' in source
+
+    assert "const SATELLITE_GRACE_MS=15000" in APP
+    assert "const SATELLITE_POSITION_RESPONSE_MS=1400" in APP
+    assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
+    assert "sat.displayAz=prior?.displayAz??az" in APP
+    assert "sat.targetAz=az" in APP
+    assert "sat.azRateDegMs=" in APP
+    assert "sat.elRateDegMs=" in APP
+    assert "sat.rangeRateKmMs=" in APP
+    assert "function stepSatellites(now)" in APP
+    assert "s.targetAz=norm360" in APP
+    assert "s.displayAz=blendAngle" in APP
+    assert "s.displayEl=" in APP
+    assert "s.az=s.displayAz;s.el=s.displayEl;s.rangeKm=s.displayRangeKm" in APP
+    assert "stepAircraft(now);stepSatellites(now);draw()" in APP
+    assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
+    assert "retaining recent satellites" in APP
