@@ -748,11 +748,54 @@ function logicalSatelliteMemberships(sourceGroups){
  return memberships;
 }
 const SATELLITE_GRACE_MS=15000;
-const SATELLITE_POSITION_RESPONSE_MS=1400;
+const SATELLITE_POSITION_RESPONSE_MS=850;
 const SATELLITE_MAX_FRAME_DT_MS=250;
 function satelliteMotionRate(current,next,horizonSeconds,isAngle=false){
  const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
  return (isAngle?adiff(next,current):(next-current))/h;
+}
+function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false){
+ const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
+ const d1=isAngle?adiff(next,current):(next-current),d2=isAngle?adiff(next2,next):(next2-next);
+ return{rate:d1/h,accel:(d2-d1)/(h*h)};
+}
+function satelliteVisualType(s){
+ if(s.group==="stations")return"station";
+ if(s.group==="starlink"||s.group==="oneweb"||s.group==="kuiper")return"constellation";
+ if(s.group==="navigation")return"navigation";
+ if(s.group==="weather"||s.group==="earth")return"earth";
+ if(s.group==="debris")return"debris";
+ if(s.group==="cubesat"||s.group==="amateur")return"cubesat";
+ return"satellite";
+}
+function drawSatelliteIcon(kind,size,fill,stroke){
+ const k=size/14;ctx.save();ctx.scale(k,k);ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=1.2/k;ctx.lineJoin="round";ctx.lineCap="round";
+ if(kind==="station"){
+  ctx.strokeRect(-3,-2.5,6,5);ctx.fillRect(-2.2,-1.7,4.4,3.4);
+  ctx.strokeRect(-10,-3.5,5,7);ctx.strokeRect(5,-3.5,5,7);
+  ctx.beginPath();ctx.moveTo(-5,0);ctx.lineTo(-3,0);ctx.moveTo(3,0);ctx.lineTo(5,0);ctx.stroke();
+ }else if(kind==="constellation"){
+  ctx.beginPath();ctx.moveTo(-8,0);ctx.lineTo(5,-3);ctx.lineTo(8,0);ctx.lineTo(5,3);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-4,-1.5);ctx.lineTo(-4,1.5);ctx.moveTo(1,-2.4);ctx.lineTo(1,2.4);ctx.stroke();
+ }else if(kind==="navigation"){
+  ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(6,0);ctx.lineTo(0,6);ctx.lineTo(-6,0);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.arc(0,0,2.2,0,Math.PI*2);ctx.stroke();
+ }else if(kind==="earth"){
+  ctx.beginPath();ctx.arc(0,0,4.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-8,0);ctx.lineTo(-4.5,0);ctx.moveTo(4.5,0);ctx.lineTo(8,0);ctx.stroke();
+ }else if(kind==="cubesat"){
+  ctx.strokeRect(-4,-4,8,8);ctx.fillRect(-2.8,-2.8,5.6,5.6);
+  ctx.beginPath();ctx.moveTo(4,-2);ctx.lineTo(8,-4);ctx.lineTo(8,2);ctx.lineTo(4,2);ctx.stroke();
+ }else if(kind==="debris"){
+  ctx.beginPath();ctx.moveTo(-5,-4);ctx.lineTo(2,-6);ctx.lineTo(6,-1);ctx.lineTo(3,5);ctx.lineTo(-4,4);ctx.lineTo(-6,0);ctx.closePath();ctx.fill();ctx.stroke();
+ }else{
+  ctx.strokeRect(-3,-3,6,6);ctx.fillRect(-2,-2,4,4);
+  ctx.beginPath();ctx.moveTo(-8,0);ctx.lineTo(-3,0);ctx.moveTo(3,0);ctx.lineTo(8,0);ctx.stroke();
+ }
+ ctx.restore();
+}
+function labelBoxOverlaps(box,boxes){
+ return boxes.some(b=>!(box.x+box.w<b.x||b.x+b.w<box.x||box.y+box.h<b.y||b.y+b.h<box.y));
 }
 async function refreshSatellites(force=false){
  if(!observer||satelliteRequestInFlight)return;
@@ -785,16 +828,23 @@ async function refreshSatellites(force=false){
    const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    const id="sat:"+raw.norad,prior=previous.get(id);
    const az=Number(raw.azimuth_deg),el=Number(raw.elevation_deg),rangeKm=Number(raw.range_km);
-   const nextAz=Number(raw.azimuth_deg_next),nextEl=Number(raw.elevation_deg_next),nextRange=Number(raw.range_km_next),horizon=Number(raw.motion_horizon_seconds)||2;
+   const nextAz=Number(raw.azimuth_deg_next),nextEl=Number(raw.elevation_deg_next),nextRange=Number(raw.range_km_next);
+   const nextAz2=Number(raw.azimuth_deg_next2),nextEl2=Number(raw.elevation_deg_next2),nextRange2=Number(raw.range_km_next2),horizon=Number(raw.motion_horizon_seconds)||2;
    if(!Number.isFinite(az)||!Number.isFinite(el)||el<0)continue;
    const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+raw.norad),az:prior?.displayAz??az,el:prior?.displayEl??el,
     rangeKm:prior?.displayRangeKm??rangeKm,detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
     norad:String(raw.norad||"—"),objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
    sat.displayAz=prior?.displayAz??az;sat.displayEl=prior?.displayEl??el;sat.displayRangeKm=prior?.displayRangeKm??rangeKm;
    sat.targetAz=az;sat.targetEl=el;sat.targetRangeKm=rangeKm;
-   sat.azRateDegMs=Number.isFinite(nextAz)?satelliteMotionRate(az,nextAz,horizon,true):(prior?.azRateDegMs||0);
-   sat.elRateDegMs=Number.isFinite(nextEl)?satelliteMotionRate(el,nextEl,horizon,false):(prior?.elRateDegMs||0);
-   sat.rangeRateKmMs=Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0);
+   const azModel=Number.isFinite(nextAz)&&Number.isFinite(nextAz2)?satelliteMotionModel(az,nextAz,nextAz2,horizon,true):null;
+   const elModel=Number.isFinite(nextEl)&&Number.isFinite(nextEl2)?satelliteMotionModel(el,nextEl,nextEl2,horizon,false):null;
+   const rangeModel=Number.isFinite(nextRange)&&Number.isFinite(nextRange2)?satelliteMotionModel(rangeKm,nextRange,nextRange2,horizon,false):null;
+   sat.azRateDegMs=azModel?.rate??(Number.isFinite(nextAz)?satelliteMotionRate(az,nextAz,horizon,true):(prior?.azRateDegMs||0));
+   sat.elRateDegMs=elModel?.rate??(Number.isFinite(nextEl)?satelliteMotionRate(el,nextEl,horizon,false):(prior?.elRateDegMs||0));
+   sat.rangeRateKmMs=rangeModel?.rate??(Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0));
+   sat.azAccelDegMs2=azModel?.accel??(prior?.azAccelDegMs2||0);
+   sat.elAccelDegMs2=elModel?.accel??(prior?.elAccelDegMs2||0);
+   sat.rangeAccelKmMs2=rangeModel?.accel??(prior?.rangeAccelKmMs2||0);
    sat.lastFrame=prior?.lastFrame??frameNow;sat.lastSeenAt=wallNow;
    next.push(sat);
   }
@@ -821,9 +871,12 @@ function stepSatellites(now){
   const rawDt=Math.max(0,now-(s.lastFrame||now));s.lastFrame=now;
   if(rawDt<=0)continue;
   const dt=Math.min(SATELLITE_MAX_FRAME_DT_MS,rawDt),positionK=1-Math.exp(-dt/SATELLITE_POSITION_RESPONSE_MS);
-  s.targetAz=norm360((s.targetAz??s.az)+(Number(s.azRateDegMs)||0)*rawDt);
-  s.targetEl=(s.targetEl??s.el)+(Number(s.elRateDegMs)||0)*rawDt;
-  s.targetRangeKm=Math.max(0,(s.targetRangeKm??s.rangeKm)+(Number(s.rangeRateKmMs)||0)*rawDt);
+  const azRate=Number(s.azRateDegMs)||0,elRate=Number(s.elRateDegMs)||0,rangeRate=Number(s.rangeRateKmMs)||0;
+  const azAccel=Number(s.azAccelDegMs2)||0,elAccel=Number(s.elAccelDegMs2)||0,rangeAccel=Number(s.rangeAccelKmMs2)||0;
+  s.targetAz=norm360((s.targetAz??s.az)+azRate*rawDt+.5*azAccel*rawDt*rawDt);
+  s.targetEl=(s.targetEl??s.el)+elRate*rawDt+.5*elAccel*rawDt*rawDt;
+  s.targetRangeKm=Math.max(0,(s.targetRangeKm??s.rangeKm)+rangeRate*rawDt+.5*rangeAccel*rawDt*rawDt);
+  s.azRateDegMs=azRate+azAccel*rawDt;s.elRateDegMs=elRate+elAccel*rawDt;s.rangeRateKmMs=rangeRate+rangeAccel*rawDt;
   s.displayAz=blendAngle(s.displayAz??s.az,s.targetAz,positionK);
   s.displayEl=(s.displayEl??s.el)+((s.targetEl??s.el)-(s.displayEl??s.el))*positionK;
   s.displayRangeKm=(s.displayRangeKm??s.rangeKm)+((s.targetRangeKm??s.rangeKm)-(s.displayRangeKm??s.rangeKm))*positionK;
@@ -985,15 +1038,27 @@ function draw(){
   }
  }
  if(layers.satellites){
-  for(const s of satellites){
+  const satelliteLabelBoxes=[];
+  const orderedSatellites=[...satellites].sort((a,b)=>(selected?.id===b.id)-(selected?.id===a.id)||b.el-a.el);
+  for(const s of orderedSatellites){
    if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
-   const active=selected?.id===s.id,satScale=clamp(1.3-Math.log10(Math.max(100,s.rangeKm))/4,.72,1.15);
-   const satSize=Math.round((active?15:12)*satScale);
-   ctx.fillStyle=s.color;ctx.strokeStyle=dayMode?"#08283f":s.color;ctx.globalAlpha=1;ctx.font="700 "+satSize+"px ui-monospace";
-   ctx.textAlign="center";ctx.textBaseline="middle";if(dayMode){ctx.lineWidth=2.2;ctx.strokeText(s.glyph||"◇",p[0],p[1])}ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.globalAlpha=1;
-   if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
+   const active=selected?.id===s.id,satScale=clamp(1.35-Math.log10(Math.max(100,s.rangeKm))/4,.76,1.18);
+   const satSize=Math.round((active?18:14)*satScale),visualType=satelliteVisualType(s);
+   ctx.save();ctx.translate(p[0],p[1]);
+   drawSatelliteIcon(visualType,satSize,s.color,dayMode?"rgba(8,40,63,.88)":"rgba(225,245,255,.72)");
+   ctx.restore();
+   if(active){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],satSize*.72+4,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
    const satGroup=SATELLITE_GROUPS[s.group];
-   if(layerLabelsOn("satellites")&&satGroup?.labels&&(s.el>28||active)){ctx.globalAlpha=1;ctx.fillStyle=objectText;ctx.font="700 9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
+   if(layerLabelsOn("satellites")&&satGroup?.labels&&(s.el>28||active)){
+    ctx.font=active?"700 10px ui-monospace":"700 9px ui-monospace";
+    const w=ctx.measureText(s.name).width+8,h=13,x=p[0]+satSize*.55+3,y=p[1]-12;
+    const box={x,y,w,h};
+    if(active||!labelBoxOverlaps(box,satelliteLabelBoxes)){
+     satelliteLabelBoxes.push(box);
+     ctx.fillStyle=dayMode?"rgba(237,247,252,.76)":"rgba(2,8,14,.68)";ctx.fillRect(x-3,y-1,w,h);
+     ctx.fillStyle=active?s.color:objectText;ctx.fillText(s.name,x,y+9);
+    }
+   }
   }
  }
 
