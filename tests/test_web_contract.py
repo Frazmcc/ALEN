@@ -543,3 +543,17 @@ def test_four_step_label_cycle_is_complete() -> None:
     assert 'function phaseState(phase){return phase===2?"off":phase===0?"labels":"plain"}' in APP
     assert 'function phaseEnabled(phase){return phase!==2}' in APP
     assert 'function phaseLabels(phase){return phase===0}' in APP
+
+
+def test_star_colours_adapt_to_sky_brightness() -> None:
+    assert "function hexRgb(value)" in APP
+    assert "function mixHexColor(a,b,t)" in APP
+    assert "function starRenderPalette(baseColor,daylight)" in APP
+    assert 'if(d<.3)return{fill:baseColor' in APP
+    assert 'mixHexColor(baseColor,"#f8fbff",t)' in APP
+    assert 'mixHexColor("#f8fbff","#08283f",t)' in APP
+    assert "starPalette=starRenderPalette(o.color,sky.daylight)" in APP
+    assert "ctx.shadowColor=starPalette.halo" in APP
+    assert "ctx.fillStyle=starPalette.fill" in APP
+    assert "ctx.strokeStyle=starPalette.outline" in APP
+    assert "ctx.fillStyle=isSelected?(dayMode?"#08283f":"#dff9ff"):starPalette.label" in APP

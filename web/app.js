@@ -115,6 +115,25 @@ function starColor(temp){
  const t=clamp(Number(temp)||6000,2500,30000);
  if(t<3500)return "#ffb07a";if(t<5000)return "#ffd2a1";if(t<6500)return "#fff2d2";if(t<9000)return "#eef4ff";return "#cfe1ff";
 }
+function hexRgb(value){
+ const hex=String(value||"#ffffff").replace("#","");
+ const full=hex.length===3?hex.split("").map(ch=>ch+ch).join(""):hex.padEnd(6,"f").slice(0,6);
+ return [0,2,4].map(i=>parseInt(full.slice(i,i+2),16)||0);
+}
+function mixHexColor(a,b,t){
+ const u=clamp(t,0,1),ca=hexRgb(a),cb=hexRgb(b);
+ return `rgb(${Math.round(ca[0]+(cb[0]-ca[0])*u)} ${Math.round(ca[1]+(cb[1]-ca[1])*u)} ${Math.round(ca[2]+(cb[2]-ca[2])*u)})`;
+}
+function starRenderPalette(baseColor,daylight){
+ const d=clamp(daylight,0,1);
+ if(d<.3)return{fill:baseColor,halo:baseColor,label:"rgba(226,241,250,.78)",outline:"rgba(255,255,255,.16)"};
+ if(d<.7){
+  const t=(d-.3)/.4;
+  return{fill:mixHexColor(baseColor,"#f8fbff",t),halo:"#f8fbff",label:"rgba(239,248,255,.92)",outline:"rgba(3,25,42,.35)"};
+ }
+ const t=(d-.7)/.3;
+ return{fill:mixHexColor("#f8fbff","#08283f",t),halo:"#ffffff",label:mixHexColor("#eef8ff","#08283f",t),outline:"rgba(255,255,255,.62)"};
+}
 async function loadBrightStars(){
  try{
   const res=await fetch("./data/bright-stars.json?v=1",{cache:"force-cache"});
@@ -783,10 +802,13 @@ function draw(){
    const visualMag=Number.isFinite(o.apparentMag)?o.apparentMag:o.mag;
    const r=Math.max(1.05,3.8-visualMag*.42)*(90/fov),isSelected=selected?.id===o.id;
    if(isSelected){ctx.strokeStyle="#7be5ff";ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],r+8,0,Math.PI*2);ctx.stroke()}
-   const daylightAlpha=sky.starVisibility;
-   ctx.globalAlpha=Math.max(0,Math.max(.15,1-visualMag*.11)*daylightAlpha);ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=o.color;ctx.fillStyle=o.color;
-   ctx.beginPath();ctx.arc(p[0],p[1],r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;
-   if(layerLabelsOn("stars")&&(visualMag<.5||isSelected)&&daylightAlpha>.08){ctx.globalAlpha=daylightAlpha;ctx.fillStyle=isSelected?"#dff9ff":"rgba(226,241,250,.76)";ctx.font="11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2);ctx.globalAlpha=1}
+   const daylightAlpha=sky.starVisibility,starPalette=starRenderPalette(o.color,sky.daylight);
+   ctx.globalAlpha=Math.max(0,Math.max(.15,1-visualMag*.11)*daylightAlpha);
+   ctx.shadowBlur=Math.max(2,10-o.extinctionMag*2);ctx.shadowColor=starPalette.halo;ctx.fillStyle=starPalette.fill;
+   ctx.beginPath();ctx.arc(p[0],p[1],r,0,Math.PI*2);ctx.fill();
+   if(sky.daylight>.45){ctx.shadowBlur=0;ctx.strokeStyle=starPalette.outline;ctx.lineWidth=.8;ctx.stroke()}
+   ctx.shadowBlur=0;ctx.globalAlpha=1;
+   if(layerLabelsOn("stars")&&(visualMag<.5||isSelected)&&daylightAlpha>.08){ctx.globalAlpha=Math.max(.28,daylightAlpha);ctx.fillStyle=isSelected?(dayMode?"#08283f":"#dff9ff"):starPalette.label;ctx.font="700 11px ui-monospace,monospace";ctx.fillText(o.name,p[0]+r+6,p[1]-r-2);ctx.globalAlpha=1}
   }
  }
  if(layers.planets){
