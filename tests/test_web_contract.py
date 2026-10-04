@@ -250,8 +250,20 @@ def test_unified_sky_object_foundation() -> None:
     assert "function skyObjectVisible(o" in APP
     assert "aboveGeometricHorizon" in APP
     assert "aboveTerrainHorizon" in APP
-    assert 'return makeSkyObject({id:"planet:"+id' in APP
+    assert 'return makeAstronomySkyObject({id:"planet:"+id' in APP
     assert 'return makeSkyObject({id:"sat:"+s.norad' in APP
-    assert 'return p?makeSkyObject({...o,az:p.az,el:p.el}):null' in APP
+    assert 'return p?makeAstronomySkyObject({...o,az:p.az,el:p.el}):null' in APP
     assert "airports.map(airportDisplayObject).filter(o=>skyObjectVisible" in APP
     assert "skyObjectScreen(o)" in APP
+
+
+def test_astronomical_refraction_and_apparent_elevation() -> None:
+    assert "function atmosphericRefractionDeg(geometricEl)" in APP
+    assert "function makeAstronomySkyObject(raw)" in APP
+    assert "geometricEl" in APP
+    assert "refractionDeg" in APP
+    assert 'return makeAstronomySkyObject({id:"planet:"+id' in APP
+    assert 'return p?makeAstronomySkyObject({...o,az:p.az,el:p.el}):null' in APP
+    assert '"Apparent elevation"' in APP
+    assert '"Geometric elevation"' in APP
+    assert '"Refraction"' in APP
