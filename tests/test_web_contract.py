@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.4.1' in HTML
+    assert './app.js?v=1.4.2' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -341,3 +341,22 @@ def test_daylight_contrast_palette() -> None:
     assert 'const aircraftInk=dayMode?"#083a59":"#9fd9ff"' in APP
     assert 'ctx.strokeText("✈",0,0)' in APP
     assert 'data-sky-mode="day"' in css
+
+
+def test_landscape_extends_beyond_viewport_edges() -> None:
+    assert "const step=5,margin=Math.max(80,width*.08)" in APP
+    assert "for(let x=-margin;x<=width+margin;x+=step)" in APP
+    assert "ctx.lineTo(width+margin,height+2)" in APP
+    assert "ctx.lineTo(-margin,height+2)" in APP
+
+
+def test_satellite_public_tle_fallback() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert 'FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"' in source
+    assert "def _load_fallback_catalog" in source
+    assert "def _fetch_fallback_catalog" in source
+    assert '"page-size": "100"' in source
+    assert '"sort": "popularity"' in source
+    assert 'payload.get("member")' in source
+    assert 'merged[record.norad] = (record, {"visual"})' in source
+    assert '"fallback_used": fallback_used' in source
