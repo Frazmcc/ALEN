@@ -123,7 +123,10 @@ def test_airports_are_clickable_selectable_objects_with_media() -> None:
     assert 'kind:"AIRPORT"' in APP
     assert "function refreshAirports()" in APP
     assert "radius_km:String(AIRPORT_RADIUS_KM)" in APP
+    assert 'limit:"30"' in APP
     assert "Number(a.distance_km)<=AIRPORT_RADIUS_KM" in APP
+    assert "setTimeout(()=>refreshAirports(),5000)" in APP
+    assert "horizonEl+1.6" in APP
     assert "function airportDisplayObject" in APP
     assert "airports.map(airportDisplayObject)" in APP
     assert 'o.kind==="AIRPORT"' in APP
