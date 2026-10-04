@@ -24,3 +24,9 @@
 .layerbar button[data-state="labels"]::after{content:"LBL"}
 .layerbar button[data-state="plain"]::after{content:"NO LBL"}
 .layerbar button[data-state="off"]::after{content:"OFF"}
+
+.layerbar button[aria-expanded="true"]{background:rgba(123,229,255,.11);color:var(--accent)}
+.astronomy-group-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.display-group-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sat-group[data-state="on"]{color:var(--text);background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.1)}
+@media(max-width:540px){.astronomy-group-grid,.display-group-grid{grid-template-columns:1fr}}
