@@ -435,12 +435,16 @@ function drawHorizon(){
   glow.addColorStop(0,"rgba(60,120,160,0)");glow.addColorStop(.72,"rgba(65,125,165,.12)");glow.addColorStop(1,"rgba(0,0,0,.28)");
   ctx.fillStyle=glow;ctx.fillRect(0,Math.max(0,horizonY-120),width,Math.min(148,height));
  }
- if(layers.landscape&&horizonY<height+180){
-   drawLandscapeLayer("rgba(2,5,7,.98)");
- }
  if(horizonY>=0&&horizonY<=height){
    ctx.strokeStyle="rgba(190,225,240,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,horizonY);ctx.lineTo(width,horizonY);ctx.stroke();
  }
+}
+function drawLandscapeForeground(){
+ const horizonY=screenYForElevation(0);
+ if(layers.landscape&&horizonY<height+180)drawLandscapeLayer("rgba(2,5,7,.98)");
+}
+function isAboveLandscape(az,el){
+ return !layers.landscape||el>terrainHorizonElevation(az);
 }
 function draw(){
  const g=ctx.createLinearGradient(0,0,0,height);
@@ -460,7 +464,7 @@ function draw(){
  }
  if(layers.stars){
   for(const o of liveObjects){
-   if(o.el<0)continue;const p=project(o.az,o.el);if(!p)continue;
+   if(o.el<0||!isAboveLandscape(o.az,o.el))continue;const p=project(o.az,o.el);if(!p)continue;
    const r=Math.max(1.2,3.8-o.mag*.42)*(90/fov),isSelected=selected?.id===o.id;
    if(isSelected){ctx.strokeStyle="#7be5ff";ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(p[0],p[1],r+8,0,Math.PI*2);ctx.stroke()}
    ctx.globalAlpha=Math.max(.35,1-o.mag*.11);ctx.shadowBlur=10;ctx.shadowColor=o.color;ctx.fillStyle=o.color;
@@ -470,7 +474,7 @@ function draw(){
  }
  if(layers.planets){
   for(const o of currentPlanetObjects(simTime)){
-   if(o.el<0)continue;const p=project(o.az,o.el);if(!p)continue;const active=selected?.id===o.id;
+   if(o.el<0||!isAboveLandscape(o.az,o.el))continue;const p=project(o.az,o.el);if(!p)continue;const active=selected?.id===o.id;
    const size=o.name==="Sun"?25:o.name==="Moon"?22:15;
    ctx.fillStyle=o.color;ctx.font=`${active?"700 ":""}${size}px system-ui`;ctx.textAlign="center";ctx.textBaseline="middle";
    ctx.fillText(o.symbol,p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
@@ -478,6 +482,26 @@ function draw(){
    ctx.fillStyle="rgba(238,248,255,.88)";ctx.font="10px ui-monospace";ctx.fillText(o.name,p[0]+size*.55,p[1]-size*.45);
   }
  }
+ if(layers.aircraft){
+  for(const a of aircraft){
+   const q=airborneAltAz(a.displayLat,a.displayLon,a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
+   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle="#9fd9ff";ctx.font="17px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✈",0,0);ctx.restore();
+   ctx.fillStyle="rgba(180,225,255,.85)";ctx.font="9px ui-monospace";ctx.fillText(a.name,p[0]+11,p[1]-8);
+  }
+ }
+ if(layers.satellites){
+  for(const s of satellites){
+   if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
+   const active=selected?.id===s.id;
+   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.font=active?"700 15px ui-monospace":"700 12px ui-monospace";
+   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
+   if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
+   if(s.el>28||active){ctx.globalAlpha=.9;ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
+  }
+ }
+
+ drawLandscapeForeground();
+
  if(layers.airports){
   for(const raw of airports){
    const a=airportDisplayObject(raw),p=project(a.az,a.el);if(!p)continue;
@@ -489,23 +513,7 @@ function draw(){
    ctx.font="9px ui-monospace,monospace";ctx.fillText(a.iata||a.icao,p[0]+8,p[1]-6);
   }
  }
- if(layers.aircraft){
-  for(const a of aircraft){
-   const q=airborneAltAz(a.displayLat,a.displayLon,a.altM);if(!q||q.el<0)continue;const p=project(q.az,q.el);if(!p)continue;
-   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.track,q.az)*DEG);ctx.fillStyle="#9fd9ff";ctx.font="17px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✈",0,0);ctx.restore();
-   ctx.fillStyle="rgba(180,225,255,.85)";ctx.font="9px ui-monospace";ctx.fillText(a.name,p[0]+11,p[1]-8);
-  }
- }
- if(layers.satellites){
-  for(const s of satellites){
-   const p=project(s.az,s.el);if(!p)continue;
-   const active=selected?.id===s.id;
-   ctx.fillStyle=s.color;ctx.strokeStyle=s.color;ctx.font=active?"700 15px ui-monospace":"700 12px ui-monospace";
-   ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(s.glyph||"◇",p[0],p[1]);ctx.textAlign="left";ctx.textBaseline="alphabetic";
-   if(active){ctx.beginPath();ctx.arc(p[0],p[1],9,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
-   if(s.el>28||active){ctx.globalAlpha=.9;ctx.font="9px ui-monospace";ctx.fillText(s.name,p[0]+8,p[1]-6);ctx.globalAlpha=1}
-  }
- }
+
  if(!observer){
    ctx.fillStyle="rgba(232,246,255,.85)";ctx.font="600 16px system-ui";ctx.textAlign="center";
    ctx.fillText("Allow current location to initialise your live sky",width/2,height*.54);
@@ -514,11 +522,12 @@ function draw(){
 }
 
 function allSelectableObjects(){
- const stars=currentSkyObjects(simTime).filter(o=>o.el>=0);
- const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?{...a,az:p.az,el:p.el}:null}).filter(Boolean);
+ const stars=currentSkyObjects(simTime).filter(o=>o.el>=0&&isAboveLandscape(o.az,o.el));
+ const ac=aircraft.map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.altM);return p?{...a,az:p.az,el:p.el}:null}).filter(o=>o&&isAboveLandscape(o.az,o.el));
  const aps=layers.airports?airports.map(airportDisplayObject):[];
- const planets=currentPlanetObjects(simTime).filter(o=>o.el>=0);
- return [...stars,...planets,...aps,...ac,...satellites];
+ const planets=currentPlanetObjects(simTime).filter(o=>o.el>=0&&isAboveLandscape(o.az,o.el));
+ const visibleSatellites=satellites.filter(o=>isAboveLandscape(o.az,o.el));
+ return [...stars,...planets,...aps,...ac,...visibleSatellites];
 }
 function nearestObject(x,y){
  let best=null,bestD=Infinity;
