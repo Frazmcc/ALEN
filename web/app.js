@@ -1132,8 +1132,10 @@ async function updateSatelliteInfo(o){
   if(imageUrl){
    image.src=imageUrl;image.alt=(info.name||o.name)+" photo";
    credit.replaceChildren(document.createTextNode(`${photo.credit||"Satellite image"} · ${photo.license||"See source for licence"}`));
-   if(String(photo.source_url||"").includes("db.satnogs.org"))appendInspectorLink(credit,"Source",photo.source_url,"db.satnogs.org");
-   else appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org");
+   const satnogsSource=trustedExternalUrl(photo.source_url,"db.satnogs.org");
+   const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
+   if(satnogsSource)appendInspectorLink(credit,"Source",satnogsSource,"db.satnogs.org");
+   else if(commonsSource)appendInspectorLink(credit,"Source",commonsSource,"commons.wikimedia.org");
   }else{
    credit.textContent="No verified public image found · ALEN illustration";
   }
