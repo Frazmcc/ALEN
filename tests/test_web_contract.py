@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.5.1' in HTML
+    assert './app.js?v=1.6.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -112,7 +112,7 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "SGP4 · CelesTrak orbital elements" in APP
     assert 'data-layer="aircraft" aria-pressed="true"' in HTML
     assert 'data-layer="satellites" aria-pressed="true"' in HTML
-    assert 'data-satellite-group="starlink" checked' in HTML
+    assert 'data-satellite-group="starlink" aria-pressed="true"' in HTML
     assert "fov=130" in APP
 
 
@@ -155,7 +155,7 @@ def test_satellite_group_controls_and_visual_categories() -> None:
     assert 'isNew:memberships.includes("new")' in APP
     assert 'isDebris:memberships.includes("debris")' in APP
     assert 'satellitePrimaryGroup' in APP
-    assert 'group.enabled=input.checked' in APP
+    assert 'group.enabled=phaseEnabled(group.phase)' in APP
     assert 'ctx.fillStyle=s.color' in APP
     assert 'ctx.fillText(s.glyph||"◇"' in APP
     assert '["Category",o.groupLabel||"Satellite"]' in APP
