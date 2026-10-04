@@ -653,6 +653,7 @@ def test_satellite_inspector_loads_useful_mission_metadata() -> None:
 def test_satellite_inspector_supports_real_photos() -> None:
     assert 'trustedExternalUrl(photo?.image_url,"db-satnogs.freetls.fastly.net")' in APP
     assert 'trustedExternalUrl(photo?.image_url,"upload.wikimedia.org")' in APP
-    assert 'appendInspectorLink(credit,"Source",photo.source_url,"db.satnogs.org")' in APP
-    assert "https://db-satnogs.freetls.fastly.net" in HTML
+    assert 'const satnogsSource=trustedExternalUrl(photo.source_url,"db.satnogs.org")' in APP
+    assert 'appendInspectorLink(credit,"Source",satnogsSource,"db.satnogs.org")' in APP
+    assert "img-src 'self' data:" in HTML
     assert "No verified public image found · ALEN illustration" in APP
