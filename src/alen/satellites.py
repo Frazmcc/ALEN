@@ -9,7 +9,7 @@ from time import time
 
 import httpx
 from sgp4 import omm
-from sgp4.api import Satrec, jday
+from sgp4.api import Satrec, WGS72, jday
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,34 +255,46 @@ class SatelliteProvider:
                     for value in (mean_motion, eccentricity, inclination, raan, argp, mean_anomaly)
                 ):
                     continue
-                fields = {
-                    "OBJECT_NAME": str(_parallel_value(name_values, index, f"NORAD {norad}")),
-                    "OBJECT_ID": str(_parallel_value(object_id_values, index, "")),
-                    "EPOCH": epoch,
-                    "MEAN_MOTION": str(mean_motion),
-                    "ECCENTRICITY": str(eccentricity),
-                    "INCLINATION": str(inclination),
-                    "RA_OF_ASC_NODE": str(raan),
-                    "ARG_OF_PERICENTER": str(argp),
-                    "MEAN_ANOMALY": str(mean_anomaly),
-                    "EPHEMERIS_TYPE": "0",
-                    "CLASSIFICATION_TYPE": "U",
-                    "NORAD_CAT_ID": str(norad),
-                    "ELEMENT_SET_NO": "999",
-                    "REV_AT_EPOCH": str(int(float(_parallel_value(rev_values, index, 0) or 0))),
-                    "BSTAR": str(float(_parallel_value(bstar_values, index, 0) or 0)),
-                    "MEAN_MOTION_DOT": str(float(_parallel_value(mm_dot_values, index, 0) or 0)),
-                    "MEAN_MOTION_DDOT": str(float(_parallel_value(mm_ddot_values, index, 0) or 0)),
-                }
+                epoch_dt = datetime.fromisoformat(epoch.replace("Z", "+00:00"))
+                if epoch_dt.tzinfo is None:
+                    epoch_dt = epoch_dt.replace(tzinfo=timezone.utc)
+                epoch_dt = epoch_dt.astimezone(timezone.utc)
+                epoch_jd, epoch_fraction = jday(
+                    epoch_dt.year,
+                    epoch_dt.month,
+                    epoch_dt.day,
+                    epoch_dt.hour,
+                    epoch_dt.minute,
+                    epoch_dt.second + epoch_dt.microsecond / 1_000_000,
+                )
+                sgp4_epoch = epoch_jd + epoch_fraction - 2433281.5
+                bstar = float(_parallel_value(bstar_values, index, 0) or 0)
+                no_kozai = mean_motion * 2.0 * math.pi / 1440.0
                 satellite = Satrec()
-                omm.initialize(satellite, fields)
+                satellite.sgp4init(
+                    WGS72,
+                    "i",
+                    norad,
+                    sgp4_epoch,
+                    bstar,
+                    0.0,
+                    0.0,
+                    eccentricity,
+                    math.radians(argp),
+                    math.radians(inclination),
+                    math.radians(mean_anomaly),
+                    no_kozai,
+                    math.radians(raan),
+                )
+                name = str(_parallel_value(name_values, index, f"NORAD {norad}")).strip()
+                international_id = str(_parallel_value(object_id_values, index, "")).strip()
             except (TypeError, ValueError, OverflowError):
                 continue
             records.append(
                 OrbitRecord(
-                    name=fields["OBJECT_NAME"].strip() or f"NORAD {norad}",
+                    name=name or f"NORAD {norad}",
                     norad=norad,
-                    international_id=fields["OBJECT_ID"].strip(),
+                    international_id=international_id,
                     satellite=satellite,
                 )
             )
