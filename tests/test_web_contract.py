@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.2' in HTML
+    assert './app.js?v=1.6.3' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -79,7 +79,9 @@ def test_live_location_and_horizon_contract() -> None:
     assert "function updateMinPitch()" in APP
     assert "pitch=minPitch" in APP
     assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
-    assert "function drawLandscapeLayer" in APP
+    assert "function traceTerrainSkyline()" in APP
+    assert "function drawDistantTerrain(dayMode)" in APP
+    assert "function drawLandscapeForeground()" in APP
     assert "function screenYForElevation(el,az=yaw)" in APP
     assert "const p=project(az,el)" in APP
     assert "function terrainElevationAt" in APP
@@ -185,20 +187,25 @@ def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert "satellite feed unavailable" in APP
 
 
-def test_landscape_is_foreground_occlusion_layer() -> None:
+def test_landscape_is_split_into_distant_terrain_and_flat_foreground() -> None:
+    assert "function drawDistantTerrain(dayMode)" in APP
     assert "function drawLandscapeForeground()" in APP
     assert "function isAboveLandscape(az,el)" in APP
+    assert "drawDistantTerrain(dayMode);" in APP
     assert "drawLandscapeForeground();" in APP
     assert "isAboveLandscape(o.az,o.el)" in APP
     assert "isAboveLandscape(q.az,q.el)" in APP
     assert "isAboveLandscape(s.az,s.el)" in APP
+    assert 'ctx.fillStyle="rgba(2,5,7,.985)"' in APP
+    assert "ctx.fillRect(0,y,width,height-y+2)" in APP
     draw_start = APP.index("function draw(){")
     draw_end = APP.index("function allSelectableObjects()", draw_start)
     draw = APP[draw_start:draw_end]
-    assert draw.index("if(layers.stars)") < draw.index("drawLandscapeForeground();")
-    assert draw.index("if(layers.planets)") < draw.index("drawLandscapeForeground();")
-    assert draw.index("if(layers.aircraft)") < draw.index("drawLandscapeForeground();")
-    assert draw.index("if(layers.satellites)") < draw.index("drawLandscapeForeground();")
+    assert draw.index("if(layers.stars)") < draw.index("drawDistantTerrain(dayMode);")
+    assert draw.index("if(layers.planets)") < draw.index("drawDistantTerrain(dayMode);")
+    assert draw.index("if(layers.aircraft)") < draw.index("drawDistantTerrain(dayMode);")
+    assert draw.index("if(layers.satellites)") < draw.index("drawDistantTerrain(dayMode);")
+    assert draw.index("drawDistantTerrain(dayMode);") < draw.index("drawLandscapeForeground();")
     assert draw.index("drawLandscapeForeground();") < draw.index("if(layers.airports)")
 
 
@@ -362,11 +369,16 @@ def test_daylight_contrast_palette() -> None:
     assert 'data-sky-mode="day"' in css
 
 
-def test_landscape_extends_beyond_viewport_edges() -> None:
-    assert "const step=5,margin=Math.max(80,width*.08)" in APP
+def test_landscape_terrain_profile_is_higher_resolution_and_viewport_safe() -> None:
+    assert "const z=10,azStep=3,eyeHeightM=1.7" in APP
+    assert "const distances=[.25,.5,1,2,3,5,8,12,18,25,35,50,70]" in APP
+    assert "const observerEyeElev=groundElev+eyeHeightM" in APP
+    assert "const curvature=(distanceKm*distanceKm)/(2*EARTH_KM)*1000" in APP
+    assert "const angle=Math.atan2(elev-observerEyeElev-curvature,distanceKm*1000)*RAD" in APP
+    assert "const points=[],step=4,margin=Math.max(80,width*.08)" in APP
     assert "for(let x=-margin;x<=width+margin;x+=step)" in APP
-    assert "ctx.lineTo(width+margin,height+2)" in APP
-    assert "ctx.lineTo(-margin,height+2)" in APP
+    assert "ctx.lineTo(width+margin,horizonY)" in APP
+    assert "ctx.lineTo(-margin,horizonY)" in APP
 
 
 def test_satellite_public_tle_fallback() -> None:
