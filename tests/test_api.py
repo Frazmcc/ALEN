@@ -48,3 +48,15 @@ def test_visible_satellites_endpoint(monkeypatch) -> None:
     )
     assert response.status_code == 200
     assert response.json()["satellites"] == sample
+
+
+def test_custom_domain_cors_is_allowed() -> None:
+    response = TestClient(app).options(
+        "/api/v1/health",
+        headers={
+            "Origin": "https://alen.observer",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://alen.observer"
