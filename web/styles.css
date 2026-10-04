@@ -6,3 +6,11 @@
 
 /* Compact footer keeps the horizon clear and maximises usable sky area. */
 .layerbar button{white-space:nowrap}.layerbar::-webkit-scrollbar{height:4px}.layerbar::-webkit-scrollbar-thumb{background:rgba(123,229,255,.16);border-radius:99px}
+
+.sky-shell[data-sky-mode="day"] .brand strong{color:#06283f;text-shadow:0 1px 0 rgba(255,255,255,.35)}
+.sky-shell[data-sky-mode="day"] .brand span{color:#17445f;font-weight:700}
+.sky-shell[data-sky-mode="day"] .top-status{color:#08283f}
+.sky-shell[data-sky-mode="day"] .mode-pill,.sky-shell[data-sky-mode="day"] .status-pill{background:rgba(255,255,255,.78);border-color:rgba(6,48,74,.20);color:#083653;box-shadow:0 1px 8px rgba(7,35,52,.10)}
+.sky-shell[data-sky-mode="day"] .status-pill[data-state="ok"]{color:#0a5e37;border-color:rgba(8,94,55,.24)}
+.sky-shell[data-sky-mode="day"] #sky-search{background:rgba(5,31,49,.88);border-color:rgba(255,255,255,.20);color:#f5fbff}
+.sky-shell[data-sky-mode="day"] #sky-search::placeholder{color:rgba(239,248,255,.70)}
