@@ -78,6 +78,7 @@ jobs:
           set -euo pipefail
           rm -rf _site
           cp -R web _site
+          cp web/assets/alen-logo.png _site/favicon.png
           printf '{"git_commit":"%s"}\n' "$DEPLOY_SHA" > _site/build.json
 
       - name: Upload static web artifact
