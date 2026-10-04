@@ -564,6 +564,59 @@ function aircraftLabelsOn(a){
  const group=AIRCRAFT_GROUPS[aircraftGroupKey(a)];
  return layerLabelsOn("aircraft")&&(!group||group.labels);
 }
+function aircraftVisualType(a){
+ const type=String(a.type||"").trim().toUpperCase(),category=String(a.category||"").trim().toUpperCase();
+ if(aircraftIsMilitary(a)||category==="A6")return "military";
+ if(category==="A7"||/^(H1|H2|H3|H4|H5|H6|H7|EC3|EC4|EC5|R22|R44|R66|B06|A109|A119|A139|AS50|S76|S92|UH60|CH47|AH64)/.test(type))return "helicopter";
+ if(category==="B1"||/^(ASW|DG|LS[0-9]|ASK|SZD|JS[123]|GLID)/.test(type))return "glider";
+ if(category==="B2")return "balloon";
+ if(category==="B6")return "drone";
+ if(/^(AT4|AT7|AT8|DH8|DHC6|SF34|BE20|B350|PC12|C208|E120|F50|F27|L410|AN2[468])/.test(type))return "turboprop";
+ if(category==="A1"||category==="A2"||/^(C1[05789][02368]|C2[01][068]|P28|PA[12-9]|SR2[02]|DA4[02]|DA2[04]|BE3[356]|M20|RV[0-9]|P06|P20|TB[129]|DR40)/.test(type))return "light";
+ if(/^(A3[0124-9]|A2[02-9]|B7[0-9]{2}|E1[679][05]|E2[09][05]|CRJ|BCS|MD8|MD9|DC9|DC10|L101|GLF|CL3|CL6|C5[0-9]{2}|LJ[234567]|FA[5-9]X)/.test(type))return "jet";
+ return "aircraft";
+}
+function aircraftScreenRotation(a,q,p){
+ const heading=norm360(a.displayTrack??a.track??0);
+ const speed=Math.max(0,Number(a.displayGs??a.gs)||0);
+ const lookAheadKm=clamp(speed*1.852/3600*18,.8,6);
+ const ahead=destinationPoint(a.displayLat,a.displayLon,heading,lookAheadKm);
+ const aheadAltAz=airborneAltAz(ahead.lat,ahead.lon,a.displayAltM??a.altM);
+ const aheadPoint=aheadAltAz?project(aheadAltAz.az,aheadAltAz.el):null;
+ if(aheadPoint){
+  const dx=aheadPoint[0]-p[0],dy=aheadPoint[1]-p[1];
+  if(Math.hypot(dx,dy)>.25)return Math.atan2(dx,-dy);
+ }
+ return adiff(heading,q.az)*DEG;
+}
+function drawAircraftIcon(kind,size,fill,stroke){
+ const s=size/20;
+ ctx.save();ctx.scale(s,s);ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=1.7/s;ctx.lineJoin="round";ctx.lineCap="round";
+ ctx.beginPath();
+ if(kind==="helicopter"){
+  ctx.moveTo(0,-8);ctx.quadraticCurveTo(4,-7,4,-2);ctx.lineTo(2,3);ctx.lineTo(1,8);ctx.lineTo(-1,8);ctx.lineTo(-2,3);ctx.quadraticCurveTo(-4,-7,0,-8);ctx.closePath();
+  ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-8,-1);ctx.lineTo(8,-1);ctx.moveTo(0,-1);ctx.lineTo(0,-9);ctx.moveTo(-3,7);ctx.lineTo(3,7);ctx.stroke();
+ }else if(kind==="glider"){
+  ctx.moveTo(0,-9);ctx.lineTo(1,-2);ctx.lineTo(10,0);ctx.lineTo(1.2,1.2);ctx.lineTo(1,8);ctx.lineTo(-1,8);ctx.lineTo(-1.2,1.2);ctx.lineTo(-10,0);ctx.lineTo(-1,-2);ctx.closePath();ctx.fill();ctx.stroke();
+ }else if(kind==="military"){
+  ctx.moveTo(0,-10);ctx.lineTo(2,-3);ctx.lineTo(8,4);ctx.lineTo(2,3);ctx.lineTo(1,9);ctx.lineTo(-1,9);ctx.lineTo(-2,3);ctx.lineTo(-8,4);ctx.lineTo(-2,-3);ctx.closePath();ctx.fill();ctx.stroke();
+ }else if(kind==="turboprop"){
+  ctx.moveTo(0,-10);ctx.lineTo(2,-4);ctx.lineTo(8,-1);ctx.lineTo(8,1);ctx.lineTo(2,2);ctx.lineTo(1,8);ctx.lineTo(4,9);ctx.lineTo(4,10);ctx.lineTo(0,9);ctx.lineTo(-4,10);ctx.lineTo(-4,9);ctx.lineTo(-1,8);ctx.lineTo(-2,2);ctx.lineTo(-8,1);ctx.lineTo(-8,-1);ctx.lineTo(-2,-4);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.arc(-5,-1,1.2,0,Math.PI*2);ctx.arc(5,-1,1.2,0,Math.PI*2);ctx.stroke();
+ }else if(kind==="light"){
+  ctx.moveTo(0,-9);ctx.lineTo(1.5,-3);ctx.lineTo(7,0);ctx.lineTo(7,1.5);ctx.lineTo(1.3,1.5);ctx.lineTo(1,7);ctx.lineTo(4,8);ctx.lineTo(4,9);ctx.lineTo(0,8);ctx.lineTo(-4,9);ctx.lineTo(-4,8);ctx.lineTo(-1,7);ctx.lineTo(-1.3,1.5);ctx.lineTo(-7,1.5);ctx.lineTo(-7,0);ctx.lineTo(-1.5,-3);ctx.closePath();ctx.fill();ctx.stroke();
+ }else if(kind==="balloon"){
+  ctx.ellipse(0,-2,6,7,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(-2,4);ctx.lineTo(-1,8);ctx.lineTo(1,8);ctx.lineTo(2,4);ctx.stroke();ctx.strokeRect(-1.5,8,3,2);
+ }else if(kind==="drone"){
+  ctx.rect(-2,-2,4,4);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(-2,-2);ctx.lineTo(-7,-7);ctx.moveTo(2,-2);ctx.lineTo(7,-7);ctx.moveTo(-2,2);ctx.lineTo(-7,7);ctx.moveTo(2,2);ctx.lineTo(7,7);ctx.stroke();
+  for(const [x,y] of [[-7,-7],[7,-7],[-7,7],[7,7]]){ctx.beginPath();ctx.arc(x,y,2.2,0,Math.PI*2);ctx.stroke()}
+ }else{
+  const swept=kind==="jet";
+  ctx.moveTo(0,-10);ctx.lineTo(2,-4);ctx.lineTo(swept?9:8,swept?2:0);ctx.lineTo(swept?8:8,swept?4:1.5);ctx.lineTo(2,2);ctx.lineTo(1,8);ctx.lineTo(4,9);ctx.lineTo(4,10);ctx.lineTo(0,9);ctx.lineTo(-4,10);ctx.lineTo(-4,9);ctx.lineTo(-1,8);ctx.lineTo(-2,2);ctx.lineTo(swept?-8:-8,swept?4:1.5);ctx.lineTo(swept?-9:-8,swept?2:0);ctx.lineTo(-2,-4);ctx.closePath();ctx.fill();ctx.stroke();
+ }
+ ctx.restore();
+}
 
 const AIRCRAFT_GRACE_MS=20000;
 const AIRCRAFT_POSITION_RESPONSE_MS=4200;
@@ -599,7 +652,7 @@ async function refreshAircraft(force=false){
        track:measuredTrack,displayTrack:prior?.displayTrack??measuredTrack,
        targetLat:projected.lat,targetLon:projected.lon,
        targetUpdatedAt:frameNow,
-       type:a.type||"Aircraft",registration:a.registration||"—",seen:seenSeconds,
+       type:a.type||"Aircraft",category:String(a.category||"").trim().toUpperCase(),registration:a.registration||"—",seen:seenSeconds,
        lastFrame:prior?.lastFrame??frameNow,lastSeenAt:wallNow
      });
    }
@@ -832,8 +885,10 @@ function draw(){
   for(const a of aircraft){
    if(!aircraftGroupEnabled(a))continue;
    const q=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
-   const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(17*depthScale);
-   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG);ctx.fillStyle=aircraftInk;ctx.strokeStyle=dayMode?"rgba(255,255,255,.82)":"rgba(0,0,0,.46)";ctx.lineWidth=2;ctx.font="700 "+iconSize+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.strokeText("✈",0,0);ctx.fillText("✈",0,0);ctx.restore();
+   const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(19*depthScale),visualType=aircraftVisualType(a);
+   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(aircraftScreenRotation(a,q,p));
+   drawAircraftIcon(visualType,iconSize,aircraftInk,dayMode?"rgba(255,255,255,.88)":"rgba(0,0,0,.55)");
+   ctx.restore();
    ctx.globalAlpha=1;
    if(aircraftLabelsOn(a)){
     const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a);
