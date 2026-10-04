@@ -242,3 +242,16 @@ def test_docs_do_not_reference_external_comparison_project() -> None:
     forbidden = "stel" + "larium"
     for path in Path(".").rglob("*.md"):
         assert forbidden not in path.read_text(encoding="utf-8").lower()
+
+
+def test_unified_sky_object_foundation() -> None:
+    assert "function makeSkyObject(raw)" in APP
+    assert "function skyObjectScreen(o)" in APP
+    assert "function skyObjectVisible(o" in APP
+    assert "aboveGeometricHorizon" in APP
+    assert "aboveTerrainHorizon" in APP
+    assert 'return makeSkyObject({id:"planet:"+id' in APP
+    assert 'return makeSkyObject({id:"sat:"+s.norad' in APP
+    assert 'return p?makeSkyObject({...o,az:p.az,el:p.el}):null' in APP
+    assert "airports.map(airportDisplayObject).filter(o=>skyObjectVisible" in APP
+    assert "skyObjectScreen(o)" in APP
