@@ -180,7 +180,7 @@ def test_dense_stars_and_real_planets_are_present() -> None:
 def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
     assert 'satelliteTimer=setInterval(()=>refreshSatellites(false),10000)' in APP
-    assert 'function stepSatellites(_ms){}' in APP
+    assert 'function stepSatellites(now)' in APP
     assert "satelliteDiagnostics=data.diagnostics||null" in APP
     assert "satellite feed unavailable" in APP
 
@@ -270,7 +270,7 @@ def test_unified_sky_object_foundation() -> None:
     assert "aboveGeometricHorizon" in APP
     assert "aboveTerrainHorizon" in APP
     assert 'return makeAstronomySkyObject({id:"planet:"+id' in APP
-    assert 'return makeSkyObject({id:"sat:"+s.norad' in APP
+    assert 'const sat=makeSkyObject({id,kind:"SATELLITE"' in APP
     assert 'return p?makeAstronomySkyObject({...o,az:p.az,el:p.el}):null' in APP
     assert "airports.map(airportDisplayObject).filter(o=>skyObjectVisible" in APP
     assert "skyObjectScreen(o)" in APP
@@ -310,7 +310,7 @@ def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
     assert "if(!observer)return;" in APP
     assert 'satelliteRequestState="requesting"' in APP
     assert 'satelliteRequestState="ok"' in APP
-    assert 'satelliteRequestState="error"' in APP
+    assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
     assert "setTimeout(()=>refreshSatellites(true),1500)" in APP
     assert 'if(key==="satellites"&&layers[key])refreshSatellites(true);' in APP
     assert "await refreshSatellites(true);" in APP
@@ -358,7 +358,7 @@ def test_daylight_contrast_palette() -> None:
     assert 'root.dataset.skyMode=dayMode?"day":"night"' in APP
     assert 'const objectText=dayMode?"#08283f":"#eef8ff"' in APP
     assert 'const aircraftInk=dayMode?"#083a59":"#9fd9ff"' in APP
-    assert 'ctx.strokeText("✈",0,0)' in APP
+    assert "drawAircraftIcon(visualType,iconSize,aircraftInk" in APP
     assert 'data-sky-mode="day"' in css
 
 
@@ -435,7 +435,7 @@ def test_aircraft_motion_is_continuous_between_network_updates() -> None:
     assert "a.displayLon+=lonError*positionK" in APP
     assert "correctionRemainingMs" not in APP
     assert "airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM)" in APP
-    assert "ctx.rotate(adiff(a.displayTrack??a.track,q.az)*DEG)" in APP
+    assert "ctx.rotate(aircraftScreenRotation(a,q,p))" in APP
 
 
 def test_multistate_layer_label_controls() -> None:
@@ -574,3 +574,55 @@ def test_satellite_group_fetch_has_fast_public_mirror_fallback() -> None:
     assert "def _fetch_group_mirror_json" in source
     assert "self.SATVISOR_MIRROR_URL.format(group=group.lower())" in source
     assert "timeout=10.0" in source
+
+
+def test_aircraft_payload_exposes_adsb_category() -> None:
+    source = Path("src/alen/aircraft.py").read_text(encoding="utf-8")
+    assert '"category": str(aircraft.get("category") or "").strip().upper()' in source
+
+
+def test_aircraft_icons_are_type_specific_and_heading_aware() -> None:
+    assert "function aircraftVisualType(a)" in APP
+    for kind in ("military", "helicopter", "glider", "balloon", "drone", "turboprop", "light", "jet"):
+        assert f'return "{kind}"' in APP
+    assert "function aircraftScreenRotation(a,q,p)" in APP
+    assert "const ahead=destinationPoint(a.displayLat,a.displayLon,heading,lookAheadKm)" in APP
+    assert "const aheadPoint=aheadAltAz?project(aheadAltAz.az,aheadAltAz.el):null" in APP
+    assert "return Math.atan2(dx,-dy)" in APP
+    assert "function drawAircraftIcon(kind,size,fill,stroke)" in APP
+    assert 'if(kind==="helicopter")' in APP
+    assert 'else if(kind==="glider")' in APP
+    assert 'else if(kind==="military")' in APP
+    assert 'else if(kind==="turboprop")' in APP
+    assert 'else if(kind==="light")' in APP
+    assert 'else if(kind==="balloon")' in APP
+    assert 'else if(kind==="drone")' in APP
+    assert "ctx.rotate(aircraftScreenRotation(a,q,p))" in APP
+    assert "drawAircraftIcon(visualType,iconSize,aircraftInk" in APP
+    assert 'strokeText("✈"' not in APP
+
+
+def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert "now + timedelta(seconds=2)" in source
+    assert '"azimuth_deg_next"' in source
+    assert '"elevation_deg_next"' in source
+    assert '"range_km_next"' in source
+    assert '"motion_horizon_seconds": 2' in source
+
+    assert "const SATELLITE_GRACE_MS=15000" in APP
+    assert "const SATELLITE_POSITION_RESPONSE_MS=1400" in APP
+    assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
+    assert "sat.displayAz=prior?.displayAz??az" in APP
+    assert "sat.targetAz=az" in APP
+    assert "sat.azRateDegMs=" in APP
+    assert "sat.elRateDegMs=" in APP
+    assert "sat.rangeRateKmMs=" in APP
+    assert "function stepSatellites(now)" in APP
+    assert "s.targetAz=norm360" in APP
+    assert "s.displayAz=blendAngle" in APP
+    assert "s.displayEl=" in APP
+    assert "s.az=s.displayAz;s.el=s.displayEl;s.rangeKm=s.displayRangeKm" in APP
+    assert "stepAircraft(now);stepSatellites(now);draw()" in APP
+    assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
+    assert "retaining recent satellites" in APP

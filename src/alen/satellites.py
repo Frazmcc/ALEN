@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from time import time
 
@@ -98,6 +98,13 @@ class SatelliteProvider:
             if position["elevation_deg"] < 0.0:
                 below_horizon += 1
                 continue
+            future_position = _topocentric_from_tle(
+                record,
+                now + timedelta(seconds=2),
+                latitude_deg,
+                longitude_deg,
+                altitude_m,
+            ) or position
             visible.append(
                 {
                     "norad": satnum,
@@ -106,6 +113,10 @@ class SatelliteProvider:
                     "azimuth_deg": round(position["azimuth_deg"], 3),
                     "elevation_deg": round(position["elevation_deg"], 3),
                     "range_km": round(position["range_km"], 1),
+                    "azimuth_deg_next": round(future_position["azimuth_deg"], 3),
+                    "elevation_deg_next": round(future_position["elevation_deg"], 3),
+                    "range_km_next": round(future_position["range_km"], 1),
+                    "motion_horizon_seconds": 2,
                     "groups": sorted(memberships),
                 }
             )
