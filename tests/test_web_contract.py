@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.5' in HTML
+    assert './app.js?v=1.6.6' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -325,13 +325,17 @@ def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
 
 def test_aircraft_photo_inspector_contract() -> None:
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
-    assert 'photo.match==="registration"?"exact registration":"aircraft type"' in APP
-    assert 'function trustedExternalUrl(value,allowedHost)' in APP
-    assert 'url.protocol!=="https:"||url.hostname!==allowedHost' in APP
-    assert 'trustedExternalUrl(photo?.image_url,"upload.wikimedia.org")' in APP
-    assert 'appendInspectorLink(credit,"Source",photo.source_url,"commons.wikimedia.org")' in APP
+    assert 'const icaoHex=String(o.hex||"").trim().toLowerCase()' in APP
+    assert 'new URLSearchParams({registration,aircraft_type:aircraftType,icao_hex:icaoHex})' in APP
+    assert 'if(!photo?.image_path)' in APP
+    assert 'const imageUrl=API_BASE+photo.image_path' in APP
+    assert "const probe=new Image()" in APP
+    assert 'photo.match==="icao"?"exact aircraft"' in APP
+    assert 'const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org")' in APP
+    assert 'const planeSpottersSource=trustedExternalUrl(photo.source_url,"www.planespotters.net")' in APP
     assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net")' in APP
-    assert "https://upload.wikimedia.org" in HTML
+    assert "Aircraft photo source unavailable · ALEN illustration" in APP
+    assert "https://alen-api-lquw.onrender.com" in HTML
 
 
 def test_sky_colour_tracks_local_solar_elevation() -> None:
