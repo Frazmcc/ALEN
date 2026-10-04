@@ -9,7 +9,7 @@ from time import time
 
 import httpx
 from sgp4 import omm
-from sgp4.api import Satrec, jday
+from sgp4.api import Satrec, WGS72, jday
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +23,7 @@ class OrbitRecord:
 class SatelliteProvider:
     BASE_URL = "https://celestrak.org/NORAD/elements/gp.php"
     FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"
+    ORBITALWIKI_URL = "https://www.orbitalwiki.com/api/v1/elements"
     CACHE_SECONDS = 1800
 
     def __init__(self) -> None:
@@ -145,6 +146,8 @@ class SatelliteProvider:
             return cached[1]
 
         records = self._fetch_fallback_catalog()
+        if not records:
+            records = self._fetch_orbitalwiki_catalog()
         if records:
             with self._lock:
                 self._cache[key] = (time(), records)
@@ -189,6 +192,106 @@ class SatelliteProvider:
                     name=str(item.get("name") or f"NORAD {norad}").strip(),
                     norad=norad,
                     international_id=line1[9:17].strip(),
+                    satellite=satellite,
+                )
+            )
+        return tuple(records)
+
+    def _fetch_orbitalwiki_catalog(self) -> tuple[OrbitRecord, ...]:
+        try:
+            with httpx.Client(
+                timeout=15.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
+            ) as client:
+                response = client.get(self.ORBITALWIKI_URL)
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return ()
+
+        if not isinstance(payload, dict):
+            return ()
+
+        norad_values = _parallel_array(
+            payload,
+            "norad_cat_id",
+            "norad",
+            "satellite_id",
+            "satelliteId",
+            "id",
+            "ids",
+        )
+        if not norad_values:
+            return ()
+
+        name_values = _parallel_array(payload, "name", "names", "object_name")
+        object_id_values = _parallel_array(payload, "object_id", "cospar", "intl_des", "international_id")
+        epoch_values = _parallel_array(payload, "epoch", "epochs", "date")
+        mean_motion_values = _parallel_array(payload, "mean_motion", "mm", "n")
+        eccentricity_values = _parallel_array(payload, "eccentricity", "ecc", "e")
+        inclination_values = _parallel_array(payload, "inclination", "inc", "i")
+        raan_values = _parallel_array(payload, "raan", "ra_of_asc_node")
+        argp_values = _parallel_array(payload, "arg_perigee", "argp", "arg_of_pericenter")
+        mean_anomaly_values = _parallel_array(payload, "mean_anomaly", "ma", "m")
+        bstar_values = _parallel_array(payload, "bstar", "b_star")
+
+        records: list[OrbitRecord] = []
+        for index, raw_norad in enumerate(norad_values):
+            try:
+                norad = int(raw_norad)
+                epoch = str(_parallel_value(epoch_values, index, ""))
+                mean_motion = float(_parallel_value(mean_motion_values, index, math.nan))
+                eccentricity = float(_parallel_value(eccentricity_values, index, math.nan))
+                inclination = float(_parallel_value(inclination_values, index, math.nan))
+                raan = float(_parallel_value(raan_values, index, math.nan))
+                argp = float(_parallel_value(argp_values, index, math.nan))
+                mean_anomaly = float(_parallel_value(mean_anomaly_values, index, math.nan))
+                if not epoch or not all(
+                    math.isfinite(value)
+                    for value in (mean_motion, eccentricity, inclination, raan, argp, mean_anomaly)
+                ):
+                    continue
+                epoch_dt = datetime.fromisoformat(epoch.replace("Z", "+00:00"))
+                if epoch_dt.tzinfo is None:
+                    epoch_dt = epoch_dt.replace(tzinfo=timezone.utc)
+                epoch_dt = epoch_dt.astimezone(timezone.utc)
+                epoch_jd, epoch_fraction = jday(
+                    epoch_dt.year,
+                    epoch_dt.month,
+                    epoch_dt.day,
+                    epoch_dt.hour,
+                    epoch_dt.minute,
+                    epoch_dt.second + epoch_dt.microsecond / 1_000_000,
+                )
+                sgp4_epoch = epoch_jd + epoch_fraction - 2433281.5
+                bstar = float(_parallel_value(bstar_values, index, 0) or 0)
+                no_kozai = mean_motion * 2.0 * math.pi / 1440.0
+                satellite = Satrec()
+                satellite.sgp4init(
+                    WGS72,
+                    "i",
+                    norad,
+                    sgp4_epoch,
+                    bstar,
+                    0.0,
+                    0.0,
+                    eccentricity,
+                    math.radians(argp),
+                    math.radians(inclination),
+                    math.radians(mean_anomaly),
+                    no_kozai,
+                    math.radians(raan),
+                )
+                name = str(_parallel_value(name_values, index, f"NORAD {norad}")).strip()
+                international_id = str(_parallel_value(object_id_values, index, "")).strip()
+            except (TypeError, ValueError, OverflowError):
+                continue
+            records.append(
+                OrbitRecord(
+                    name=name or f"NORAD {norad}",
+                    norad=norad,
+                    international_id=international_id,
                     satellite=satellite,
                 )
             )
@@ -378,3 +481,21 @@ def _gmst_radians(julian_date: float) -> float:
         - t * t * t / 38710000.0
     )
     return math.radians(gmst_deg % 360.0)
+
+
+def _parallel_array(payload: dict[str, object], *aliases: str) -> list[object]:
+    containers = [payload]
+    for key in ("data", "elements", "arrays"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            containers.append(nested)
+    for container in containers:
+        for alias in aliases:
+            value = container.get(alias)
+            if isinstance(value, list):
+                return value
+    return []
+
+
+def _parallel_value(values: list[object], index: int, default: object) -> object:
+    return values[index] if index < len(values) and values[index] is not None else default
