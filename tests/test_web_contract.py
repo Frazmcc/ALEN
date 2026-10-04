@@ -629,15 +629,16 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert "const SATELLITE_POSITION_RESPONSE_MS=850" in APP
     assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
     assert "sat.displayAz=prior?.displayAz??az" in APP
-    assert "sat.targetAz=az" in APP
-    assert "sat.azRateDegMs=" in APP
-    assert "sat.elRateDegMs=" in APP
+    assert "sat.displayVec=prior?.displayVec??satelliteSkyVector" in APP
+    assert "sat.targetVec=sample0" in APP
+    assert "sat.vectorRate=vectorModel.rate" in APP
+    assert "sat.vectorAccel=vectorModel.accel" in APP
     assert "sat.rangeRateKmMs=" in APP
     assert "function stepSatellites(now)" in APP
-    assert "s.targetAz=norm360" in APP
-    assert "s.displayAz=blendAngle" in APP
-    assert "s.displayEl=" in APP
-    assert "s.az=s.displayAz;s.el=s.displayEl;s.rangeKm=s.displayRangeKm" in APP
+    assert "s.targetVec=normalizeSkyVector" in APP
+    assert "s.displayVec=blendSkyVector" in APP
+    assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
+    assert "s.az=display.az;s.el=display.el;s.rangeKm=s.displayRangeKm" in APP
     assert "stepAircraft(now);stepSatellites(now);draw()" in APP
     assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
     assert "retaining recent satellites" in APP
