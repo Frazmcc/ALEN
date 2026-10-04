@@ -235,9 +235,6 @@ class SatelliteProvider:
         argp_values = _parallel_array(payload, "arg_perigee", "argp", "arg_of_pericenter")
         mean_anomaly_values = _parallel_array(payload, "mean_anomaly", "ma", "m")
         bstar_values = _parallel_array(payload, "bstar", "b_star")
-        mm_dot_values = _parallel_array(payload, "mean_motion_dot", "mm_dot", "ndot")
-        mm_ddot_values = _parallel_array(payload, "mean_motion_ddot", "mm_ddot", "nddot")
-        rev_values = _parallel_array(payload, "rev_at_epoch", "rev", "revolution_number")
 
         records: list[OrbitRecord] = []
         for index, raw_norad in enumerate(norad_values):
