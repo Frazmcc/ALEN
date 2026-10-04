@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.0.0' in HTML
+    assert './app.js?v=1.2.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
