@@ -21,7 +21,7 @@ let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,selecte
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
-let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0;
+let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null;
 const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
@@ -281,7 +281,10 @@ function setLiveStatus(){
  const a=aircraft.length,s=satellites.length;
  const parts=[];
  if(layers.aircraft)parts.push(`${a} aircraft`);
- if(layers.satellites)parts.push(`${s} satellites`);
+ if(layers.satellites){
+   const loaded=satelliteDiagnostics?.unique_orbits;
+   parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
+ }
  liveEl.textContent=observer?`LIVE · ${parts.join(" · ")}`:"WAITING FOR LOCATION";
 }
 
@@ -434,13 +437,14 @@ async function refreshSatellites(force=false){
   const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
   if(!res.ok)throw new Error("satellites "+res.status);
   const data=await res.json();
+  satelliteDiagnostics=data.diagnostics||null;
   satellites=(Array.isArray(data.satellites)?data.satellites:[]).map(s=>{
    const memberships=logicalSatelliteMemberships(s.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    return{id:"sat:"+s.norad,kind:"SATELLITE",name:s.name||("NORAD "+s.norad),az:Number(s.azimuth_deg),el:Number(s.elevation_deg),
     rangeKm:Number(s.range_km),detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
     norad:String(s.norad||"—"),objectId:s.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")};
   }).filter(s=>Number.isFinite(s.az)&&Number.isFinite(s.el)&&s.el>=0);
- }catch(e){satellites=[];console.warn("ALEN satellite feed unavailable",e)}
+ }catch(e){satellites=[];satelliteDiagnostics={unique_orbits:0};console.warn("ALEN satellite feed unavailable",e)}
  setLiveStatus();
 }
 function stepSatellites(_ms){}
