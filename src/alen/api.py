@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import logging
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
@@ -119,21 +119,46 @@ def nearby_aircraft(
 def aircraft_photo(
     registration: str = Query(default="", max_length=32),
     aircraft_type: str = Query(default="", max_length=64),
+    icao_hex: str = Query(default="", max_length=12),
 ) -> dict[str, object]:
-    photo = _aircraft_photos.find(registration, aircraft_type)
+    photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
     if photo is None:
         return {"photo": None}
+    image_query = (
+        f"?registration={registration}&aircraft_type={aircraft_type}&icao_hex={icao_hex}"
+    )
     return {
         "photo": {
-            "image_url": photo.image_url,
+            "image_path": "/api/v1/aircraft/photo/image" + image_query,
             "source_url": photo.source_url,
             "title": photo.title,
             "artist": photo.artist,
             "license": photo.license_name,
             "match": photo.match,
+            "provider": photo.provider,
             "planespotters_url": photo.planespotters_url,
         }
     }
+
+
+@app.get("/api/v1/aircraft/photo/image")
+def aircraft_photo_image(
+    registration: str = Query(default="", max_length=32),
+    aircraft_type: str = Query(default="", max_length=64),
+    icao_hex: str = Query(default="", max_length=12),
+) -> Response:
+    photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Aircraft photo not found")
+    image = _aircraft_photos.image_bytes(photo)
+    if image is None:
+        raise HTTPException(status_code=502, detail="Aircraft photo source unavailable")
+    body, media_type = image
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=21600"},
+    )
 
 
 @app.get("/api/v1/aircraft/route")
