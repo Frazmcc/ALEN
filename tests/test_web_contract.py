@@ -43,7 +43,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert "./assets/alen-logo.png?v=2" in HTML
     assert Path("web/assets/alen-logo.png").is_file()
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=0.8.1' in HTML
+    assert './app.js?v=0.9.0' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -176,6 +176,28 @@ def test_astronomy_controls_are_grouped() -> None:
     assert 'data-layer="atmosphere"' in astronomy
     assert 'data-layer="constellations"' in astronomy
     assert 'data-layer="planets"' not in astronomy
+
+
+def test_true_observer_projection_and_aircraft_geometry() -> None:
+    assert "function verticalFovRad()" in APP
+    assert "function geodeticToEcef(latDeg,lonDeg,altM)" in APP
+    assert "const east=-Math.sin(lonr)*dx+Math.cos(lonr)*dy" in APP
+    assert "const north=-Math.sin(latr)*Math.cos(lonr)*dx" in APP
+    assert "const up=Math.cos(latr)*Math.cos(lonr)*dx" in APP
+    assert "el:Math.atan2(up,horizontalM)*RAD" in APP
+    assert "slantRangeKm:slantRangeM/1000" in APP
+    assert "const target=[Math.cos(elr)*Math.sin(azr),Math.cos(elr)*Math.cos(azr),Math.sin(elr)]" in APP
+    assert "const forward=[Math.cos(pitchr)*Math.sin(yawr),Math.cos(pitchr)*Math.cos(yawr),Math.sin(pitchr)]" in APP
+    assert "const z=target[0]*forward[0]+target[1]*forward[1]+target[2]*forward[2]" in APP
+    assert '["Slant range",o.slantRangeKm.toFixed(1)+" km"]' in APP
+
+
+def test_satellite_backend_uses_omm_json() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert "from sgp4 import omm" in source
+    assert 'params={"GROUP": group.upper(), "FORMAT": "JSON"}' in source
+    assert "omm.initialize(satellite, fields)" in source
+    assert "Satrec.twoline2rv" not in source
 
 
 def test_docs_do_not_reference_external_comparison_project() -> None:
