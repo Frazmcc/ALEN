@@ -66,7 +66,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.0' in HTML
+    assert './app.js?v=1.6.1' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
@@ -110,8 +110,8 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert "requestAnimationFrame(tick)" in APP
     assert "API_BASE+\"/api/v1/satellites?\"" in APP
     assert "SGP4 · CelesTrak orbital elements" in APP
-    assert 'data-layer="aircraft" aria-pressed="true"' in HTML
-    assert 'data-layer="satellites" aria-pressed="true"' in HTML
+    assert 'id="aircraft-groups-button"' in HTML
+    assert 'id="satellite-groups-button"' in HTML
     assert 'data-satellite-group="starlink" aria-pressed="true"' in HTML
     assert "fov=130" in APP
 
@@ -202,16 +202,35 @@ def test_landscape_is_foreground_occlusion_layer() -> None:
     assert draw.index("drawLandscapeForeground();") < draw.index("if(layers.airports)")
 
 
-def test_astronomy_controls_are_grouped() -> None:
-    assert 'class="layer-group" aria-label="Astronomy layers"' in HTML
-    assert '<span class="layer-group-title">Astronomy</span>' in HTML
-    astronomy_start = HTML.index('class="layer-group" aria-label="Astronomy layers"')
-    astronomy_end = HTML.index('</section>', astronomy_start)
+def test_footer_controls_are_grouped_into_four_tabs() -> None:
+    for control_id in (
+        "astronomy-groups-button",
+        "aircraft-groups-button",
+        "satellite-groups-button",
+        "display-groups-button",
+    ):
+        assert f'id="{control_id}"' in HTML
+
+    astronomy_start = HTML.index('id="astronomy-groups"')
+    astronomy_end = HTML.index('</aside>', astronomy_start)
     astronomy = HTML[astronomy_start:astronomy_end]
     assert 'data-layer="stars"' in astronomy
-    assert 'data-layer="atmosphere"' in astronomy
     assert 'data-layer="constellations"' in astronomy
-    assert 'data-layer="planets"' not in astronomy
+    assert 'data-layer="planets"' in astronomy
+    assert 'data-layer="atmosphere"' not in astronomy
+    assert 'data-layer="landscape"' not in astronomy
+
+    display_start = HTML.index('id="display-groups"')
+    display_end = HTML.index('</aside>', display_start)
+    display = HTML[display_start:display_end]
+    assert 'data-layer="landscape"' in display
+    assert 'data-layer="atmosphere"' in display
+    assert 'data-layer="stars"' not in display
+
+    assert 'const GROUP_PANELS=[' in APP
+    assert '["astronomy-groups","astronomy-groups-button","astronomy-groups-close"]' in APP
+    assert '["display-groups","display-groups-button","display-groups-close"]' in APP
+    assert "function closeControlPanels(except=null)" in APP
 
 
 def test_true_observer_projection_and_aircraft_geometry() -> None:
