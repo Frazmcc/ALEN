@@ -43,11 +43,13 @@ def test_visible_satellites_endpoint(monkeypatch) -> None:
         }
     ]
     monkeypatch.setattr("alen.api._satellites.visible", lambda *args, **kwargs: sample)
+    monkeypatch.setattr("alen.api._satellites.last_diagnostics", {"unique_orbits": 1, "visible": 1})
     response = TestClient(app).get(
         "/api/v1/satellites?lat=55.86&lon=-4.25&altitude_m=50&groups=stations&limit=10"
     )
     assert response.status_code == 200
     assert response.json()["satellites"] == sample
+    assert response.json()["diagnostics"]["visible"] == 1
 
 
 def test_custom_domain_cors_is_allowed() -> None:
