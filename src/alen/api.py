@@ -66,14 +66,16 @@ def visible_satellites(
 ) -> dict[str, object]:
     requested = [value.strip() for value in groups.split(",") if value.strip()]
     requested = requested[:12]
+    satellites = _satellites.visible(
+        lat,
+        lon,
+        altitude_m,
+        requested,
+        limit=limit,
+    )
     return {
-        "satellites": _satellites.visible(
-            lat,
-            lon,
-            altitude_m,
-            requested,
-            limit=limit,
-        )
+        "satellites": satellites,
+        "diagnostics": _satellites.last_diagnostics,
     }
 
 
