@@ -316,15 +316,17 @@ def test_aircraft_persistence_across_transient_feed_gaps() -> None:
     assert "aircraft=aircraft.filter" in APP
 
 
-def test_satellite_refresh_runs_independently_of_display_toggle() -> None:
-    assert 'satelliteRequestState="idle",satelliteRequestInFlight=false' in APP
-    assert "if(!observer)return;" in APP
-    assert 'satelliteRequestState="requesting"' in APP
-    assert 'satelliteRequestState="ok"' in APP
-    assert 'satelliteRequestState=satellites.length?"stale":"error"' in APP
-    assert "setTimeout(()=>refreshSatellites(true),1500)" in APP
-    assert 'if(key==="satellites"&&layers[key])refreshSatellites(true);' in APP
-    assert "await refreshSatellites(true);" in APP
+def test_satellite_polling_pauses_when_not_visible_or_enabled() -> None:
+    assert 'satelliteRequestState="idle",satelliteRequestInFlight=false,satelliteRefreshQueued=false' in APP
+    assert "function stopSatellitePolling()" in APP
+    assert "function scheduleSatelliteRefresh(delayMs=SATELLITE_REFRESH_MS)" in APP
+    assert "function restartSatellitePolling(forceRefresh=false)" in APP
+    assert "if(document.hidden||!observer||!layers.satellites)return;" in APP
+    assert 'document.addEventListener("visibilitychange",()=>{' in APP
+    assert "if(document.hidden)stopSatellitePolling();" in APP
+    assert "else restartSatellitePolling(true);" in APP
+    assert 'if(key==="satellites")restartSatellitePolling(layers[key]);' in APP
+    assert "satelliteTimer=setInterval" not in APP
 
 
 def test_aircraft_photo_inspector_contract() -> None:
@@ -361,10 +363,13 @@ def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
     assert "as_completed" in source
     assert 'ThreadPoolExecutor(max_workers=6, thread_name_prefix="alen-sat")' in source
     assert "timeout=8.0" in source
-    assert "if(!observer||satelliteRequestInFlight)return;" in APP
+    assert "if(satelliteRequestInFlight){" in APP
+    assert "if(force)satelliteRefreshQueued=true;" in APP
     assert "const controller=new AbortController()" in APP
     assert "setTimeout(()=>controller.abort(),20000)" in APP
     assert "satelliteRequestInFlight=false" in APP
+    assert "if(currentSignature!==requestSignature){" in APP
+    assert "if(queued&&!document.hidden&&layers.satellites)setTimeout(()=>refreshSatellites(true),0);" in APP
 
 
 def test_satellite_shared_snapshot_is_advanced_to_now() -> None:
@@ -648,7 +653,7 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert '"range_km_next2"' in source
     assert '"motion_horizon_seconds": 2' in source
 
-    assert "const SATELLITE_GRACE_MS=15000" in APP
+    assert "const SATELLITE_GRACE_MS=30000" in APP
     assert "const SATELLITE_POSITION_RESPONSE_MS=850" in APP
     assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
     assert "sat.displayAz=prior?.displayAz??targetNow.az" in APP
