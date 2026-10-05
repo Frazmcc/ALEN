@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "ALEN",
+    "slug": "alen-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "alen",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.frazmcc.alen.dev"
+    },
+    "android": {
+      "package": "com.frazmcc.alen.dev"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#020711"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ALEN uses your location while you are using the app to calculate the sky above you.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "ALEN uses motion sensors while Aim with phone is enabled to align the live sky with the direction you point your device."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

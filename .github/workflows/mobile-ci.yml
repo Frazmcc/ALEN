@@ -1,0 +1,44 @@
+name: Mobile CI
+
+concurrency:
+  group: mobile-ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package.json
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Expo doctor
+        run: npm run doctor
+
+      - name: Type check
+        run: npm run typecheck
