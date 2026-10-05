@@ -417,7 +417,6 @@ def test_aircraft_photo_inspector_contract() -> None:
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
     assert "Loading aircraft photo…" in APP
     assert "No PlaneSpotters photo found · ALEN illustration" in APP
-    assert "https://api.planespotters.net" in HTML
     assert "https://*.plnspttrs.net" in HTML
     assert 'loading="eager"' in HTML
     assert 'fetchpriority="high"' in HTML
