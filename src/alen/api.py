@@ -106,13 +106,15 @@ def nearby_aircraft(
     radius_nm: float = Query(default=43.4488, ge=1.0, le=250.0),
     limit: int = Query(default=450, ge=1, le=500),
 ) -> dict[str, object]:
+    aircraft = _aircraft.nearby(
+        lat,
+        lon,
+        radius_nm=radius_nm,
+        limit=limit,
+    )
     return {
-        "aircraft": _aircraft.nearby(
-            lat,
-            lon,
-            radius_nm=radius_nm,
-            limit=limit,
-        )
+        "aircraft": aircraft,
+        "diagnostics": _aircraft.last_diagnostics,
     }
 
 
