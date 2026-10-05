@@ -209,31 +209,50 @@ function currentSunAltAz(ms){
  const sun=solarSystemRaDec(ms).sun;
  return sun?raDecToAltAz(sun.ra,sun.dec,ms):null;
 }
-function mixRgb(a,b,t){
+function mixRgbArray(a,b,t){
  const u=clamp(t,0,1);
- return `rgb(${Math.round(a[0]+(b[0]-a[0])*u)} ${Math.round(a[1]+(b[1]-a[1])*u)} ${Math.round(a[2]+(b[2]-a[2])*u)})`;
+ return[
+  a[0]+(b[0]-a[0])*u,
+  a[1]+(b[1]-a[1])*u,
+  a[2]+(b[2]-a[2])*u
+ ];
 }
+function rgbCss(rgb){
+ return `rgb(${Math.round(rgb[0])} ${Math.round(rgb[1])} ${Math.round(rgb[2])})`;
+}
+function rgbaCss(rgb,alpha){
+ return `rgba(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])},${clamp(alpha,0,1).toFixed(3)})`;
+}
+function mixRgb(a,b,t){return rgbCss(mixRgbArray(a,b,t))}
 function timeOfDaySky(sunEl){
  const stops=[
-  {el:-18,top:[1,3,10],mid:[7,17,29],horizon:[16,35,52],stars:1},
-  {el:-12,top:[4,10,25],mid:[18,36,64],horizon:[61,70,94],stars:.92},
-  {el:-6,top:[14,30,65],mid:[52,76,111],horizon:[153,96,91],stars:.62},
-  {el:-1,top:[42,82,136],mid:[103,131,171],horizon:[241,157,104],stars:.16},
-  {el:6,top:[74,132,190],mid:[116,169,216],horizon:[185,210,229],stars:.02},
-  {el:25,top:[71,138,204],mid:[111,174,224],horizon:[176,210,235],stars:0},
-  {el:90,top:[65,132,202],mid:[105,169,222],horizon:[169,206,234],stars:0}
+  {el:-18,top:[1,3,10],mid:[5,12,23],horizon:[14,28,43],warm:[25,31,43],stars:1},
+  {el:-12,top:[2,5,18],mid:[12,25,48],horizon:[48,58,82],warm:[92,57,65],stars:.92},
+  {el:-6,top:[6,15,42],mid:[31,55,93],horizon:[102,91,111],warm:[218,101,68],stars:.62},
+  {el:-1,top:[14,39,83],mid:[66,98,142],horizon:[158,132,142],warm:[255,143,74],stars:.16},
+  {el:6,top:[54,112,179],mid:[101,158,210],horizon:[183,207,229],warm:[241,187,123],stars:.02},
+  {el:25,top:[60,126,195],mid:[105,169,220],horizon:[177,210,234],warm:[205,215,224],stars:0},
+  {el:90,top:[56,120,190],mid:[101,166,218],horizon:[170,206,233],warm:[195,211,226],stars:0}
  ];
  if(!Number.isFinite(sunEl))sunEl=-18;
  let lo=stops[0],hi=stops[stops.length-1];
  for(let i=1;i<stops.length;i++){if(sunEl<=stops[i].el){lo=stops[i-1];hi=stops[i];break}}
  const t=hi.el===lo.el?0:clamp((sunEl-lo.el)/(hi.el-lo.el),0,1);
+ const topRgb=mixRgbArray(lo.top,hi.top,t),midRgb=mixRgbArray(lo.mid,hi.mid,t),horizonRgb=mixRgbArray(lo.horizon,hi.horizon,t),warmRgb=mixRgbArray(lo.warm,hi.warm,t);
  return{
-  top:mixRgb(lo.top,hi.top,t),
-  mid:mixRgb(lo.mid,hi.mid,t),
-  horizon:mixRgb(lo.horizon,hi.horizon,t),
+  top:rgbCss(topRgb),
+  mid:rgbCss(midRgb),
+  horizon:rgbCss(horizonRgb),
+  topRgb,midRgb,horizonRgb,warmRgb,
   starVisibility:lo.stars+(hi.stars-lo.stars)*t,
-  daylight:clamp((sunEl+6)/12,0,1)
+  daylight:clamp((sunEl+6)/12,0,1),
+  sunElevation:sunEl
  };
+}
+function skyColourAtElevation(sky,elevationDeg){
+ const el=clamp(elevationDeg,0,90);
+ if(el<=22)return rgbCss(mixRgbArray(sky.horizonRgb,sky.midRgb,Math.pow(el/22,.62)));
+ return rgbCss(mixRgbArray(sky.midRgb,sky.topRgb,Math.pow((el-22)/68,.72)));
 }
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function norm360(v){v%=360;return v<0?v+360:v}
@@ -261,6 +280,12 @@ function horizonBottomGap(){
 function verticalFovRad(){
  const hfov=clamp(fov,1,170)*DEG;
  return 2*Math.atan(Math.tan(hfov/2)*height/Math.max(width,1));
+}
+function screenElevationAtY(y){
+ const vfov=verticalFovRad();
+ const normalized=(height*.5-y)/Math.max(1,height*.5);
+ const delta=Math.atan(normalized*Math.tan(vfov/2))*RAD;
+ return clamp(pitch+delta,-90,90);
 }
 function updateMinPitch(){
  const vfov=verticalFovRad(),targetY=Math.max(0,height-horizonBottomGap());
@@ -1014,12 +1039,48 @@ function drawDistantTerrain(dayMode){
  ctx.strokeStyle=dayMode?"rgba(120,155,168,.34)":"rgba(105,145,160,.22)";
  ctx.lineWidth=.8;ctx.stroke();
 }
-function drawHorizon(){
+function drawAtmosphericSky(sky){
+ if(!layers.atmosphere){
+  ctx.fillStyle=sky.top;
+  ctx.fillRect(0,0,width,height);
+  return;
+ }
+ const g=ctx.createLinearGradient(0,0,0,height),samples=16;
+ for(let i=0;i<=samples;i++){
+  const fraction=i/samples;
+  g.addColorStop(fraction,skyColourAtElevation(sky,screenElevationAtY(height*fraction)));
+ }
+ ctx.fillStyle=g;ctx.fillRect(0,0,width,height);
+}
+function drawSolarHorizonGlow(sun,sky){
+ if(!layers.atmosphere||!sun||!Number.isFinite(sun.el)||!Number.isFinite(sun.az))return;
+ const horizonY=screenYForElevation(0);
+ if(horizonY<-180||horizonY>height+180)return;
+ const rise=clamp((sun.el+12)/10,0,1),fall=clamp((12-sun.el)/10,0,1);
+ const strength=rise*fall;
+ if(strength<=.01)return;
+ const sunX=width*.5+(adiff(sun.az,yaw)/Math.max(fov,1))*width;
+ const radius=Math.max(260,width*.48);
+ const glow=ctx.createRadialGradient(sunX,horizonY,0,sunX,horizonY,radius);
+ glow.addColorStop(0,rgbaCss(sky.warmRgb,.48*strength));
+ glow.addColorStop(.26,rgbaCss(sky.warmRgb,.28*strength));
+ glow.addColorStop(.62,rgbaCss(sky.warmRgb,.09*strength));
+ glow.addColorStop(1,rgbaCss(sky.warmRgb,0));
+ ctx.fillStyle=glow;
+ const top=Math.max(0,horizonY-190),bottom=Math.min(height,horizonY+85);
+ if(bottom>top)ctx.fillRect(0,top,width,bottom-top);
+}
+function drawHorizon(sky){
  const horizonY=screenYForElevation(0);
  if(layers.atmosphere){
-  const glow=ctx.createLinearGradient(0,Math.max(0,horizonY-120),0,Math.min(height,horizonY+28));
-  glow.addColorStop(0,"rgba(60,120,160,0)");glow.addColorStop(.72,"rgba(65,125,165,.12)");glow.addColorStop(1,"rgba(0,0,0,.28)");
-  ctx.fillStyle=glow;ctx.fillRect(0,Math.max(0,horizonY-120),width,Math.min(148,height));
+  const top=Math.max(0,horizonY-110),bottom=Math.min(height,horizonY+24);
+  if(bottom>top){
+   const glow=ctx.createLinearGradient(0,top,0,bottom);
+   glow.addColorStop(0,rgbaCss(sky.horizonRgb,0));
+   glow.addColorStop(.72,rgbaCss(sky.horizonRgb,.10+.05*sky.daylight));
+   glow.addColorStop(1,"rgba(0,0,0,.24)");
+   ctx.fillStyle=glow;ctx.fillRect(0,top,width,bottom-top);
+  }
  }
  if(horizonY>=0&&horizonY<=height){
    ctx.strokeStyle="rgba(190,225,240,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,horizonY);ctx.lineTo(width,horizonY);ctx.stroke();
@@ -1045,12 +1106,9 @@ function draw(){
  root.dataset.skyMode=dayMode?"day":"night";
  const objectText=dayMode?"#08283f":"#eef8ff";
  const aircraftInk=dayMode?"#083a59":"#9fd9ff";
- const g=ctx.createLinearGradient(0,0,0,height);
- g.addColorStop(0,sky.top);
- g.addColorStop(.62,layers.atmosphere?sky.mid:sky.top);
- g.addColorStop(1,layers.atmosphere?sky.horizon:sky.mid);
- ctx.fillStyle=g;ctx.fillRect(0,0,width,height);
- drawHorizon();
+ drawAtmosphericSky(sky);
+ drawSolarHorizonGlow(sun,sky);
+ drawHorizon(sky);
 
  const liveObjects=currentSkyObjects(simTime);
  const byId=new Map(liveObjects.map(o=>[o.id,o]));
