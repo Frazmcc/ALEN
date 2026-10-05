@@ -28,7 +28,11 @@ Update this file whenever a feature changes what data is collected, processed, s
 - Background location is disabled on Android and iOS.
 - No location foreground service is enabled on Android.
 - If permission is denied, the application remains usable with the demo/manual-location path.
-- The current native astronomy implementation performs star and planet calculations on-device and does not transmit device coordinates to the ALEN API.
+- Star and planet calculations remain on-device.
+- The Satellites layer is off by default.
+- When the user enables Satellites, the active observer latitude/longitude is sent to the ALEN API to calculate which satellites are above that observer.
+- The satellite API rounds observer coordinates into an approximately 0.005° cache cell and retains that application-level cache for up to 8 seconds.
+- The mobile app does not send observer coordinates directly to CelesTrak or another satellite-data provider.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
 - Manual coordinates may be persisted locally because they are explicitly entered as an observer location; they are not transmitted to ALEN services.
 

@@ -7,6 +7,7 @@ export type SkyLayers = {
   planets: boolean;
   atmosphere: boolean;
   landscape: boolean;
+  satellites: boolean;
 };
 
 type Props = {
@@ -14,18 +15,20 @@ type Props = {
   layers: SkyLayers;
   onToggleOpen: () => void;
   onToggleLayer: (layer: keyof SkyLayers) => void;
+  satelliteSummary?: string;
 };
 
 const options: Array<{
   key: keyof SkyLayers;
   label: string;
-  group: 'Astronomy' | 'Display';
+  group: 'Astronomy' | 'Display' | 'Live';
 }> = [
   { key: 'stars', label: 'Stars', group: 'Astronomy' },
   { key: 'constellations', label: 'Constellations', group: 'Astronomy' },
   { key: 'planets', label: 'Planets', group: 'Astronomy' },
   { key: 'atmosphere', label: 'Atmosphere', group: 'Display' },
   { key: 'landscape', label: 'Landscape', group: 'Display' },
+  { key: 'satellites', label: 'Satellites', group: 'Live' },
 ];
 
 export function SkyLayersControl({
@@ -33,6 +36,7 @@ export function SkyLayersControl({
   layers,
   onToggleOpen,
   onToggleLayer,
+  satelliteSummary,
 }: Props) {
   return (
     <View
@@ -76,7 +80,7 @@ export function SkyLayersControl({
             gap: 8,
           }}
         >
-          {(['Astronomy', 'Display'] as const).map((group) => (
+          {(['Astronomy', 'Display', 'Live'] as const).map((group) => (
             <View key={group} style={{ gap: 6 }}>
               <Text
                 style={{
@@ -115,15 +119,28 @@ export function SkyLayersControl({
                         borderColor: enabled ? colors.accent : colors.border,
                       }}
                     >
-                      <Text
-                        style={{
-                          color: enabled ? colors.text : colors.muted,
-                          fontSize: 12,
-                          fontWeight: enabled ? '700' : '500',
-                        }}
-                      >
-                        {option.label}
-                      </Text>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text
+                          style={{
+                            color: enabled ? colors.text : colors.muted,
+                            fontSize: 12,
+                            fontWeight: enabled ? '700' : '500',
+                          }}
+                        >
+                          {option.label}
+                        </Text>
+                        {option.key === 'satellites' && satelliteSummary ? (
+                          <Text
+                            style={{
+                              color: colors.muted,
+                              fontSize: 9,
+                              marginTop: 2,
+                            }}
+                          >
+                            {satelliteSummary}
+                          </Text>
+                        ) : null}
+                      </View>
                       <Text
                         style={{
                           color: enabled ? colors.success : colors.muted,
