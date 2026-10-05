@@ -15,7 +15,6 @@ import {
   norm360,
   raDecToAltAz,
   skyPalette,
-  type Observer,
 } from '@/sky/astronomy';
 import { projectAltAz } from '@/sky/projection';
 import { useObserverLocation } from '@/location/useObserverLocation';
