@@ -304,6 +304,36 @@ def aircraft_photo(
     }
 
 
+@app.get("/api/v1/aircraft/service-photo")
+def aircraft_service_photo(
+    service: str = Query(max_length=32),
+    region: str = Query(max_length=80),
+    aircraft_type: str = Query(default="", max_length=32),
+    operator: str = Query(default="", max_length=120),
+) -> dict[str, object]:
+    photo = _aircraft_photos.find_regional_service(
+        service,
+        region,
+        aircraft_type,
+        operator,
+    )
+    if photo is None:
+        return {"photo": None}
+    return {
+        "photo": {
+            "image_url": photo.image_url,
+            "source_url": photo.source_url,
+            "title": photo.title,
+            "artist": photo.artist,
+            "license": photo.license_name,
+            "match": "regional_service",
+            "provider": photo.provider,
+            "region": region,
+            "service": service,
+        }
+    }
+
+
 @app.get("/api/v1/aircraft/photo/image")
 def aircraft_photo_image(
     registration: str = Query(default="", max_length=32),
