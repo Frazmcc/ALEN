@@ -123,7 +123,7 @@ def test_live_location_and_horizon_contract() -> None:
     assert "footerHeight+10" in APP
     assert "function updateMinPitch()" in APP
     assert "pitch=minPitch" in APP
-    assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
+    assert "pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89)" in APP
     assert "function traceTerrainSkyline()" in APP
     assert "function drawDistantTerrain(dayMode)" in APP
     assert "function drawLandscapeForeground()" not in APP
