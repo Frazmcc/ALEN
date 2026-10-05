@@ -385,7 +385,8 @@ def test_satellite_shared_snapshot_is_advanced_to_now() -> None:
     assert "position_sample_age_seconds" in source
     assert "position_cache_hits" in source
     assert "position_cache_misses" in source
-    assert "const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,3000)" in APP
+    assert "const SATELLITE_MAX_SAMPLE_AGE_MS=10000" in APP
+    assert "const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,SATELLITE_MAX_SAMPLE_AGE_MS)" in APP
     assert "const trajectory=satelliteTrajectory(raw,horizon)" in APP
     assert "targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs)" in APP
     assert 'detail:"SGP4 · shared world-position trajectory"' in APP
