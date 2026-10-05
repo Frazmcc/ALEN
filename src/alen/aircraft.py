@@ -177,20 +177,22 @@ class AircraftProvider:
                 },
             ) as client:
                 response = client.get(url)
+                status_code = int(getattr(response, "status_code", 200))
+                headers = getattr(response, "headers", {})
 
-                if 400 <= response.status_code < 500:
+                if 400 <= status_code < 500:
                     retry_after = 10
-                    if response.status_code == 429:
+                    if status_code == 429:
                         try:
                             retry_after = max(
                                 2,
-                                min(60, int(response.headers.get("Retry-After", "10"))),
+                                min(60, int(headers.get("Retry-After", "10"))),
                             )
-                        except ValueError:
+                        except (TypeError, ValueError):
                             retry_after = 10
                     shared_cache.set_json(
                         self._cooldown_key(latitude_deg, longitude_deg, radius_nm),
-                        {"status": response.status_code},
+                        {"status": status_code},
                         ttl_seconds=retry_after,
                     )
                     return None
