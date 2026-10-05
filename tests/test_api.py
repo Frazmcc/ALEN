@@ -53,6 +53,61 @@ def test_visible_satellites_endpoint(monkeypatch) -> None:
     assert response.json()["diagnostics"]["visible"] == 1
 
 
+def test_satellite_observer_response_is_reused_for_nearby_users(monkeypatch) -> None:
+    sample = [
+        {
+            "norad": 25544,
+            "name": "ISS (ZARYA)",
+            "international_id": "1998-067A",
+            "azimuth_deg": 180.0,
+            "elevation_deg": 42.0,
+            "range_km": 820.0,
+            "azimuth_deg_next": 180.2,
+            "elevation_deg_next": 42.1,
+            "range_km_next": 819.0,
+            "azimuth_deg_next2": 180.4,
+            "elevation_deg_next2": 42.2,
+            "range_km_next2": 818.0,
+            "motion_horizon_seconds": 2,
+            "groups": ["stations"],
+        }
+    ]
+    calls = {"count": 0}
+
+    def fake_visible(*args, **kwargs):
+        calls["count"] += 1
+        return sample
+
+    monkeypatch.setattr("alen.api._satellites.visible", fake_visible)
+    monkeypatch.setattr(
+        "alen.api._satellites.last_diagnostics",
+        {
+            "unique_orbits": 1,
+            "visible": 1,
+            "position_sample_age_seconds": 0.25,
+        },
+    )
+
+    client = TestClient(app)
+    first = client.get(
+        "/api/v1/satellites?lat=54.32121&lon=-3.21021"
+        "&altitude_m=80&groups=stations&limit=17"
+    )
+    second = client.get(
+        "/api/v1/satellites?lat=54.32124&lon=-3.21024"
+        "&altitude_m=81&groups=stations&limit=17"
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert calls["count"] == 1
+    assert first.json()["diagnostics"]["observer_cache"] == "miss"
+    assert second.json()["diagnostics"]["observer_cache"] == "hit"
+    assert second.json()["diagnostics"]["observer_cache_age_seconds"] >= 0.0
+    assert second.json()["diagnostics"]["position_sample_age_seconds"] >= 0.25
+    assert second.json()["satellites"] == sample
+
+
 def test_satellite_world_positions_are_shared_within_time_bucket(monkeypatch) -> None:
     from datetime import datetime, timezone
 
