@@ -42,6 +42,7 @@ export function useObserverLocation() {
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const userChangedSelection = useRef(false);
+  const requestingRef = useRef(false);
 
   const applyCurrentLocation = useCallback(
     async ({
@@ -51,8 +52,9 @@ export function useObserverLocation() {
       requestPermission: boolean;
       persist: boolean;
     }) => {
-      if (requesting) return false;
+      if (requestingRef.current) return false;
 
+      requestingRef.current = true;
       setRequesting(true);
       setError(null);
 
@@ -104,10 +106,11 @@ export function useObserverLocation() {
         }
         return false;
       } finally {
+        requestingRef.current = false;
         setRequesting(false);
       }
     },
-    [requesting],
+    [],
   );
 
   useEffect(() => {
