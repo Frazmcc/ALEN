@@ -92,7 +92,7 @@ export default function SkyScreen() {
     [satelliteGroups],
   );
   const {
-    tracks: visibleSatelliteTracks,
+    tracks: satelliteTracks,
     status: satelliteStatus,
   } = useLiveSatellites(
     observer,
