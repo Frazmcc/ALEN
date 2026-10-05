@@ -18,6 +18,7 @@ import {
 import { clamp } from '@/sky/astronomy';
 import { colors } from '@/theme/colors';
 import { CONSTELLATIONS } from '@/sky/constellations';
+import type { LiveAircraft, LiveSatellite } from '@/live/liveObjects';
 
 export type RenderedStar = Star & {
   az: number;
@@ -27,6 +28,8 @@ export type RenderedStar = Star & {
 type Props = {
   stars: RenderedStar[];
   planets: PlanetPosition[];
+  aircraft: LiveAircraft[];
+  satellites: LiveSatellite[];
   viewport: Viewport;
   starVisibility: number;
   showStars: boolean;
@@ -34,6 +37,8 @@ type Props = {
   showPlanets: boolean;
   showAtmosphere: boolean;
   showLandscape: boolean;
+  showAircraft: boolean;
+  showSatellites: boolean;
   targetKind?: string;
   targetId?: string;
   horizonY: number;
@@ -47,6 +52,8 @@ type Props = {
 export const SkyObjectCanvas = memo(function SkyObjectCanvas({
   stars,
   planets,
+  aircraft,
+  satellites,
   viewport,
   starVisibility,
   showStars,
@@ -54,6 +61,8 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
   showPlanets,
   showAtmosphere,
   showLandscape,
+  showAircraft,
+  showSatellites,
   targetKind,
   targetId,
   horizonY,
@@ -134,6 +143,67 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
         ];
       }),
     [planets, targetId, targetKind, viewport],
+  );
+
+
+  const projectedSatellites = useMemo(
+    () =>
+      satellites.flatMap((satellite) => {
+        if (!showSatellites || satellite.el < 0) return [];
+
+        const point = projectAltAz(
+          satellite.az,
+          satellite.el,
+          viewport,
+        );
+        if (!point) return [];
+
+        return [{
+          ...point,
+          id: satellite.id,
+          color: satellite.color,
+          radius: satellite.radius,
+          halo: satellite.halo,
+          opacity: satellite.opacity,
+        }];
+      }),
+    [satellites, showSatellites, viewport],
+  );
+
+  const projectedAircraft = useMemo(
+    () =>
+      aircraft.flatMap((item) => {
+        if (!showAircraft || item.el < 0) return [];
+
+        const point = projectAltAz(item.az, item.el, viewport);
+        if (!point) return [];
+
+        const ahead = projectAltAz(item.nextAz, item.nextEl, viewport);
+        let headingX = point.x;
+        let headingY = point.y - 7;
+
+        if (ahead) {
+          const dx = ahead.x - point.x;
+          const dy = ahead.y - point.y;
+          const length = Math.hypot(dx, dy);
+          if (length > 0.001) {
+            headingX = point.x + (dx / length) * 8;
+            headingY = point.y + (dy / length) * 8;
+          }
+        }
+
+        const near = 1 - clamp(item.slantRangeKm / 85, 0, 1);
+
+        return [{
+          ...point,
+          id: item.id,
+          color: item.color,
+          headingX,
+          headingY,
+          radius: 2.1 + near * 1.2,
+        }];
+      }),
+    [aircraft, showAircraft, viewport],
   );
 
   return (
@@ -219,6 +289,49 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
               strokeWidth={2}
             />
           ))}
+
+
+        {projectedSatellites.map((satellite) => (
+          <Circle
+            key={`satellite-halo-${satellite.id}`}
+            cx={satellite.x}
+            cy={satellite.y}
+            r={satellite.halo}
+            color={satellite.color}
+            opacity={satellite.opacity * 0.2}
+          />
+        ))}
+        {projectedSatellites.map((satellite) => (
+          <Circle
+            key={satellite.id}
+            cx={satellite.x}
+            cy={satellite.y}
+            r={satellite.radius}
+            color={satellite.color}
+            opacity={satellite.opacity}
+          />
+        ))}
+
+        {projectedAircraft.map((item) => (
+          <Line
+            key={`aircraft-heading-${item.id}`}
+            p1={vec(item.x, item.y)}
+            p2={vec(item.headingX, item.headingY)}
+            color={item.color}
+            opacity={0.9}
+            strokeWidth={1.4}
+          />
+        ))}
+        {projectedAircraft.map((item) => (
+          <Circle
+            key={item.id}
+            cx={item.x}
+            cy={item.y}
+            r={item.radius}
+            color={item.color}
+            opacity={0.96}
+          />
+        ))}
 
         {showLandscape ? (
           <>
