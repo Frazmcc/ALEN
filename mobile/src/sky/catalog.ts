@@ -51,13 +51,6 @@ export const BRIGHT_STARS: Star[] = (brightStarData.stars as RawStar[])
       Number.isFinite(star.mag),
   );
 
-// The full 2,887-star catalogue is available for search/object details.
-// Until the sky is moved to a canvas renderer, keep the native-view layer
-// to brighter stars so object count stays appropriate for React Native views.
-export const MOBILE_RENDER_STARS = BRIGHT_STARS.filter(
-  (star) => star.mag <= 4,
-);
-
 export const PLANET_INFO = {
   sun: { name: 'Sun', color: '#ffd76a', glyph: '☉' },
   moon: { name: 'Moon', color: '#e8edf2', glyph: '◐' },

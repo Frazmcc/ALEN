@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { colors } from '@/theme/colors';
-import { BRIGHT_STARS, MOBILE_RENDER_STARS } from '@/sky/catalog';
+import { BRIGHT_STARS } from '@/sky/catalog';
 import {
   clamp,
   currentPlanetPositions,
@@ -91,31 +91,19 @@ export default function SkyScreen() {
   const sun = planets.find((planet) => planet.id === 'sun');
   const palette = skyPalette(sun?.el ?? -18);
 
-  const targetStar = useMemo(
+  const stars = useMemo(
     () =>
-      targetKind === 'star' && targetId
-        ? BRIGHT_STARS.find((star) => star.id === targetId) ?? null
-        : null,
-    [targetId, targetKind],
+      BRIGHT_STARS.map((star) => ({
+        ...star,
+        ...raDecToAltAz(
+          star.ra,
+          star.dec,
+          now,
+          observer,
+        ),
+      })),
+    [now, observer],
   );
-
-  const stars = useMemo(() => {
-    const catalog =
-      targetStar &&
-      !MOBILE_RENDER_STARS.some((star) => star.id === targetStar.id)
-        ? [...MOBILE_RENDER_STARS, targetStar]
-        : MOBILE_RENDER_STARS;
-
-    return catalog.map((star) => ({
-      ...star,
-      ...raDecToAltAz(
-        star.ra,
-        star.dec,
-        now,
-        observer,
-      ),
-    }));
-  }, [now, observer, targetStar]);
 
   useEffect(() => {
     if (restoring || phoneAimActive || !targetId || !targetKind) return;
@@ -343,30 +331,6 @@ export default function SkyScreen() {
               </Text>
             );
           })}
-
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: horizonY,
-            bottom: 0,
-            backgroundColor: '#03080b',
-          }}
-        />
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: Math.max(0, horizonY - 1),
-            height: 2,
-            backgroundColor: palette.horizon,
-            opacity: 0.7,
-          }}
-        />
 
         <View
           style={{

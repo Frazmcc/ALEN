@@ -5,6 +5,7 @@ import {
   Circle,
   Fill,
   LinearGradient,
+  Rect,
   vec,
 } from '@shopify/react-native-skia';
 import type { Star } from '@/sky/catalog';
@@ -169,6 +170,22 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
               strokeWidth={2}
             />
           ))}
+
+        <Rect
+          x={0}
+          y={Math.max(0, horizonY)}
+          width={Math.max(1, viewport.width)}
+          height={Math.max(0, viewport.height - horizonY)}
+          color="#03080b"
+        />
+        <Rect
+          x={0}
+          y={Math.max(0, horizonY - 1)}
+          width={Math.max(1, viewport.width)}
+          height={2}
+          color={skyColors.horizon}
+          opacity={0.7}
+        />
       </Canvas>
     </View>
   );
