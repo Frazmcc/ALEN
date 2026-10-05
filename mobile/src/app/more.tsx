@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Constants from 'expo-constants';
 import {
   Linking,
@@ -63,7 +64,7 @@ function Section({
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <View style={{ marginTop: 20 }}>
@@ -141,47 +142,40 @@ export default function MoreScreen() {
           </Text>
 
           <Section title="OBSERVER LOCATION">
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 15,
-                    fontWeight: '700',
-                  }}
-                >
-                  {restoring ? 'Restoring observer…' : label}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.muted,
-                    fontSize: 10,
-                    lineHeight: 15,
-                    marginTop: 3,
-                  }}
-                >
-                  {observer.lat.toFixed(5)}, {observer.lon.toFixed(5)}
-                </Text>
-              </View>
+            <View>
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 15,
+                  fontWeight: '700',
+                }}
+              >
+                {restoring ? 'Restoring observer…' : label}
+              </Text>
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 10,
+                  lineHeight: 15,
+                  marginTop: 3,
+                }}
+              >
+                {observer.lat.toFixed(5)}, {observer.lon.toFixed(5)}
+              </Text>
 
-              <LocationControl
-                observer={observer}
-                source={source}
-                label={label}
-                requesting={requesting}
-                restoring={restoring}
-                error={error}
-                onUseCurrent={useCurrentLocation}
-                onUseManual={useManualLocation}
-                onUseDemo={useDemoLocation}
-              />
+              <View style={{ alignItems: 'flex-start', marginTop: 12 }}>
+                <LocationControl
+                  observer={observer}
+                  source={source}
+                  label={label}
+                  requesting={requesting}
+                  restoring={restoring}
+                  error={error}
+                  onUseCurrent={useCurrentLocation}
+                  onUseManual={useManualLocation}
+                  onUseDemo={useDemoLocation}
+                />
+              </View>
             </View>
 
             <Text
