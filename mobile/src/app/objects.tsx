@@ -437,7 +437,7 @@ export default function ObjectsScreen() {
                     style={{
                       color: colors.text,
                       fontSize: 14,
-                      fontWeight: '650',
+                      fontWeight: '600',
                     }}
                   >
                     {name}
