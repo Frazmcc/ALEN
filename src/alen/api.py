@@ -194,7 +194,20 @@ def satellite_info(
     norad: int = Query(ge=1, le=999999999),
     name: str = Query(default="", max_length=120),
 ) -> dict[str, object]:
-    return {"satellite": _satellite_info.lookup(norad, name)}
+    info = _satellite_info.lookup(norad, name)
+    if info is None:
+        return {"satellite": None}
+
+    result = dict(info)
+    photo = result.get("photo")
+    if isinstance(photo, dict):
+        photo_result = dict(photo)
+        photo_result["image_path"] = (
+            "/api/v1/satellite/photo/image?"
+            + urlencode({"norad": norad, "name": name})
+        )
+        result["photo"] = photo_result
+    return {"satellite": result}
 
 
 @app.get("/api/v1/satellite/photo/image")
@@ -202,9 +215,15 @@ def satellite_photo_image(
     norad: int = Query(ge=1, le=999999999),
     name: str = Query(default="", max_length=120),
 ) -> Response:
-    image = _satellite_info.image_bytes(norad, name)
-    if image is None:
+    info = _satellite_info.lookup(norad, name)
+    if info is None:
+        raise HTTPException(status_code=404, detail="Satellite not found")
+    photo = info.get("photo")
+    if not isinstance(photo, dict):
         raise HTTPException(status_code=404, detail="Satellite photo not found")
+    image = _satellite_info.image_bytes(photo)
+    if image is None:
+        raise HTTPException(status_code=502, detail="Satellite photo source unavailable")
     body, media_type = image
     return Response(
         content=body,
