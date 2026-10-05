@@ -12,6 +12,7 @@ from .aircraft import AircraftProvider
 from .aircraft_photos import AircraftPhotoProvider
 from .aircraft_routes import AircraftRouteProvider
 from .airports import AirportProvider
+from .cache import shared_cache
 from .satellites import SatelliteProvider
 from .satellite_info import SatelliteInfoProvider
 
@@ -44,6 +45,7 @@ def health() -> dict[str, str]:
         "status": "ok",
         "name": "ALEN",
         "version": __version__,
+        "cache": "redis" if shared_cache.distributed else "local",
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
