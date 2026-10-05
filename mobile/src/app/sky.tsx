@@ -26,6 +26,7 @@ import {
   SkyLayersControl,
   type SkyLayers,
 } from '@/components/SkyLayersControl';
+import { useLiveSkyObjects } from '@/live/useLiveSkyObjects';
 
 type Size = {
   width: number;
@@ -49,6 +50,8 @@ export default function SkyScreen() {
     planets: true,
     atmosphere: true,
     landscape: true,
+    aircraft: true,
+    satellites: true,
   });
   const gestureStart = useRef({ yaw: 180, pitch: 28, fov: 105 });
   const pinchStartDistance = useRef<number | null>(null);
@@ -75,6 +78,15 @@ export default function SkyScreen() {
     start: startPhoneAim,
     stop: stopPhoneAim,
   } = useDevicePointing();
+
+  const {
+    aircraft,
+    satellites,
+    error: liveFeedError,
+  } = useLiveSkyObjects(observer, {
+    aircraftEnabled: layers.aircraft,
+    satellitesEnabled: layers.satellites,
+  });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -274,6 +286,8 @@ export default function SkyScreen() {
         <SkyObjectCanvas
           stars={stars}
           planets={planets}
+          aircraft={aircraft}
+          satellites={satellites}
           viewport={viewport}
           starVisibility={palette.stars}
           showStars={layers.stars}
@@ -281,6 +295,8 @@ export default function SkyScreen() {
           showPlanets={layers.planets}
           showAtmosphere={layers.atmosphere}
           showLandscape={layers.landscape}
+          showAircraft={layers.aircraft}
+          showSatellites={layers.satellites}
           targetKind={targetKind}
           targetId={targetId}
           horizonY={horizonY}
@@ -388,6 +404,18 @@ export default function SkyScreen() {
               }}
             >
               {new Date(now).toLocaleTimeString()}
+            </Text>
+            <Text
+              style={{
+                color: colors.muted,
+                fontSize: 9,
+                marginTop: 2,
+              }}
+            >
+              {aircraft.length} aircraft · {satellites.length} satellites
+              {liveFeedError.aircraft || liveFeedError.satellites
+                ? ' · reconnecting'
+                : ''}
             </Text>
           </View>
 
