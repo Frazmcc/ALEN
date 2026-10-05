@@ -87,6 +87,7 @@ function numberRow(
   suffix: string,
   digits = 0,
 ): [string, string] | null {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number)
     ? [label, `${number.toFixed(digits)}${suffix}`]
@@ -268,7 +269,17 @@ export function useLiveObjectMetadata(
           };
 
           if (active) {
-            setMetadata(satelliteMetadata(payload.satellite ?? null));
+            const info = payload.satellite ?? null;
+            const next = satelliteMetadata(info);
+            if (info?.photo?.image_url) {
+              const imageQuery = new URLSearchParams({
+                norad: track.norad,
+                name: track.name,
+              });
+              next.imageUrl =
+                `${config.apiBaseUrl}/api/v1/satellite/photo/image?${imageQuery.toString()}`;
+            }
+            setMetadata(next);
           }
           return;
         }
