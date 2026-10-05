@@ -728,7 +728,7 @@ def test_satellite_motion_uses_sgp4_forecast_trajectory() -> None:
     assert "function satelliteSlerp(a,b,t)" in APP
     assert "const supplied=Array.isArray(raw.trajectory)?raw.trajectory:[]" in APP
     assert "const vec=satelliteSlerp(a.vec,b.vec,t)" in APP
-    assert "tMs>b.timeMs?2.5:1" in APP
+    assert "tMs>b.timeMs?10:1" in APP
 
 
 def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
