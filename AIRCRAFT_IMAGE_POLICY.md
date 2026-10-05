@@ -14,7 +14,7 @@ This policy is a hard acceptance rule for ALEN's aircraft inspector.
 
 If no exact-airframe photograph is available for an aircraft identified as police, air ambulance/HEMS or coastguard/SAR:
 
-1. Prefer a representative aircraft image from the same operational region.
+1. Prefer a representative aircraft image from the same operational region. When a geographic region cannot be resolved, a named police/ambulance/coastguard operator may be used as the regional service identity.
 2. The inspector must label it clearly as "regional service representative" and "not the exact airframe".
 3. Regional representative imagery must never be presented as the exact aircraft.
 4. If no suitable regional service image is available, fall back to the exact ICAO-model neutral reference described above.
