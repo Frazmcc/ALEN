@@ -37,6 +37,7 @@ import {
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
 import {
+  aircraftGroupKey,
   aircraftMatchesActiveGroup,
   defaultAircraftGroupState,
   type AircraftGroupKey,
@@ -256,6 +257,20 @@ export default function SkyScreen() {
     : null;
   const selectedDetail = resolvedSelection?.detail ?? null;
 
+  useEffect(() => {
+    if (!selectedObject) return;
+    if (
+      selectedObject.kind !== 'satellite' &&
+      selectedObject.kind !== 'aircraft'
+    ) {
+      return;
+    }
+
+    if (!resolvedSelection) {
+      setSelectedObject(null);
+    }
+  }, [resolvedSelection, selectedObject]);
+
   const selectedStaticKind =
     selectedObject?.kind === 'star' || selectedObject?.kind === 'planet'
       ? selectedObject.kind
@@ -353,17 +368,47 @@ export default function SkyScreen() {
   }
 
   function toggleAircraftGroup(group: AircraftGroupKey) {
-    setAircraftGroups((current) => ({
-      ...current,
-      [group]: !current[group],
-    }));
+    const next = {
+      ...aircraftGroups,
+      [group]: !aircraftGroups[group],
+    };
+
+    if (selectedObject?.kind === 'aircraft') {
+      const selectedTrack = aircraftTracks.find(
+        (track) => track.id === selectedObject.id,
+      );
+
+      if (
+        selectedTrack &&
+        !aircraftMatchesActiveGroup(selectedTrack, next)
+      ) {
+        setSelectedObject(null);
+      }
+    }
+
+    setAircraftGroups(next);
   }
 
   function toggleSatelliteGroup(group: SatelliteGroupKey) {
-    setSatelliteGroups((current) => ({
-      ...current,
-      [group]: !current[group],
-    }));
+    const next = {
+      ...satelliteGroups,
+      [group]: !satelliteGroups[group],
+    };
+
+    if (selectedObject?.kind === 'satellite') {
+      const selectedTrack = satelliteTracks.find(
+        (track) => track.id === selectedObject.id,
+      );
+
+      if (
+        selectedTrack &&
+        !satelliteMatchesActiveGroups(selectedTrack.groups, next)
+      ) {
+        setSelectedObject(null);
+      }
+    }
+
+    setSatelliteGroups(next);
   }
 
   function toggleLayer(layer: keyof SkyLayers) {
