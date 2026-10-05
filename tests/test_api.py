@@ -730,6 +730,76 @@ def test_satellite_info_endpoint(monkeypatch) -> None:
     assert response.json()["satellite"] == sample
 
 
+def test_satellite_photo_endpoint_returns_isstracker_image(monkeypatch) -> None:
+    from alen.satellite_info import SatellitePhoto
+
+    sample = SatellitePhoto(
+        image_url="https://img-cdn.isstracker.pl/static/cache/iss-zarya-25544.png",
+        source_url="https://isstracker.pl/en/satellites/25544",
+        credit="ISS Tracker",
+        license_name="See ISS Tracker source for image usage terms",
+        match="isstracker",
+    )
+    monkeypatch.setattr(
+        "alen.api._satellite_info.find_isstracker_photo",
+        lambda *args, **kwargs: sample,
+    )
+
+    response = TestClient(app).get(
+        "/api/v1/satellite/photo?norad=25544&name=ISS%20%28ZARYA%29"
+    )
+
+    assert response.status_code == 200
+    photo = response.json()["photo"]
+    assert photo["image_url"].startswith("https://img-cdn.isstracker.pl/")
+    assert photo["source_url"] == "https://isstracker.pl/en/satellites/25544"
+    assert photo["credit"] == "ISS Tracker"
+    assert photo["match"] == "isstracker"
+    assert photo["provider"] == "isstracker"
+
+
+def test_isstracker_satellite_photo_parser_prefers_primary_photo() -> None:
+    from alen.satellite_info import _extract_isstracker_photo_url
+
+    html = """
+    <html><body>
+      <img alt="Orbit launches ISS (ZARYA)"
+           src="https://static.isstracker.pl/img/satellites/status-alive.png">
+      <img alt="Photo ISS (ZARYA)"
+           src="https://img-cdn.isstracker.pl/static/cache/iss-zarya-25544.png?data=test">
+    </body></html>
+    """
+
+    result = _extract_isstracker_photo_url(html)
+    assert result.startswith(
+        "https://img-cdn.isstracker.pl/static/cache/iss-zarya-25544.png"
+    )
+
+
+def test_isstracker_satellite_photo_parser_supports_shared_family_image() -> None:
+    from alen.satellite_info import _extract_isstracker_photo_url
+
+    html = """
+    <img alt="Photo STARLINK-38276"
+         src="https://static.isstracker.pl/images/satellites/common/starlink.png">
+    """
+
+    assert _extract_isstracker_photo_url(html) == (
+        "https://static.isstracker.pl/images/satellites/common/starlink.png"
+    )
+
+
+def test_isstracker_satellite_photo_rejects_lookalike_host() -> None:
+    from alen.satellite_info import _extract_isstracker_photo_url
+
+    html = """
+    <img alt="Photo ISS"
+         src="https://img-cdn.isstracker.pl.evil.example/fake.png">
+    """
+
+    assert _extract_isstracker_photo_url(html) == ""
+
+
 def test_satellite_info_endpoint_adds_proxy_image_path(monkeypatch) -> None:
     sample = {
         "name": "ISS (ZARYA)",
@@ -819,6 +889,7 @@ def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) 
         },
     )
     monkeypatch.setattr(provider, "_satnogs", lambda norad: None)
+    monkeypatch.setattr(provider, "find_isstracker_photo", lambda *args, **kwargs: None)
     monkeypatch.setattr(provider, "_commons_photo", lambda *args, **kwargs: None)
 
     info = provider.lookup(54039, "CZ-2C R/B")

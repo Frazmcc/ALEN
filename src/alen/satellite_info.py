@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import unescape
+from html.parser import HTMLParser
 import re
 import time
+from urllib.parse import urlparse
 
 import httpx
 
@@ -24,6 +26,7 @@ class SatelliteInfoProvider:
     SATNOGS_URL = "https://db.satnogs.org/api/satellites/"
     COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
     SATNOGS_MEDIA_BASE = "https://db-satnogs.freetls.fastly.net/media/"
+    ISSTRACKER_PAGE_URL = "https://isstracker.pl/en/satellites/{norad}"
     CACHE_TTL_SECONDS = 86400
     REFRESH_LOCK_SECONDS = 30
     MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -145,7 +148,9 @@ class SatelliteInfoProvider:
         life_expectancy = _life_expectancy(description, object_type_code)
         cost = _cost_text(object_type_code)
 
-        photo = self._satnogs_photo(satnogs)
+        photo = self.find_isstracker_photo(norad, object_name)
+        if photo is None:
+            photo = self._satnogs_photo(satnogs)
         if photo is None:
             photo = self._commons_photo(object_name, object_type_code)
 
@@ -196,6 +201,80 @@ class SatelliteInfoProvider:
             ttl_seconds=self.CACHE_TTL_SECONDS,
         )
         return result
+
+    def find_isstracker_photo(
+        self,
+        norad: int,
+        name: str = "",
+    ) -> SatellitePhoto | None:
+        norad = int(norad)
+        cache_key = f"satellite-photo:isstracker:{norad}"
+        cached = self._cache.get_json(cache_key)
+        if isinstance(cached, dict) and "found" in cached:
+            value = cached.get("value")
+            if isinstance(value, dict):
+                return SatellitePhoto(
+                    image_url=_clean(value.get("image_url")),
+                    source_url=_clean(value.get("source_url")),
+                    credit=_clean(value.get("credit")) or "ISS Tracker",
+                    license_name=_clean(value.get("license")) or "See ISS Tracker source for image usage terms",
+                    match=_clean(value.get("match")) or "isstracker",
+                )
+            return None
+
+        page_url = self.ISSTRACKER_PAGE_URL.format(norad=norad)
+        try:
+            with httpx.Client(
+                timeout=10.0,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "ALEN/0.1 (satellite photo lookup)",
+                    "Accept": "text/html,application/xhtml+xml",
+                },
+            ) as client:
+                response = client.get(page_url)
+                response.raise_for_status()
+                html = response.text
+        except httpx.HTTPError:
+            self._cache.set_json(
+                cache_key,
+                {"found": False, "value": None},
+                ttl_seconds=1800,
+            )
+            return None
+
+        image_url = _extract_isstracker_photo_url(html)
+        if not image_url:
+            self._cache.set_json(
+                cache_key,
+                {"found": False, "value": None},
+                ttl_seconds=3600,
+            )
+            return None
+
+        photo = SatellitePhoto(
+            image_url=image_url,
+            source_url=page_url,
+            credit="ISS Tracker",
+            license_name="See ISS Tracker source for image usage terms",
+            match="isstracker",
+        )
+        self._cache.set_json(
+            cache_key,
+            {
+                "found": True,
+                "value": {
+                    "image_url": photo.image_url,
+                    "source_url": photo.source_url,
+                    "credit": photo.credit,
+                    "license": photo.license_name,
+                    "match": photo.match,
+                    "name": name,
+                },
+            },
+            ttl_seconds=self.CACHE_TTL_SECONDS,
+        )
+        return photo
 
     def image_bytes(
         self,
@@ -340,6 +419,95 @@ class SatelliteInfoProvider:
         return None
 
 
+class _ISSTrackerImageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.candidates: list[tuple[str, str]] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        if tag.lower() != "img":
+            return
+        values = {key.lower(): (value or "") for key, value in attrs}
+        alt = values.get("alt", "")
+        for key in ("src", "data-src", "data-lazy-src"):
+            url = values.get(key, "").strip()
+            if url:
+                self.candidates.append((alt, url))
+        srcset = values.get("srcset", "").strip()
+        if srcset:
+            first = srcset.split(",", 1)[0].strip().split(" ", 1)[0]
+            if first:
+                self.candidates.append((alt, first))
+
+
+def _extract_isstracker_photo_url(html: str) -> str:
+    parser = _ISSTrackerImageParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        parser.candidates = []
+
+    ranked: list[tuple[int, str]] = []
+    for alt, raw_url in parser.candidates:
+        url = unescape(raw_url).strip()
+        if not _trusted_isstracker_image_url(url):
+            continue
+        lower_alt = alt.lower()
+        lower_url = url.lower()
+        score = 0
+        if "photo" in lower_alt:
+            score += 100
+        if "satellite" in lower_alt:
+            score += 30
+        if "img-cdn.isstracker.pl" in lower_url:
+            score += 40
+        if "/images/satellites/" in lower_url or "/static/cache/" in lower_url:
+            score += 25
+        if "orbit" in lower_alt or "launch" in lower_alt:
+            score -= 70
+        if "status-" in lower_url or "banner" in lower_url or "/img/" in lower_url:
+            score -= 80
+        ranked.append((score, url))
+
+    if not ranked:
+        for url in re.findall(
+            r"https://(?:img-cdn\.isstracker\.pl|static\.isstracker\.pl)/[^\"'<>\s]+",
+            html,
+            flags=re.I,
+        ):
+            clean_url = unescape(url).strip()
+            lower_url = clean_url.lower()
+            if not _trusted_isstracker_image_url(clean_url):
+                continue
+            score = 40 if "img-cdn.isstracker.pl" in lower_url else 0
+            if "/images/satellites/" in lower_url or "/static/cache/" in lower_url:
+                score += 25
+            if "status-" in lower_url or "banner" in lower_url:
+                score -= 80
+            ranked.append((score, clean_url))
+
+    if not ranked:
+        return ""
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return ranked[0][1] if ranked[0][0] > 0 else ""
+
+
+def _trusted_isstracker_image_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and (parsed.hostname or "").lower()
+        in {"img-cdn.isstracker.pl", "static.isstracker.pl"}
+    )
+
+
 def _purpose_for(object_type_code: str, name: str) -> str:
     if object_type_code == "R/B" or " R/B" in name.upper():
         return "Spent launch-vehicle stage. Its job was to help place the mission payload into orbit; it is now an uncontrolled rocket body rather than an operating satellite."
@@ -402,8 +570,19 @@ def _metadata_text(metadata: dict[str, object], key: str) -> str:
 
 
 def _trusted_satellite_image_url(value: str) -> bool:
-    return value.startswith(
-        "https://upload.wikimedia.org/"
-    ) or value.startswith(
-        "https://db-satnogs.freetls.fastly.net/media/"
+    if _trusted_isstracker_image_url(value):
+        return True
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https":
+        return False
+    return (
+        host == "upload.wikimedia.org"
+        or (
+            host == "db-satnogs.freetls.fastly.net"
+            and parsed.path.startswith("/media/")
+        )
     )
