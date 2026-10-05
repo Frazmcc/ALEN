@@ -18,6 +18,7 @@ export type LiveObjectMetadata = {
 
 type SatellitePhoto = {
   image_url?: string;
+  image_path?: string;
   source_url?: string;
   credit?: string;
   license?: string;
@@ -79,6 +80,12 @@ const EMPTY: LiveObjectMetadata = {
 function clean(value: unknown) {
   const text = String(value ?? '').trim();
   return text && text !== 'None' ? text : '';
+}
+
+function alenImageUrl(value: unknown) {
+  const path = clean(value);
+  if (!path.startsWith('/api/v1/')) return undefined;
+  return `${config.apiBaseUrl}${path}`;
 }
 
 function numberRow(
@@ -149,7 +156,7 @@ function satelliteMetadata(info: SatelliteInfo | null): LiveObjectMetadata {
   return {
     loading: false,
     error: null,
-    imageUrl: clean(photo?.image_url) || undefined,
+    imageUrl: alenImageUrl(photo?.image_path),
     imageCredit: creditParts.join(' · ') || undefined,
     description: clean(info.purpose) || undefined,
     rows,
@@ -183,12 +190,7 @@ function aircraftMetadata(
           ? `Destination: ${arrival}`
           : undefined;
 
-  const imagePath = clean(photo?.image_path);
-  const imageUrl = imagePath
-    ? imagePath.startsWith('https://')
-      ? imagePath
-      : `${config.apiBaseUrl}${imagePath}`
-    : undefined;
+  const imageUrl = alenImageUrl(photo?.image_path);
   const creditParts = [
     clean(photo?.artist),
     clean(photo?.license),
@@ -269,17 +271,7 @@ export function useLiveObjectMetadata(
           };
 
           if (active) {
-            const info = payload.satellite ?? null;
-            const next = satelliteMetadata(info);
-            if (info?.photo?.image_url) {
-              const imageQuery = new URLSearchParams({
-                norad: track.norad,
-                name: track.name,
-              });
-              next.imageUrl =
-                `${config.apiBaseUrl}/api/v1/satellite/photo/image?${imageQuery.toString()}`;
-            }
-            setMetadata(next);
+            setMetadata(satelliteMetadata(payload.satellite ?? null));
           }
           return;
         }
