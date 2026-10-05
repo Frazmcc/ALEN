@@ -111,7 +111,7 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert 'radius_nm:String(AIRCRAFT_RADIUS_NM)' in APP
     assert "requestAnimationFrame(tick)" in APP
     assert "API_BASE+\"/api/v1/satellites?\"" in APP
-    assert "SGP4 · CelesTrak orbital elements" in APP
+    assert "SGP4 · shared world-position snapshot" in APP
     assert 'id="aircraft-groups-button"' in HTML
     assert 'id="satellite-groups-button"' in HTML
     assert 'data-satellite-group="starlink" aria-pressed="true"' in HTML
@@ -639,7 +639,7 @@ def test_aircraft_icons_are_type_specific_and_heading_aware() -> None:
 
 def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
-    assert "now + timedelta(seconds=2)" in source
+    assert "sample_at + timedelta(seconds=2)" in source
     assert '"azimuth_deg_next"' in source
     assert '"elevation_deg_next"' in source
     assert '"range_km_next"' in source
@@ -652,7 +652,7 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert "const SATELLITE_POSITION_RESPONSE_MS=850" in APP
     assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
     assert "sat.displayAz=prior?.displayAz??az" in APP
-    assert "sat.displayVec=prior?.displayVec??satelliteSkyVector" in APP
+    assert "sat.displayVec=prior?.displayVec??targetVecNow" in APP
     assert "sat.targetVec=sample0" in APP
     assert "sat.vectorRate=vectorModel.rate" in APP
     assert "sat.vectorAccel=vectorModel.accel" in APP
@@ -711,7 +711,7 @@ def test_satellite_visuals_are_category_specific_and_labels_declutter() -> None:
 
 def test_satellite_motion_uses_curved_short_horizon_model() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
-    assert "now + timedelta(seconds=4)" in source
+    assert "sample_at + timedelta(seconds=4)" in source
     assert '"azimuth_deg_next2"' in source
     assert '"elevation_deg_next2"' in source
     assert '"range_km_next2"' in source
