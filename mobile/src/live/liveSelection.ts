@@ -352,12 +352,10 @@ export function nearestSkySelection(
   x: number,
   y: number,
 ): SkySelection | null {
-  let best:
-    | {
-        selection: SkySelection;
-        score: number;
-      }
-    | null = null;
+  const candidates: Array<{
+    selection: SkySelection;
+    score: number;
+  }> = [];
 
   const consider = (
     selection: SkySelection,
@@ -373,10 +371,10 @@ export function nearestSkySelection(
     const distancePx = Math.hypot(point.x - x, point.y - y);
     if (distancePx > thresholdPx) return;
 
-    const score = distancePx / thresholdPx;
-    if (!best || score < best.score) {
-      best = { selection, score };
-    }
+    candidates.push({
+      selection,
+      score: distancePx / thresholdPx,
+    });
   };
 
   if (context.layers.stars && context.starVisibility > 0.02) {
@@ -419,5 +417,6 @@ export function nearestSkySelection(
     );
   }
 
-  return best?.selection ?? null;
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates[0]?.selection ?? null;
 }
