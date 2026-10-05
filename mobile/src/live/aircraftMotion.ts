@@ -203,7 +203,8 @@ export function aircraftVisualType(raw: RawAircraft): AircraftVisualType {
   const type = String(raw.type ?? '').trim().toUpperCase();
   const category = String(raw.category ?? '').trim().toUpperCase();
 
-  if (isMilitary(raw) || category === 'A6') return 'military';
+  if (isMilitary(raw)) return 'military';
+  if (category === 'A6') return 'jet';
   if (
     category === 'A7' ||
     /^(H1|H2|H3|H4|H5|H6|H7|EC3|EC4|EC5|R22|R44|R66|B06|A109|A119|A139|AS50|S76|S92|UH60|CH47|AH64)/.test(
