@@ -20,6 +20,17 @@ class OrbitRecord:
     satellite: Satrec
 
 
+@dataclass(frozen=True, slots=True)
+class ObserverFrame:
+    x: float
+    y: float
+    z: float
+    sin_lat: float
+    cos_lat: float
+    sin_lon: float
+    cos_lon: float
+
+
 class SatelliteProvider:
     BASE_URL = "https://celestrak.org/NORAD/elements/gp.php"
     FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"
@@ -122,6 +133,7 @@ class SatelliteProvider:
         )
         sample_age_seconds = max(0.0, (now - sample_at).total_seconds())
 
+        observer_frame = _observer_frame(latitude_deg, longitude_deg, altitude_m)
         visible_candidates: list[
             tuple[OrbitRecord, set[str], dict[str, float]]
         ] = []
@@ -133,12 +145,7 @@ class SatelliteProvider:
             if world_position is None:
                 propagation_failures += 1
                 continue
-            position = _topocentric_from_ecef(
-                world_position,
-                latitude_deg,
-                longitude_deg,
-                altitude_m,
-            )
+            position = _topocentric_from_frame(world_position, observer_frame)
             if position is None:
                 propagation_failures += 1
                 continue
@@ -160,17 +167,13 @@ class SatelliteProvider:
 
         visible: list[dict[str, object]] = []
         for record, memberships, position in visible_candidates:
-            future_position = _topocentric_from_ecef(
+            future_position = _topocentric_from_frame(
                 next_world.get(record.norad),
-                latitude_deg,
-                longitude_deg,
-                altitude_m,
+                observer_frame,
             ) or position
-            future_position_2 = _topocentric_from_ecef(
+            future_position_2 = _topocentric_from_frame(
                 next2_world.get(record.norad),
-                latitude_deg,
-                longitude_deg,
-                altitude_m,
+                observer_frame,
             ) or future_position
             visible.append(
                 {
@@ -634,31 +637,45 @@ def _ecef_from_tle(
     )
 
 
-def _topocentric_from_ecef(
-    position_ecef: tuple[float, float, float] | None,
+def _observer_frame(
     latitude_deg: float,
     longitude_deg: float,
     altitude_m: float,
+) -> ObserverFrame:
+    x, y, z = _observer_ecef(latitude_deg, longitude_deg, altitude_m)
+    lat = math.radians(latitude_deg)
+    lon = math.radians(longitude_deg)
+    return ObserverFrame(
+        x=x,
+        y=y,
+        z=z,
+        sin_lat=math.sin(lat),
+        cos_lat=math.cos(lat),
+        sin_lon=math.sin(lon),
+        cos_lon=math.cos(lon),
+    )
+
+
+def _topocentric_from_frame(
+    position_ecef: tuple[float, float, float] | None,
+    frame: ObserverFrame,
 ) -> dict[str, float] | None:
     if position_ecef is None:
         return None
 
     x, y, z = position_ecef
-    ox, oy, oz = _observer_ecef(latitude_deg, longitude_deg, altitude_m)
-    dx, dy, dz = x - ox, y - oy, z - oz
+    dx, dy, dz = x - frame.x, y - frame.y, z - frame.z
 
-    lat = math.radians(latitude_deg)
-    lon = math.radians(longitude_deg)
-    east = -math.sin(lon) * dx + math.cos(lon) * dy
+    east = -frame.sin_lon * dx + frame.cos_lon * dy
     north = (
-        -math.sin(lat) * math.cos(lon) * dx
-        - math.sin(lat) * math.sin(lon) * dy
-        + math.cos(lat) * dz
+        -frame.sin_lat * frame.cos_lon * dx
+        - frame.sin_lat * frame.sin_lon * dy
+        + frame.cos_lat * dz
     )
     up = (
-        math.cos(lat) * math.cos(lon) * dx
-        + math.cos(lat) * math.sin(lon) * dy
-        + math.sin(lat) * dz
+        frame.cos_lat * frame.cos_lon * dx
+        + frame.cos_lat * frame.sin_lon * dy
+        + frame.sin_lat * dz
     )
 
     range_km = math.sqrt(east * east + north * north + up * up)
@@ -674,6 +691,18 @@ def _topocentric_from_ecef(
     }
 
 
+def _topocentric_from_ecef(
+    position_ecef: tuple[float, float, float] | None,
+    latitude_deg: float,
+    longitude_deg: float,
+    altitude_m: float,
+) -> dict[str, float] | None:
+    return _topocentric_from_frame(
+        position_ecef,
+        _observer_frame(latitude_deg, longitude_deg, altitude_m),
+    )
+
+
 def _topocentric_from_tle(
     record: OrbitRecord,
     when: datetime,
@@ -681,11 +710,9 @@ def _topocentric_from_tle(
     longitude_deg: float,
     altitude_m: float,
 ) -> dict[str, float] | None:
-    return _topocentric_from_ecef(
+    return _topocentric_from_frame(
         _ecef_from_tle(record, when),
-        latitude_deg,
-        longitude_deg,
-        altitude_m,
+        _observer_frame(latitude_deg, longitude_deg, altitude_m),
     )
 
 
