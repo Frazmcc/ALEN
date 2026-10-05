@@ -108,7 +108,7 @@ def test_satellite_observer_cache_key_quantizes_only_nearby_positions() -> None:
         17,
     )
     farther = _satellite_observer_cache_key(
-        54.323,
+        54.327,
         -3.21024,
         81,
         ["stations", "visual"],
@@ -117,6 +117,31 @@ def test_satellite_observer_cache_key_quantizes_only_nearby_positions() -> None:
 
     assert first == nearby
     assert first != farther
+
+
+def test_satellite_observer_cache_groups_nearby_load_probe_positions() -> None:
+    from alen.api import (
+        SATELLITE_OBSERVER_ALTITUDE_BUCKET_M,
+        SATELLITE_OBSERVER_CACHE_SECONDS,
+        SATELLITE_OBSERVER_CELL_DEGREES,
+        _satellite_observer_cache_key,
+    )
+
+    keys = {
+        _satellite_observer_cache_key(
+            55.860 + i * 0.001,
+            -4.250 + i * 0.001,
+            0,
+            ["last-30-days", "stations", "visual", "starlink"],
+            320,
+        )
+        for i in range(5)
+    }
+
+    assert SATELLITE_OBSERVER_CACHE_SECONDS == 8
+    assert SATELLITE_OBSERVER_CELL_DEGREES == 0.005
+    assert SATELLITE_OBSERVER_ALTITUDE_BUCKET_M == 100
+    assert len(keys) <= 2
 
 
 def test_satellite_observer_response_is_reused_for_nearby_users(monkeypatch) -> None:

@@ -759,6 +759,7 @@ function logicalSatelliteMemberships(sourceGroups){
  return memberships;
 }
 const SATELLITE_REFRESH_MS=10000;
+const SATELLITE_MAX_SAMPLE_AGE_MS=10000;
 const SATELLITE_GRACE_MS=30000;
 const SATELLITE_POSITION_RESPONSE_MS=420;
 const SATELLITE_MAX_FRAME_DT_MS=250;
@@ -912,7 +913,7 @@ async function refreshSatellites(force=false){
   satelliteDiagnostics=data.diagnostics||null;
   satelliteRequestState="ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
-  const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,3000);
+  const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,SATELLITE_MAX_SAMPLE_AGE_MS);
   for(const raw of (Array.isArray(data.satellites)?data.satellites:[])){
    const norad=String(raw.norad||"").trim();
    if(!norad||seenNorad.has(norad))continue;
