@@ -5,6 +5,7 @@ import {
   Circle,
   Fill,
   LinearGradient,
+  Path,
   Rect,
   vec,
 } from '@shopify/react-native-skia';
@@ -16,6 +17,7 @@ import {
 } from '@/sky/projection';
 import { clamp } from '@/sky/astronomy';
 import { colors } from '@/theme/colors';
+import { CONSTELLATION_LINES } from '@/sky/constellations';
 
 export type RenderedStar = Star & {
   az: number;
@@ -27,6 +29,9 @@ type Props = {
   planets: PlanetPosition[];
   viewport: Viewport;
   starVisibility: number;
+  showStars: boolean;
+  showConstellations: boolean;
+  showPlanets: boolean;
   targetKind?: string;
   targetId?: string;
   horizonY: number;
@@ -42,6 +47,9 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
   planets,
   viewport,
   starVisibility,
+  showStars,
+  showConstellations,
+  showPlanets,
   targetKind,
   targetId,
   horizonY,
@@ -50,7 +58,7 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
   const projectedStars = useMemo(
     () =>
       stars.flatMap((star) => {
-        if (star.el < 0 || starVisibility <= 0.02) return [];
+        if (!showStars || star.el < 0 || starVisibility <= 0.02) return [];
 
         const point = projectAltAz(star.az, star.el, viewport);
         if (!point) return [];
@@ -72,13 +80,51 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
           },
         ];
       }),
-    [starVisibility, stars, targetId, targetKind, viewport],
+    [showStars, starVisibility, stars, targetId, targetKind, viewport],
   );
+
+  const projectedConstellations = useMemo(() => {
+    if (!showConstellations || starVisibility <= 0.02) return [];
+
+    const byId = new Map(stars.map((star) => [star.id, star]));
+
+    return CONSTELLATION_LINES.flatMap((chain, index) => {
+      const commands: string[] = [];
+      let penDown = false;
+      let segmentCount = 0;
+
+      for (const id of chain) {
+        const star = byId.get(id);
+        if (!star || star.el < 0) {
+          penDown = false;
+          continue;
+        }
+
+        const point = projectAltAz(star.az, star.el, viewport);
+        if (!point) {
+          penDown = false;
+          continue;
+        }
+
+        if (penDown) {
+          commands.push(`L ${point.x} ${point.y}`);
+          segmentCount += 1;
+        } else {
+          commands.push(`M ${point.x} ${point.y}`);
+          penDown = true;
+        }
+      }
+
+      return segmentCount > 0
+        ? [{ id: `constellation-${index}`, path: commands.join(' ') }]
+        : [];
+    });
+  }, [showConstellations, starVisibility, stars, viewport]);
 
   const projectedPlanets = useMemo(
     () =>
       planets.flatMap((planet) => {
-        if (planet.el < 0) return [];
+        if (!showPlanets || planet.el < 0) return [];
 
         const point = projectAltAz(
           planet.az,
@@ -101,7 +147,7 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
           },
         ];
       }),
-    [planets, targetId, targetKind, viewport],
+    [planets, showPlanets, targetId, targetKind, viewport],
   );
 
   return (
@@ -119,6 +165,17 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
             positions={[0, 0.58, 1]}
           />
         </Fill>
+
+        {projectedConstellations.map((constellation) => (
+          <Path
+            key={constellation.id}
+            path={constellation.path}
+            color="#73a0be"
+            opacity={clamp(starVisibility * 0.42, 0, 0.34)}
+            style="stroke"
+            strokeWidth={0.9}
+          />
+        ))}
 
         {projectedStars.map((star) => (
           <Circle
