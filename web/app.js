@@ -812,7 +812,7 @@ function satelliteTrajectorySample(points,elapsedMs){
  }else{
   for(let i=1;i<points.length;i++)if(tMs<=points[i].timeMs){a=points[i-1];b=points[i];break}
  }
- const span=Math.max(1,b.timeMs-a.timeMs),t=clamp((tMs-a.timeMs)/span,0,tMs>b.timeMs?2.5:1);
+ const span=Math.max(1,b.timeMs-a.timeMs),t=clamp((tMs-a.timeMs)/span,0,tMs>b.timeMs?10:1);
  const vec=satelliteSlerp(a.vec,b.vec,t),altaz=satelliteVectorToAltAz(vec);
  return{vec,az:altaz.az,el:altaz.el,rangeKm:Math.max(0,a.rangeKm+(b.rangeKm-a.rangeKm)*t)};
 }
