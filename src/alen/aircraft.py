@@ -32,7 +32,6 @@ class AircraftProvider:
         radius_nm: float = 43.4488,
         limit: int = 450,
     ) -> list[dict[str, object]]:
-        cell_lat, cell_lon = self._cell_center(latitude_deg, longitude_deg)
         radius_bucket = max(
             self.RADIUS_BUCKET_NM,
             min(
@@ -40,7 +39,15 @@ class AircraftProvider:
                 int(math.ceil(radius_nm / self.RADIUS_BUCKET_NM) * self.RADIUS_BUCKET_NM),
             ),
         )
-        upstream_radius_nm = min(250, radius_bucket + self.CELL_PADDING_NM)
+        if radius_bucket + self.CELL_PADDING_NM <= 250:
+            cell_lat, cell_lon = self._cell_center(latitude_deg, longitude_deg)
+            upstream_radius_nm = radius_bucket + self.CELL_PADDING_NM
+        else:
+            # Large-radius API callers need the full provider radius, so there
+            # is no spare radius for geographic-cell padding.
+            cell_lat = round(latitude_deg, 4)
+            cell_lon = round(longitude_deg, 4)
+            upstream_radius_nm = radius_bucket
         cache_key = (
             f"aircraft:{cell_lat:+06.2f}:{cell_lon:+07.2f}:r{upstream_radius_nm}"
         )
