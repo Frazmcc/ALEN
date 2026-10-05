@@ -39,7 +39,7 @@ _satellites = SatelliteProvider()
 _satellite_info = SatelliteInfoProvider()
 _logger = logging.getLogger("alen.satellites")
 
-SATELLITE_OBSERVER_CACHE_SECONDS = 2
+SATELLITE_OBSERVER_CACHE_SECONDS = 1
 SATELLITE_OBSERVER_COORD_DECIMALS = 3
 SATELLITE_OBSERVER_ALTITUDE_BUCKET_M = 25
 
