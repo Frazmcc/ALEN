@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { colors } from '@/theme/colors';
-import { BRIGHT_STARS, MOBILE_RENDER_STARS } from '@/sky/catalog';
+import { BRIGHT_STARS } from '@/sky/catalog';
 import {
   clamp,
   currentPlanetPositions,
@@ -99,23 +99,19 @@ export default function SkyScreen() {
     [targetId, targetKind],
   );
 
-  const stars = useMemo(() => {
-    const catalog =
-      targetStar &&
-      !MOBILE_RENDER_STARS.some((star) => star.id === targetStar.id)
-        ? [...MOBILE_RENDER_STARS, targetStar]
-        : MOBILE_RENDER_STARS;
-
-    return catalog.map((star) => ({
-      ...star,
-      ...raDecToAltAz(
-        star.ra,
-        star.dec,
-        now,
-        observer,
-      ),
-    }));
-  }, [now, observer, targetStar]);
+  const stars = useMemo(
+    () =>
+      BRIGHT_STARS.map((star) => ({
+        ...star,
+        ...raDecToAltAz(
+          star.ra,
+          star.dec,
+          now,
+          observer,
+        ),
+      })),
+    [now, observer],
+  );
 
   useEffect(() => {
     if (restoring || phoneAimActive || !targetId || !targetKind) return;
