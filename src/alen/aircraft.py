@@ -17,7 +17,7 @@ class AircraftProvider:
     CELL_PADDING_NM = 50
     RADIUS_BUCKET_NM = 25
     CACHE_FRESH_SECONDS = 1.0
-    CACHE_STALE_SECONDS = 20.0
+    CACHE_STALE_SECONDS = 60.0
     REFRESH_LOCK_SECONDS = 8
 
     def __init__(self, cache: SharedCache | None = None) -> None:
