@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import {
   PanResponder,
   Pressable,
@@ -8,7 +9,7 @@ import {
 } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { colors } from '@/theme/colors';
-import { MOBILE_RENDER_STARS } from '@/sky/catalog';
+import { BRIGHT_STARS, MOBILE_RENDER_STARS } from '@/sky/catalog';
 import {
   clamp,
   currentPlanetPositions,
@@ -27,11 +28,16 @@ type Size = {
 };
 
 export default function SkyScreen() {
+  const { targetKind, targetId } = useLocalSearchParams<{
+    targetKind?: string;
+    targetId?: string;
+  }>();
   const [now, setNow] = useState(Date.now());
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [yaw, setYaw] = useState(180);
   const [pitch, setPitch] = useState(28);
   const gestureStart = useRef({ yaw: 180, pitch: 28 });
+  const appliedTarget = useRef<string | null>(null);
   const {
     observer,
     source,
@@ -82,19 +88,78 @@ export default function SkyScreen() {
   const sun = planets.find((planet) => planet.id === 'sun');
   const palette = skyPalette(sun?.el ?? -18);
 
-  const stars = useMemo(
+  const targetStar = useMemo(
     () =>
-      MOBILE_RENDER_STARS.map((star) => ({
-        ...star,
-        ...raDecToAltAz(
-          star.ra,
-          star.dec,
-          now,
-          observer,
-        ),
-      })),
-    [now, observer],
+      targetKind === 'star' && targetId
+        ? BRIGHT_STARS.find((star) => star.id === targetId) ?? null
+        : null,
+    [targetId, targetKind],
   );
+
+  const stars = useMemo(() => {
+    const catalog =
+      targetStar &&
+      !MOBILE_RENDER_STARS.some((star) => star.id === targetStar.id)
+        ? [...MOBILE_RENDER_STARS, targetStar]
+        : MOBILE_RENDER_STARS;
+
+    return catalog.map((star) => ({
+      ...star,
+      ...raDecToAltAz(
+        star.ra,
+        star.dec,
+        now,
+        observer,
+      ),
+    }));
+  }, [now, observer, targetStar]);
+
+  useEffect(() => {
+    if (restoring || phoneAimActive || !targetId || !targetKind) return;
+
+    const key = `${targetKind}:${targetId}`;
+    if (appliedTarget.current === key) return;
+
+    if (targetKind === 'star') {
+      const star = BRIGHT_STARS.find((item) => item.id === targetId);
+      if (!star) {
+        appliedTarget.current = key;
+        return;
+      }
+
+      const horizontal = raDecToAltAz(
+        star.ra,
+        star.dec,
+        now,
+        observer,
+      );
+
+      if (horizontal.el >= 0) {
+        setYaw(horizontal.az);
+        setPitch(clamp(horizontal.el, 0, 84));
+      }
+
+      appliedTarget.current = key;
+      return;
+    }
+
+    if (targetKind === 'planet') {
+      const planet = planets.find((item) => item.id === targetId);
+      if (planet && planet.el >= 0) {
+        setYaw(planet.az);
+        setPitch(clamp(planet.el, 0, 84));
+      }
+      appliedTarget.current = key;
+    }
+  }, [
+    now,
+    observer,
+    phoneAimActive,
+    planets,
+    restoring,
+    targetId,
+    targetKind,
+  ]);
 
   const viewport = {
     ...size,
@@ -177,8 +242,12 @@ export default function SkyScreen() {
             const point = projectAltAz(star.az, star.el, viewport);
             if (!point || palette.stars <= 0.02) return null;
 
-            const dotSize = clamp(4.5 - star.mag, 1.5, 5.5);
-            const showLabel = star.mag <= 0.15;
+            const isTarget =
+              targetKind === 'star' && targetId === star.id;
+            const dotSize = isTarget
+              ? 9
+              : clamp(4.5 - star.mag, 1.5, 5.5);
+            const showLabel = isTarget || star.mag <= 0.15;
 
             return (
               <View
@@ -199,6 +268,8 @@ export default function SkyScreen() {
                     height: dotSize,
                     borderRadius: dotSize / 2,
                     backgroundColor: star.color,
+                    borderWidth: isTarget ? 2 : 0,
+                    borderColor: isTarget ? colors.accent : 'transparent',
                   }}
                 />
                 {showLabel ? (
