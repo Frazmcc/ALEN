@@ -27,7 +27,7 @@ let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
 const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,airports:true,aircraft:true,satellites:true};
 const MULTISTATE_LAYERS=new Set(["stars","planets","airports","aircraft","satellites"]);
-const layerPhases={stars:0,planets:0,airports:0,aircraft:0,satellites:1};
+const layerPhases={stars:0,planets:0,airports:0,aircraft:0,satellites:0};
 const AIRCRAFT_GROUPS={
  commercial:{label:"Commercial",enabled:true,labels:true,phase:0},
  military:{label:"Military",enabled:true,labels:true,phase:0},
