@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Modal,
   PanResponder,
   Pressable,
   Text,
+  TextInput,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -30,13 +32,21 @@ export default function SkyScreen() {
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [yaw, setYaw] = useState(180);
   const [pitch, setPitch] = useState(28);
+  const [manualLocationOpen, setManualLocationOpen] = useState(false);
+  const [manualLabel, setManualLabel] = useState('');
+  const [manualLat, setManualLat] = useState('');
+  const [manualLon, setManualLon] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
   const gestureStart = useRef({ yaw: 180, pitch: 28 });
   const {
     observer,
     source,
+    label: observerLabel,
     requesting,
+    restoring,
     error: locationError,
     useCurrentLocation,
+    useManualLocation,
     useDemoLocation,
   } = useObserverLocation();
   const {
@@ -131,6 +141,39 @@ export default function SkyScreen() {
       }),
     [phoneAimActive, pitch, yaw],
   );
+
+  function openManualLocation() {
+    setManualLabel(source === 'manual' ? observerLabel : '');
+    setManualLat(observer.lat.toFixed(6));
+    setManualLon(observer.lon.toFixed(6));
+    setManualError(null);
+    setManualLocationOpen(true);
+  }
+
+  async function saveManualLocation() {
+    const lat = Number(manualLat.trim().replace(',', '.'));
+    const lon = Number(manualLon.trim().replace(',', '.'));
+
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180
+    ) {
+      setManualError(
+        'Latitude must be between -90 and 90 and longitude between -180 and 180.',
+      );
+      return;
+    }
+
+    const saved = await useManualLocation(lat, lon, manualLabel);
+    if (saved) {
+      setManualError(null);
+      setManualLocationOpen(false);
+    }
+  }
 
   function onLayout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
@@ -350,11 +393,11 @@ export default function SkyScreen() {
                   fontWeight: '700',
                 }}
               >
-                {requesting
-                  ? 'Finding location…'
-                  : source === 'device'
-                    ? 'Current location'
-                    : 'Demo observer'}
+                {restoring
+                  ? 'Restoring location…'
+                  : requesting
+                    ? 'Finding location…'
+                    : observerLabel}
               </Text>
               <Text
                 style={{
@@ -365,11 +408,32 @@ export default function SkyScreen() {
               >
                 {source === 'device'
                   ? 'Foreground location only'
-                  : 'Tap to use your location'}
+                  : source === 'manual'
+                    ? 'Saved on this device'
+                    : 'Tap to use your location'}
               </Text>
             </Pressable>
 
-            {source === 'device' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={openManualLocation}
+              style={{
+                minHeight: 32,
+                justifyContent: 'center',
+                paddingHorizontal: 10,
+                borderRadius: 12,
+                backgroundColor: 'rgba(9,18,33,0.88)',
+                borderWidth: 1,
+                borderColor:
+                  source === 'manual' ? colors.accent : colors.border,
+              }}
+            >
+              <Text style={{ color: colors.muted, fontSize: 10 }}>
+                Set manual location
+              </Text>
+            </Pressable>
+
+            {source !== 'demo' ? (
               <Pressable
                 accessibilityRole="button"
                 onPress={useDemoLocation}
@@ -384,7 +448,7 @@ export default function SkyScreen() {
                 }}
               >
                 <Text style={{ color: colors.muted, fontSize: 10 }}>
-                  Use demo location
+                  Use Greenwich demo
                 </Text>
               </Pressable>
             ) : null}
@@ -473,6 +537,173 @@ export default function SkyScreen() {
             {phoneAimActive ? 'Tap for manual view' : 'Compass + motion'}
           </Text>
         </Pressable>
+        <Modal
+          visible={manualLocationOpen}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setManualLocationOpen(false)}
+        >
+          <View
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+              padding: 24,
+              backgroundColor: 'rgba(0,0,0,0.72)',
+            }}
+          >
+            <View
+              style={{
+                borderRadius: 22,
+                padding: 20,
+                backgroundColor: colors.panel,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 22,
+                  fontWeight: '700',
+                }}
+              >
+                Manual observer location
+              </Text>
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 13,
+                  lineHeight: 19,
+                  marginTop: 6,
+                  marginBottom: 18,
+                }}
+              >
+                Enter coordinates for anywhere on Earth. ALEN stores this choice
+                only on this device and calculates the sky for that location.
+              </Text>
+
+              <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 6 }}>
+                Name (optional)
+              </Text>
+              <TextInput
+                value={manualLabel}
+                onChangeText={setManualLabel}
+                placeholder="e.g. Mauna Kea"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="words"
+                style={{
+                  minHeight: 46,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  paddingHorizontal: 12,
+                  marginBottom: 12,
+                }}
+              />
+
+              <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 6 }}>
+                Latitude
+              </Text>
+              <TextInput
+                value={manualLat}
+                onChangeText={setManualLat}
+                placeholder="51.5074"
+                placeholderTextColor={colors.muted}
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{
+                  minHeight: 46,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  paddingHorizontal: 12,
+                  marginBottom: 12,
+                }}
+              />
+
+              <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 6 }}>
+                Longitude
+              </Text>
+              <TextInput
+                value={manualLon}
+                onChangeText={setManualLon}
+                placeholder="-0.1278"
+                placeholderTextColor={colors.muted}
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{
+                  minHeight: 46,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  paddingHorizontal: 12,
+                }}
+              />
+
+              {manualError ? (
+                <Text
+                  style={{
+                    color: colors.warning,
+                    fontSize: 11,
+                    lineHeight: 16,
+                    marginTop: 10,
+                  }}
+                >
+                  {manualError}
+                </Text>
+              ) : null}
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  gap: 10,
+                  justifyContent: 'flex-end',
+                  marginTop: 18,
+                }}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setManualLocationOpen(false)}
+                  style={{
+                    minHeight: 44,
+                    justifyContent: 'center',
+                    paddingHorizontal: 16,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>
+                    Cancel
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={saveManualLocation}
+                  style={{
+                    minHeight: 44,
+                    justifyContent: 'center',
+                    paddingHorizontal: 18,
+                    borderRadius: 12,
+                    backgroundColor: colors.accent,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>
+                    Use location
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </AppScreen>
   );
