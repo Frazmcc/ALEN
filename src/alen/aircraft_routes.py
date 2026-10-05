@@ -1,28 +1,58 @@
 from __future__ import annotations
 
 import re
-import time
 
 import httpx
+
+from .cache import SharedCache, shared_cache
 
 
 class AircraftRouteProvider:
     BASE_URL = "https://vrs-standing-data.adsb.lol/routes"
-    CACHE_TTL_SECONDS = 3600
+    CACHE_TTL_SECONDS = 21600
+    REFRESH_LOCK_SECONDS = 8
 
-    def __init__(self) -> None:
-        self._cache: dict[str, tuple[float, dict[str, object] | None]] = {}
+    def __init__(self, cache: SharedCache | None = None) -> None:
+        self._cache = cache or shared_cache
 
     def lookup(self, callsign: str) -> dict[str, object] | None:
         normalized = re.sub(r"[^A-Z0-9]", "", callsign.upper())
         if len(normalized) < 3:
             return None
 
-        now = time.monotonic()
-        cached = self._cache.get(normalized)
-        if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
-            return cached[1]
+        key = f"aircraft-route:{normalized}"
+        cached = self._cache.get_json(key)
+        if isinstance(cached, dict) and "found" in cached:
+            value = cached.get("value")
+            return value if isinstance(value, dict) else None
 
+        token = self._cache.acquire_lock(key, ttl_seconds=self.REFRESH_LOCK_SECONDS)
+        if token is None:
+            # Another user is already fetching this callsign. Give that request
+            # a brief chance to populate the shared cache rather than duplicating
+            # the upstream lookup.
+            import time
+
+            for _ in range(10):
+                time.sleep(0.05)
+                cached = self._cache.get_json(key)
+                if isinstance(cached, dict) and "found" in cached:
+                    value = cached.get("value")
+                    return value if isinstance(value, dict) else None
+            return None
+
+        try:
+            result = self._fetch(normalized)
+            self._cache.set_json(
+                key,
+                {"found": result is not None, "value": result},
+                ttl_seconds=self.CACHE_TTL_SECONDS,
+            )
+            return result
+        finally:
+            self._cache.release_lock(key, token)
+
+    def _fetch(self, normalized: str) -> dict[str, object] | None:
         url = f"{self.BASE_URL}/{normalized[:2]}/{normalized}.json"
         try:
             with httpx.Client(
@@ -32,16 +62,12 @@ class AircraftRouteProvider:
             ) as client:
                 response = client.get(url)
                 if response.status_code == 404:
-                    result = None
-                else:
-                    response.raise_for_status()
-                    payload = response.json()
-                    result = self._parse(payload)
+                    return None
+                response.raise_for_status()
+                payload = response.json()
         except (httpx.HTTPError, ValueError):
-            result = None
-
-        self._cache[normalized] = (now, result)
-        return result
+            return None
+        return self._parse(payload)
 
     @staticmethod
     def _parse(payload: object) -> dict[str, object] | None:
