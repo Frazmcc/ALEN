@@ -9,6 +9,7 @@ def test_health() -> None:
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["name"] == "ALEN"
+    assert payload["cache"] in {"local", "redis"}
 
 
 def test_nearby_airports_endpoint(monkeypatch) -> None:
