@@ -64,12 +64,6 @@ class AircraftPhotoProvider:
                 exact_token=reg,
                 match="registration",
             )
-        if photo is None and type_name and type_name not in {"AIRCRAFT", "—"}:
-            for query in _type_search_queries(type_name):
-                photo = self._search_commons(query, exact_token="", match="type")
-                if photo is not None:
-                    break
-
         if photo is not None and not photo.planespotters_url:
             gallery = (
                 f"https://www.planespotters.net/photos/reg/{quote(reg, safe='')}"
