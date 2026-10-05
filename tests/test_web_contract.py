@@ -159,7 +159,7 @@ def test_satellite_group_controls_and_visual_categories() -> None:
     assert 'satellitePrimaryGroup' in APP
     assert 'group.enabled=phaseEnabled(group.phase)' in APP
     assert "const depth=drawSatellitePoint(s,active,dayMode)" in APP
-    assert "drawSatelliteIcon(visualType,satSize,s.color" in APP
+    assert "drawSatelliteIcon" not in APP
     assert '["Category",o.groupLabel||"Satellite"]' in APP
     assert '["New launch",o.isNew?"Yes · ≤30 days":"No"]' in APP
     assert '["Debris",o.isDebris?"Yes":"No"]' in APP
