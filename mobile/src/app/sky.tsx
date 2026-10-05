@@ -22,6 +22,10 @@ import { useObserverLocation } from '@/location/useObserverLocation';
 import { useDevicePointing } from '@/orientation/useDevicePointing';
 import { LocationControl } from '@/components/LocationControl';
 import { SkyObjectCanvas } from '@/components/SkyObjectCanvas';
+import {
+  SkyLayersControl,
+  type SkyLayers,
+} from '@/components/SkyLayersControl';
 
 type Size = {
   width: number;
@@ -38,6 +42,14 @@ export default function SkyScreen() {
   const [yaw, setYaw] = useState(180);
   const [pitch, setPitch] = useState(28);
   const [fov, setFov] = useState(105);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [layers, setLayers] = useState<SkyLayers>({
+    stars: true,
+    constellations: true,
+    planets: true,
+    atmosphere: true,
+    landscape: true,
+  });
   const gestureStart = useRef({ yaw: 180, pitch: 28, fov: 105 });
   const pinchStartDistance = useRef<number | null>(null);
   const appliedTarget = useRef<string | null>(null);
@@ -245,6 +257,13 @@ export default function SkyScreen() {
     setSize({ width, height });
   }
 
+  function toggleLayer(layer: keyof SkyLayers) {
+    setLayers((current) => ({
+      ...current,
+      [layer]: !current[layer],
+    }));
+  }
+
   return (
     <AppScreen>
       <View
@@ -257,6 +276,11 @@ export default function SkyScreen() {
           planets={planets}
           viewport={viewport}
           starVisibility={palette.stars}
+          showStars={layers.stars}
+          showConstellations={layers.constellations}
+          showPlanets={layers.planets}
+          showAtmosphere={layers.atmosphere}
+          showLandscape={layers.landscape}
           targetKind={targetKind}
           targetId={targetId}
           horizonY={horizonY}
@@ -267,7 +291,7 @@ export default function SkyScreen() {
           }}
         />
 
-        {stars
+        {layers.stars ? stars
           .filter(
             (star) =>
               star.el >= 0 &&
@@ -298,9 +322,9 @@ export default function SkyScreen() {
                 {star.name}
               </Text>
             );
-          })}
+          }) : null}
 
-        {planets
+        {layers.planets ? planets
           .filter((planet) => planet.el >= 0)
           .map((planet) => {
             const point = projectAltAz(
@@ -330,7 +354,7 @@ export default function SkyScreen() {
                 {planet.name}
               </Text>
             );
-          })}
+          }) : null}
 
         <View
           style={{
@@ -379,6 +403,13 @@ export default function SkyScreen() {
             onUseDemo={useDemoLocation}
           />
         </View>
+
+        <SkyLayersControl
+          open={layersOpen}
+          layers={layers}
+          onToggleOpen={() => setLayersOpen((open) => !open)}
+          onToggleLayer={toggleLayer}
+        />
 
         {phoneAimError ? (
           <View
