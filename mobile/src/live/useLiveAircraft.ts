@@ -1,0 +1,221 @@
+import {
+  AppState,
+  type AppStateStatus,
+} from 'react-native';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { config } from '@/config';
+import type { Observer } from '@/sky/astronomy';
+import {
+  aircraftColor,
+  aircraftVisualType,
+  measuredAircraftPosition,
+  predictAircraft,
+  type AircraftTrack,
+  type RawAircraft,
+} from '@/live/aircraftMotion';
+
+const REFRESH_MS = 2500;
+const GRACE_MS = 60_000;
+const RADIUS_NM = 43.4488;
+
+export type AircraftFeedStatus =
+  | 'off'
+  | 'loading'
+  | 'live'
+  | 'stale'
+  | 'error';
+
+type AircraftResponse = {
+  aircraft?: RawAircraft[];
+  diagnostics?: {
+    cache_age_seconds?: number;
+    returned?: number;
+    [key: string]: unknown;
+  };
+};
+
+export function useLiveAircraft(
+  observer: Observer,
+  enabled: boolean,
+) {
+  const [tracks, setTracks] = useState<AircraftTrack[]>([]);
+  const [status, setStatus] =
+    useState<AircraftFeedStatus>(enabled ? 'loading' : 'off');
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const tracksRef = useRef<AircraftTrack[]>([]);
+
+  useEffect(() => {
+    tracksRef.current = tracks;
+  }, [tracks]);
+
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    if (!tracksRef.current.length) setStatus('loading');
+    setError(null);
+
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 8000);
+
+    try {
+      const query = [
+        `lat=${encodeURIComponent(String(observer.lat))}`,
+        `lon=${encodeURIComponent(String(observer.lon))}`,
+        `radius_nm=${RADIUS_NM}`,
+        'limit=450',
+      ].join('&');
+
+      const response = await fetch(
+        `${config.apiBaseUrl}/api/v1/aircraft?${query}`,
+        {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`aircraft feed ${response.status}`);
+      }
+
+      const payload = (await response.json()) as AircraftResponse;
+      const receivedAtMs = Date.now();
+      const previous = new Map(
+        tracksRef.current.map((track) => [track.id, track] as const),
+      );
+      const next = new Map<string, AircraftTrack>();
+
+      for (const raw of Array.isArray(payload.aircraft)
+        ? payload.aircraft
+        : []) {
+        const lat = Number(raw.lat);
+        const lon = Number(raw.lon);
+        const id = String(
+          raw.hex ?? raw.flight ?? raw.registration ?? '',
+        ).trim();
+
+        if (
+          !id ||
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lon)
+        ) {
+          continue;
+        }
+
+        const measured = measuredAircraftPosition(raw);
+        const prior = previous.get(id);
+        const display = prior
+          ? predictAircraft(prior, receivedAtMs)
+          : measured;
+
+        next.set(id, {
+          id,
+          name:
+            String(
+              raw.flight ?? raw.registration ?? raw.hex ?? 'Aircraft',
+            ).trim() || 'Aircraft',
+          callsign: String(raw.flight ?? '').trim(),
+          operator: String(raw.operator ?? '').trim(),
+          registration: String(raw.registration ?? '').trim(),
+          type: String(raw.type ?? 'Aircraft').trim(),
+          category: String(raw.category ?? '').trim().toUpperCase(),
+          squawk: String(raw.squawk ?? '').trim(),
+          dbFlags: Number(raw.db_flags) || 0,
+          visualType: aircraftVisualType(raw),
+          color: aircraftColor(raw),
+          receivedAtMs,
+          lastSeenAtMs: receivedAtMs,
+          startLat: display.lat,
+          startLon: display.lon,
+          startAltM: display.altM,
+          startGs: display.gs,
+          startTrack: display.track,
+          targetLat: measured.lat,
+          targetLon: measured.lon,
+          targetAltM: measured.altM,
+          targetGs: measured.gs,
+          targetTrack: measured.track,
+        });
+      }
+
+      for (const [id, prior] of previous) {
+        if (next.has(id)) continue;
+        if (receivedAtMs - prior.lastSeenAtMs <= GRACE_MS) {
+          next.set(id, prior);
+        }
+      }
+
+      const values = [...next.values()];
+      tracksRef.current = values;
+      setTracks(values);
+      setStatus('live');
+    } catch (caught) {
+      if (controller.signal.aborted && !timedOut) return;
+
+      const message = timedOut
+        ? 'Aircraft feed timed out'
+        : caught instanceof Error
+          ? caught.message
+          : 'Aircraft feed unavailable';
+
+      setError(message);
+      setStatus(tracksRef.current.length ? 'stale' : 'error');
+    } finally {
+      clearTimeout(timeout);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    }
+  }, [enabled, observer.lat, observer.lon]);
+
+  useEffect(() => {
+    if (!enabled) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      tracksRef.current = [];
+      setTracks([]);
+      setStatus('off');
+      setError(null);
+      return;
+    }
+
+    void refresh();
+    const interval = setInterval(() => {
+      if (AppState.currentState === 'active') void refresh();
+    }, REFRESH_MS);
+
+    const subscription = AppState.addEventListener(
+      'change',
+      (nextState: AppStateStatus) => {
+        if (nextState === 'active') void refresh();
+      },
+    );
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, [enabled, refresh]);
+
+  return {
+    tracks,
+    status,
+    error,
+    refresh,
+  };
+}
