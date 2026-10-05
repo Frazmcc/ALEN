@@ -8,8 +8,9 @@ Update this file whenever a feature changes what data is collected, processed, s
 
 | Data category | Used | Stored by ALEN | Sent to ALEN backend | Shared with third parties | Purpose | Retention |
 |---|---|---|---|---|---|---|
-| Precise device location | Optional | No | No | No | Calculate the observer's sky locally | Current app session/state only |
-| Approximate device location | Optional | No | No | No | Same foreground sky calculation | Current app session/state only |
+| Precise device location | Optional | No | No | No | Calculate the observer's sky locally | Current foreground session only |
+| Approximate device location | Optional | No | No | No | Same foreground sky calculation | Current foreground session only |
+| Manual observer coordinates | Optional | Yes, on device only | No | No | Reopen the sky at a user-selected location | Until the user changes/clears the observer preference |
 | Account data | No | No | No | No | N/A | N/A |
 | Advertising ID | No | No | No | No | N/A | N/A |
 | Contacts | No | No | No | No | N/A | N/A |
@@ -28,6 +29,8 @@ Update this file whenever a feature changes what data is collected, processed, s
 - No location foreground service is enabled on Android.
 - If permission is denied, the application remains usable with the demo/manual-location path.
 - The current native astronomy implementation performs star and planet calculations on-device and does not transmit device coordinates to the ALEN API.
+- GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
+- Manual coordinates may be persisted locally because they are explicitly entered as an observer location; they are not transmitted to ALEN services.
 
 ## Motion/orientation rules
 
