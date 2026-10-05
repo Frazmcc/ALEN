@@ -91,14 +91,6 @@ export default function SkyScreen() {
   const sun = planets.find((planet) => planet.id === 'sun');
   const palette = skyPalette(sun?.el ?? -18);
 
-  const targetStar = useMemo(
-    () =>
-      targetKind === 'star' && targetId
-        ? BRIGHT_STARS.find((star) => star.id === targetId) ?? null
-        : null,
-    [targetId, targetKind],
-  );
-
   const stars = useMemo(
     () =>
       BRIGHT_STARS.map((star) => ({
