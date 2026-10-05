@@ -45,6 +45,8 @@ Update this file whenever a feature changes what data is collected, processed, s
 - Motion access is requested only when the user enables Aim with phone.
 - Motion and compass readings are processed locally on-device.
 - Sensor readings are not stored by ALEN and are not sent to the ALEN API.
+- Known-object phone-aim calibration creates only in-memory heading/elevation correction offsets for the current app session; those offsets are not persisted and are not sent to the ALEN API.
+- Calibration is limited to selected stars, the Moon and planets above 10° altitude; the Sun, satellites and aircraft are not accepted as calibration targets.
 - Turning Aim with phone off removes the active sensor subscriptions.
 - Manual drag remains available if motion access is denied or unavailable.
 - Sensor sampling is intentionally below Android's high-sampling-rate permission threshold.

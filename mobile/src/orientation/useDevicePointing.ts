@@ -15,10 +15,17 @@ type PointingStatus =
   | 'unavailable'
   | 'error';
 
+function signedAngle(value: number) {
+  return ((value + 540) % 360) - 180;
+}
+
+function angleDelta(target: number, current: number) {
+  return signedAngle(target - current);
+}
+
 function smoothAngle(previous: number | null, next: number, amount: number) {
   if (previous === null) return norm360(next);
-  const delta = ((next - previous + 540) % 360) - 180;
-  return norm360(previous + delta * amount);
+  return norm360(previous + angleDelta(next, previous) * amount);
 }
 
 function smoothLinear(previous: number | null, next: number, amount: number) {
@@ -78,6 +85,7 @@ export function useDevicePointing() {
   const [screenOrientation, setScreenOrientation] = useState(
     ScreenOrientation.Orientation.UNKNOWN,
   );
+  const [calibrated, setCalibrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const motionSubscription = useRef<ReturnType<
@@ -92,6 +100,8 @@ export function useDevicePointing() {
   const orientationRef = useRef(ScreenOrientation.Orientation.UNKNOWN);
   const smoothedHeading = useRef<number | null>(null);
   const smoothedElevation = useRef<number | null>(null);
+  const headingCalibrationOffset = useRef(0);
+  const elevationCalibrationOffset = useRef(0);
   const generation = useRef(0);
 
   const stop = useCallback(() => {
@@ -113,6 +123,51 @@ export function useDevicePointing() {
     setScreenOrientation(ScreenOrientation.Orientation.UNKNOWN);
     setError(null);
   }, []);
+
+  const resetCalibration = useCallback(() => {
+    headingCalibrationOffset.current = 0;
+    elevationCalibrationOffset.current = 0;
+    smoothedHeading.current = null;
+    smoothedElevation.current = null;
+    setCalibrated(false);
+  }, []);
+
+  const calibrateTo = useCallback(
+    (targetHeading: number, targetElevation: number) => {
+      if (
+        status !== 'active' ||
+        heading === null ||
+        elevation === null ||
+        !Number.isFinite(targetHeading) ||
+        !Number.isFinite(targetElevation)
+      ) {
+        return false;
+      }
+
+      const targetAz = norm360(targetHeading);
+      const targetEl = clamp(targetElevation, -90, 90);
+
+      headingCalibrationOffset.current = signedAngle(
+        headingCalibrationOffset.current +
+          angleDelta(targetAz, heading),
+      );
+      elevationCalibrationOffset.current = clamp(
+        elevationCalibrationOffset.current +
+          (targetEl - elevation),
+        -45,
+        45,
+      );
+
+      smoothedHeading.current = targetAz;
+      smoothedElevation.current = targetEl;
+      setHeading(targetAz);
+      setElevation(targetEl);
+      setCalibrated(true);
+      setError(null);
+      return true;
+    },
+    [elevation, heading, status],
+  );
 
   const start = useCallback(async () => {
     if (status === 'starting' || status === 'active') return;
@@ -172,8 +227,14 @@ export function useDevicePointing() {
 
       motionSubscription.current = DeviceMotion.addListener((measurement) => {
         const gravity = measurement.accelerationIncludingGravity;
-        const nextElevation = cameraElevationFromGravity(gravity);
-        if (nextElevation === null) return;
+        const rawElevation = cameraElevationFromGravity(gravity);
+        if (rawElevation === null) return;
+
+        const nextElevation = clamp(
+          rawElevation + elevationCalibrationOffset.current,
+          -90,
+          90,
+        );
 
         smoothedElevation.current = smoothLinear(
           smoothedElevation.current,
@@ -196,7 +257,8 @@ export function useDevicePointing() {
 
           const nextHeading = norm360(
             rawHeading +
-              headingOffsetForOrientation(orientationRef.current),
+              headingOffsetForOrientation(orientationRef.current) +
+              headingCalibrationOffset.current,
           );
 
           smoothedHeading.current = smoothAngle(
@@ -251,8 +313,11 @@ export function useDevicePointing() {
     headingAccuracy,
     usingTrueNorth,
     screenOrientation: orientationLabel(screenOrientation),
+    calibrated,
     error,
     start,
     stop,
+    calibrateTo,
+    resetCalibration,
   };
 }

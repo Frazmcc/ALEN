@@ -139,9 +139,12 @@ export default function SkyScreen() {
     headingAccuracy,
     usingTrueNorth,
     screenOrientation,
+    calibrated: phoneAimCalibrated,
     error: phoneAimError,
     start: startPhoneAim,
     stop: stopPhoneAim,
+    calibrateTo: calibratePhoneAim,
+    resetCalibration: resetPhoneAimCalibration,
   } = useDevicePointing();
 
   useEffect(() => {
@@ -303,6 +306,16 @@ export default function SkyScreen() {
     ? resolveSelection(selectedObject, selectionContext)
     : null;
   const selectedDetail = resolvedSelection?.detail ?? null;
+  const canCalibrateSelection = Boolean(
+    phoneAimActive &&
+      resolvedSelection &&
+      selectedObject &&
+      (selectedObject.kind === 'star' ||
+        selectedObject.kind === 'planet') &&
+      !(selectedObject.kind === 'planet' && selectedObject.id === 'sun') &&
+      resolvedSelection.el >= 10 &&
+      resolvedSelection.el <= 84,
+  );
 
   useEffect(() => {
     if (!selectedObject) return;
@@ -518,6 +531,19 @@ export default function SkyScreen() {
     if (phoneAimActive) stopPhoneAim();
     setYaw(resolved.az);
     setPitch(clamp(resolved.el, 0, 84));
+  }
+
+  function calibrateSelectedObject() {
+    if (!canCalibrateSelection || !resolvedSelection) return;
+
+    const calibrated = calibratePhoneAim(
+      resolvedSelection.az,
+      resolvedSelection.el,
+    );
+
+    if (calibrated) {
+      setSelectedObject(null);
+    }
   }
 
   return (
@@ -773,10 +799,40 @@ export default function SkyScreen() {
           </Text>
           <Text style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>
             {phoneAimActive
-              ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · accuracy ${headingAccuracy ?? '—'} · ${screenOrientation}`
+              ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · accuracy ${headingAccuracy ?? '—'} · ${screenOrientation}${phoneAimCalibrated ? ' · calibrated' : ''}`
               : 'Drag to look · pinch to zoom'}
           </Text>
         </View>
+
+        {phoneAimActive && phoneAimCalibrated ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reset phone aim calibration"
+            onPress={resetPhoneAimCalibration}
+            style={{
+              position: 'absolute',
+              right: 18,
+              bottom: 70,
+              minHeight: 36,
+              justifyContent: 'center',
+              paddingHorizontal: 12,
+              borderRadius: 11,
+              backgroundColor: 'rgba(9,18,33,0.94)',
+              borderWidth: 1,
+              borderColor: colors.success,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 10,
+                fontWeight: '700',
+              }}
+            >
+              Reset calibration
+            </Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           accessibilityRole="button"
@@ -820,6 +876,9 @@ export default function SkyScreen() {
         detail={selectedDetail}
         onClose={() => setSelectedObject(null)}
         onCentre={resolvedSelection ? centreSelectedObject : undefined}
+        onCalibrate={
+          canCalibrateSelection ? calibrateSelectedObject : undefined
+        }
       />
     </AppScreen>
   );

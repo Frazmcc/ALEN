@@ -42,7 +42,8 @@ Status:
 - [x] True-north preference with magnetic fallback
 - [x] Smoothed phone aiming
 - [x] Permission-denial fallback to manual view
-- [~] Calibration UX and real-device tuning
+- [x] Known-object phone-aim calibration baseline
+- [ ] Real-device sensor calibration tuning
 - [x] Orientation handling for portrait/landscape device rotations
 
 ## M3 - Mobile Object Experience
@@ -61,7 +62,7 @@ Status:
 ## M4 - AR
 - [ ] Camera sky mode
 - [ ] Real-world alignment
-- [ ] Drift/calibration correction
+- [~] Drift/calibration correction
 - [ ] Native privacy and camera permission flow
 
 ## M5 - Reliability and Offline
