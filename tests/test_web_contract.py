@@ -705,20 +705,23 @@ def test_satellite_inspector_supports_real_photos() -> None:
     assert "No verified public image found · ALEN illustration" in APP
 
 
-def test_satellite_visuals_are_category_specific_and_labels_declutter() -> None:
-    assert "function satelliteVisualType(s)" in APP
-    for kind in ("station", "constellation", "navigation", "earth", "debris", "cubesat", "satellite"):
-        assert f'return"{kind}"' in APP or f'return "{kind}"' in APP
-    assert "function drawSatelliteIcon(kind,size,fill,stroke)" in APP
-    assert "function labelBoxOverlaps(box,boxes)" in APP
+def test_satellite_visuals_are_point_like_with_depth_and_declutter() -> None:
+    assert "function satelliteRangeText(rangeKm)" in APP
+    assert "function satelliteDepthCue(rangeKm,active=false)" in APP
+    assert "function drawSatellitePoint(s,active,dayMode)" in APP
+    assert "Math.log10(km)" in APP
+    assert "const depth=drawSatellitePoint(s,active,dayMode)" in APP
+    assert "drawSatelliteIcon" not in APP
     assert "const MAX_SATELLITE_LABELS=18" in APP
     assert "const satelliteLabelBoxes=[];let satelliteLabelCount=0" in APP
     assert "satelliteLabelCount<MAX_SATELLITE_LABELS" in APP
     assert "function satelliteLabelText(s)" in APP
-    assert "if(active||!labelBoxOverlaps(box,satelliteLabelBoxes))" in APP
+    assert "satelliteRangeText(s?.rangeKm)" in APP
+    assert 'labelsEnabled=layerLabelsOn("satellites")&&satGroup?.labels' in APP
+    assert "if((active||(labelsEnabled&&s.el>18))" in APP
     assert "ctx.roundRect(x,y,boxW,boxH,3)" in APP
-    assert "drawSatelliteIcon(visualType,satSize,s.color" in APP
-
+    assert '["Line-of-sight distance",satelliteRangeText(o.rangeKm)]' in APP
+    assert '["Depth cue","Nearer satellites appear slightly brighter and larger"]' in APP
 
 def test_satellite_motion_uses_sgp4_forecast_trajectory() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
