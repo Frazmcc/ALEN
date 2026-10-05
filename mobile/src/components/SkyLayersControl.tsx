@@ -8,6 +8,7 @@ export type SkyLayers = {
   atmosphere: boolean;
   landscape: boolean;
   satellites: boolean;
+  aircraft: boolean;
 };
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
   onToggleOpen: () => void;
   onToggleLayer: (layer: keyof SkyLayers) => void;
   satelliteSummary?: string;
+  aircraftSummary?: string;
 };
 
 const options: Array<{
@@ -29,6 +31,7 @@ const options: Array<{
   { key: 'atmosphere', label: 'Atmosphere', group: 'Display' },
   { key: 'landscape', label: 'Landscape', group: 'Display' },
   { key: 'satellites', label: 'Satellites', group: 'Live' },
+  { key: 'aircraft', label: 'Aircraft', group: 'Live' },
 ];
 
 export function SkyLayersControl({
@@ -37,6 +40,7 @@ export function SkyLayersControl({
   onToggleOpen,
   onToggleLayer,
   satelliteSummary,
+  aircraftSummary,
 }: Props) {
   return (
     <View
@@ -138,6 +142,17 @@ export function SkyLayersControl({
                             }}
                           >
                             {satelliteSummary}
+                          </Text>
+                        ) : null}
+                        {option.key === 'aircraft' && aircraftSummary ? (
+                          <Text
+                            style={{
+                              color: colors.muted,
+                              fontSize: 9,
+                              marginTop: 2,
+                            }}
+                          >
+                            {aircraftSummary}
                           </Text>
                         ) : null}
                       </View>

@@ -28,6 +28,8 @@ import {
 } from '@/components/SkyLayersControl';
 import { LiveSatelliteCanvas } from '@/components/LiveSatelliteCanvas';
 import { useLiveSatellites } from '@/live/useLiveSatellites';
+import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
+import { useLiveAircraft } from '@/live/useLiveAircraft';
 
 type Size = {
   width: number;
@@ -52,6 +54,7 @@ export default function SkyScreen() {
     atmosphere: true,
     landscape: true,
     satellites: false,
+    aircraft: false,
   });
   const gestureStart = useRef({ yaw: 180, pitch: 28, fov: 105 });
   const pinchStartDistance = useRef<number | null>(null);
@@ -71,6 +74,10 @@ export default function SkyScreen() {
     tracks: satelliteTracks,
     status: satelliteStatus,
   } = useLiveSatellites(observer, layers.satellites);
+  const {
+    tracks: aircraftTracks,
+    status: aircraftStatus,
+  } = useLiveAircraft(observer, layers.aircraft);
 
   const {
     active: phoneAimActive,
@@ -304,6 +311,12 @@ export default function SkyScreen() {
           viewport={viewport}
           visible={layers.satellites}
         />
+        <LiveAircraftCanvas
+          tracks={aircraftTracks}
+          observer={observer}
+          viewport={viewport}
+          visible={layers.aircraft}
+        />
 
         {layers.stars ? stars
           .filter(
@@ -431,6 +444,17 @@ export default function SkyScreen() {
                 : satelliteStatus === 'stale'
                   ? `${satelliteTracks.length} cached · reconnecting`
                   : satelliteStatus === 'error'
+                    ? 'Feed unavailable'
+                    : 'Off · no location sent'
+          }
+          aircraftSummary={
+            aircraftStatus === 'live'
+              ? `${aircraftTracks.length} nearby · labels off`
+              : aircraftStatus === 'loading'
+                ? 'Loading ADS-B positions…'
+                : aircraftStatus === 'stale'
+                  ? `${aircraftTracks.length} cached · reconnecting`
+                  : aircraftStatus === 'error'
                     ? 'Feed unavailable'
                     : 'Off · no location sent'
           }
