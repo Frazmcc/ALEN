@@ -199,20 +199,10 @@ class SatelliteInfoProvider:
 
     def image_bytes(
         self,
-        norad: int,
-        name: str = "",
+        photo: dict[str, object],
     ) -> tuple[bytes, str] | None:
-        info = self.lookup(norad, name)
-        if not isinstance(info, dict):
-            return None
-        photo = info.get("photo")
-        if not isinstance(photo, dict):
-            return None
         image_url = _clean(photo.get("image_url"))
-        if not (
-            image_url.startswith(self.SATNOGS_MEDIA_BASE)
-            or image_url.startswith("https://upload.wikimedia.org/")
-        ):
+        if not _trusted_satellite_image_url(image_url):
             return None
 
         try:
@@ -226,7 +216,7 @@ class SatelliteInfoProvider:
             ) as client:
                 response = client.get(image_url)
                 response.raise_for_status()
-                media_type = (
+                mime = (
                     response.headers.get("content-type", "")
                     .split(";", 1)[0]
                     .lower()
@@ -235,7 +225,7 @@ class SatelliteInfoProvider:
         except httpx.HTTPError:
             return None
 
-        if media_type not in {
+        if mime not in {
             "image/jpeg",
             "image/png",
             "image/webp",
@@ -244,7 +234,7 @@ class SatelliteInfoProvider:
             return None
         if not body or len(body) > self.MAX_IMAGE_BYTES:
             return None
-        return body, media_type
+        return body, mime
 
     def _satcat(self, norad: int) -> dict[str, object] | None:
         try:
@@ -409,3 +399,11 @@ def _metadata_text(metadata: dict[str, object], key: str) -> str:
     value = str(raw.get("value") or "")
     value = re.sub(r"<[^>]*>", "", value)
     return unescape(value).strip()
+
+
+def _trusted_satellite_image_url(value: str) -> bool:
+    return value.startswith(
+        "https://upload.wikimedia.org/"
+    ) or value.startswith(
+        "https://db-satnogs.freetls.fastly.net/media/"
+    )
