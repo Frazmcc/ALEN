@@ -25,6 +25,7 @@ Status:
 - [x] Centre sky on a selected catalogue object
 - [x] High-performance Skia canvas for star/planet points
 - [x] Pinch-to-zoom
+- [x] Skia constellation guide lines and native astronomy layer controls
 - [ ] Native tap selection in the sky
 - [~] Seamless horizon-anchored atmosphere gradient
 - [ ] Full website terrain fidelity
