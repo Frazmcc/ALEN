@@ -372,6 +372,7 @@ def test_satellite_shared_snapshot_is_advanced_to_now() -> None:
     assert "POSITION_BUCKET_SECONDS = 1" in source
     assert "MAX_POSITION_BUCKETS = 12" in source
     assert "def _world_positions(" in source
+    assert "observer_frame = _observer_frame(latitude_deg, longitude_deg, altitude_m)" in source
     assert "position_sample_age_seconds" in source
     assert "position_cache_hits" in source
     assert "position_cache_misses" in source
