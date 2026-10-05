@@ -308,13 +308,36 @@ def test_star_atmospheric_extinction() -> None:
 def test_aircraft_persistence_across_transient_feed_gaps() -> None:
     assert "const AIRCRAFT_GRACE_MS=60000" in APP
     assert "aircraftRequestInFlight=false" in APP
-    assert "if(!observer||!layers.aircraft||aircraftRequestInFlight)return;" in APP
+    assert "if(!observer||!layers.aircraft||document.hidden)return;" in APP
+    assert "if(aircraftRequestInFlight){" in APP
+    assert "if(force)aircraftRefreshQueued=true;" in APP
     assert "setTimeout(()=>controller.abort(),8000)" in APP
     assert "cacheAge>8" in APP
     assert "lastSeenAt:wallNow" in APP
     assert "if(wallNow-lastSeenAt<=AIRCRAFT_GRACE_MS)next.set(id,prior)" in APP
     assert "retaining recent aircraft" in APP
     assert "aircraft=aircraft.filter" in APP
+
+
+def test_visibility_resume_snaps_live_positions_without_elastic_correction() -> None:
+    assert "aircraftResumePending=false,satelliteResumePending=false" in APP
+    assert "aircraftSnapOnRefresh=false,satelliteSnapOnRefresh=false" in APP
+    assert "aircraftAbortController=null,satelliteAbortController=null" in APP
+    assert "aircraftAbortController?.abort()" in APP
+    assert "satelliteAbortController?.abort()" in APP
+    assert "aircraftResumePending=layers.aircraft" in APP
+    assert "satelliteResumePending=layers.satellites" in APP
+    assert "aircraftSnapOnRefresh=layers.aircraft" in APP
+    assert "satelliteSnapOnRefresh=layers.satellites" in APP
+    assert "if(layers.aircraft)refreshAircraft(true)" in APP
+    assert "restartSatellitePolling(true)" in APP
+    assert "if(aircraftResumePending)return;" in APP
+    assert "if(satelliteResumePending)return;" in APP
+    assert "displayLat:snapToFresh?projected.lat:" in APP
+    assert "displayTrack:snapToFresh?measuredTrack:" in APP
+    assert "sat.displayVec=snapToFresh?targetNow.vec:" in APP
+    assert "aircraftResumePending=false" in APP
+    assert "satelliteResumePending=false" in APP
 
 
 def test_satellite_polling_pauses_when_not_visible_or_enabled() -> None:
@@ -324,8 +347,10 @@ def test_satellite_polling_pauses_when_not_visible_or_enabled() -> None:
     assert "function restartSatellitePolling(forceRefresh=false)" in APP
     assert "if(document.hidden||!observer||!layers.satellites)return;" in APP
     assert 'document.addEventListener("visibilitychange",()=>{' in APP
-    assert "if(document.hidden)stopSatellitePolling();" in APP
-    assert "else restartSatellitePolling(true);" in APP
+    assert "function pauseLiveDataForHiddenPage()" in APP
+    assert "function resumeLiveDataAfterVisibility()" in APP
+    assert "if(document.hidden)pauseLiveDataForHiddenPage();" in APP
+    assert "else resumeLiveDataAfterVisibility();" in APP
     assert 'if(key==="satellites")restartSatellitePolling(layers[key]);' in APP
     assert "satelliteTimer=setInterval" not in APP
 
@@ -689,8 +714,8 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert "function satelliteTrajectory(raw,horizonSeconds=2)" in APP
     assert "function satelliteTrajectorySample(points,elapsedMs)" in APP
     assert "function satelliteSlerp(a,b,t)" in APP
-    assert "sat.displayAz=prior?.displayAz??targetNow.az" in APP
-    assert "sat.displayVec=prior?.displayVec??targetNow.vec" in APP
+    assert "sat.displayAz=snapToFresh?targetNow.az:(prior?.displayAz??targetNow.az)" in APP
+    assert "sat.displayVec=snapToFresh?targetNow.vec:(prior?.displayVec??targetNow.vec)" in APP
     assert "sat.trajectory=trajectory;sat.trajectoryReceivedAt=frameNow;sat.sampleAgeMs=sampleAgeMs" in APP
     assert "function stepSatellites(now)" in APP
     assert "const target=satelliteTrajectorySample(s.trajectory,elapsedMs)" in APP
@@ -769,7 +794,7 @@ def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
     assert "function satelliteVectorToAltAz(v)" in APP
     assert "function satelliteSlerp(a,b,t)" in APP
     assert "function blendSkyVector(current,target,k)" in APP
-    assert "sat.displayVec=prior?.displayVec??targetNow.vec" in APP
+    assert "sat.displayVec=snapToFresh?targetNow.vec:(prior?.displayVec??targetNow.vec)" in APP
     assert "const target=satelliteTrajectorySample(s.trajectory,elapsedMs)" in APP
     assert "s.displayVec=blendSkyVector" in APP
     assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
