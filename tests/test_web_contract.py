@@ -305,7 +305,7 @@ def test_star_atmospheric_extinction() -> None:
 
 
 def test_aircraft_persistence_across_transient_feed_gaps() -> None:
-    assert "const AIRCRAFT_GRACE_MS=20000" in APP
+    assert "const AIRCRAFT_GRACE_MS=30000" in APP
     assert "lastSeenAt:wallNow" in APP
     assert "if(wallNow-lastSeenAt<=AIRCRAFT_GRACE_MS)next.set(id,prior)" in APP
     assert "retaining recent aircraft" in APP
@@ -355,7 +355,7 @@ def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
     assert "ThreadPoolExecutor" in source
     assert "as_completed" in source
-    assert "max_workers=min(6, len(requested_groups))" in source
+    assert 'ThreadPoolExecutor(max_workers=6, thread_name_prefix="alen-sat")' in source
     assert "timeout=8.0" in source
     assert "if(!observer||satelliteRequestInFlight)return;" in APP
     assert "const controller=new AbortController()" in APP
@@ -436,7 +436,7 @@ def test_aircraft_route_details_are_inspector_only() -> None:
 def test_aircraft_motion_is_continuous_between_network_updates() -> None:
     assert "function destinationPoint(lat,lon,bearingDeg,distanceKm)" in APP
     assert "function blendAngle(current,target,k)" in APP
-    assert "seenSeconds=clamp(Number(a.seen)||0,0,30)" in APP
+    assert "seenSeconds=clamp(Number(a.seen)||0,0,45)" in APP
     assert "measuredGs*1.852*seenSeconds/3600" in APP
     assert "displayGs:prior?.displayGs??measuredGs" in APP
     assert "displayTrack:prior?.displayTrack??measuredTrack" in APP
