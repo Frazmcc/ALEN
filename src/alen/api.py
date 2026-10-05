@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
+from time import time as unix_time
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Query, Response
@@ -37,6 +38,59 @@ _airports = AirportProvider()
 _satellites = SatelliteProvider()
 _satellite_info = SatelliteInfoProvider()
 _logger = logging.getLogger("alen.satellites")
+
+SATELLITE_OBSERVER_CACHE_SECONDS = 1
+SATELLITE_OBSERVER_COORD_DECIMALS = 3
+SATELLITE_OBSERVER_ALTITUDE_BUCKET_M = 25
+
+
+def _satellite_observer_cache_key(
+    latitude_deg: float,
+    longitude_deg: float,
+    altitude_m: float,
+    groups: list[str],
+    limit: int,
+) -> str:
+    latitude = round(latitude_deg, SATELLITE_OBSERVER_COORD_DECIMALS)
+    longitude = round(longitude_deg, SATELLITE_OBSERVER_COORD_DECIMALS)
+    altitude = int(
+        round(altitude_m / SATELLITE_OBSERVER_ALTITUDE_BUCKET_M)
+        * SATELLITE_OBSERVER_ALTITUDE_BUCKET_M
+    )
+    group_key = ",".join(sorted(set(groups)))
+    return (
+        f"satellite-observer:v1:{latitude:.3f}:{longitude:.3f}:"
+        f"{altitude}:{limit}:{group_key}"
+    )
+
+
+def _satellite_cached_response(cache_key: str) -> dict[str, object] | None:
+    snapshot = shared_cache.get_json(cache_key)
+    if not isinstance(snapshot, dict):
+        return None
+    satellites = snapshot.get("satellites")
+    diagnostics = snapshot.get("diagnostics")
+    if not isinstance(satellites, list) or not isinstance(diagnostics, dict):
+        return None
+
+    try:
+        cache_age = max(0.0, unix_time() - float(snapshot.get("cached_at") or 0.0))
+    except (TypeError, ValueError):
+        cache_age = 0.0
+
+    adjusted_diagnostics = dict(diagnostics)
+    try:
+        sample_age = float(adjusted_diagnostics.get("position_sample_age_seconds") or 0.0)
+    except (TypeError, ValueError):
+        sample_age = 0.0
+    adjusted_diagnostics["position_sample_age_seconds"] = round(sample_age + cache_age, 3)
+    adjusted_diagnostics["observer_cache"] = "hit"
+    adjusted_diagnostics["observer_cache_age_seconds"] = round(cache_age, 3)
+    return {
+        "satellites": satellites,
+        "diagnostics": adjusted_diagnostics,
+    }
+
 
 
 @app.get("/api/v1/health")
@@ -77,6 +131,17 @@ def visible_satellites(
 ) -> dict[str, object]:
     requested = [value.strip() for value in groups.split(",") if value.strip()]
     requested = requested[:12]
+    cache_key = _satellite_observer_cache_key(
+        lat,
+        lon,
+        altitude_m,
+        requested,
+        limit,
+    )
+    cached = _satellite_cached_response(cache_key)
+    if cached is not None:
+        return cached
+
     satellites = _satellites.visible(
         lat,
         lon,
@@ -84,9 +149,25 @@ def visible_satellites(
         requested,
         limit=limit,
     )
-    diagnostics = _satellites.last_diagnostics
+    diagnostics = dict(_satellites.last_diagnostics)
+    diagnostics["observer_cache"] = "miss"
+    diagnostics["observer_cache_age_seconds"] = 0.0
     if not satellites:
         _logger.warning("Satellite request returned no visible objects: %s", diagnostics)
+
+    shared_cache.set_json(
+        cache_key,
+        {
+            "cached_at": unix_time(),
+            "satellites": satellites,
+            "diagnostics": {
+                key: value
+                for key, value in diagnostics.items()
+                if key not in {"observer_cache", "observer_cache_age_seconds"}
+            },
+        },
+        ttl_seconds=SATELLITE_OBSERVER_CACHE_SECONDS,
+    )
     return {
         "satellites": satellites,
         "diagnostics": diagnostics,
