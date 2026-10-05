@@ -862,6 +862,7 @@ async function refreshSatellites(force=false){
   satelliteDiagnostics=data.diagnostics||null;
   satelliteRequestState="ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[];
+  const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,2000);
   for(const raw of (Array.isArray(data.satellites)?data.satellites:[])){
    const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    const id="sat:"+raw.norad,prior=previous.get(id);
@@ -869,21 +870,38 @@ async function refreshSatellites(force=false){
    const nextAz=Number(raw.azimuth_deg_next),nextEl=Number(raw.elevation_deg_next),nextRange=Number(raw.range_km_next);
    const nextAz2=Number(raw.azimuth_deg_next2),nextEl2=Number(raw.elevation_deg_next2),nextRange2=Number(raw.range_km_next2),horizon=Number(raw.motion_horizon_seconds)||2;
    if(!Number.isFinite(az)||!Number.isFinite(el)||el<0)continue;
-   const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+raw.norad),az:prior?.displayAz??az,el:prior?.displayEl??el,
-    rangeKm:prior?.displayRangeKm??rangeKm,detail:"SGP4 · CelesTrak orbital elements",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
-    norad:String(raw.norad||"—"),objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
-   sat.displayAz=prior?.displayAz??az;sat.displayEl=prior?.displayEl??el;sat.displayRangeKm=prior?.displayRangeKm??rangeKm;
+
    const sample0=satelliteSkyVector(az,el);
    const sample1=Number.isFinite(nextAz)&&Number.isFinite(nextEl)?satelliteSkyVector(nextAz,nextEl):sample0;
    const sample2=Number.isFinite(nextAz2)&&Number.isFinite(nextEl2)?satelliteSkyVector(nextAz2,nextEl2):sample1;
    const vectorModel=satelliteVectorModel(sample0,sample1,sample2,horizon);
-   sat.displayVec=prior?.displayVec??satelliteSkyVector(sat.displayAz,sat.displayEl);
-   sat.targetVec=sample0;
-   sat.vectorRate=vectorModel.rate;sat.vectorAccel=vectorModel.accel;
-   sat.targetRangeKm=rangeKm;
+   const targetVecNow=normalizeSkyVector({
+    x:sample0.x+vectorModel.rate.x*sampleAgeMs+.5*vectorModel.accel.x*sampleAgeMs*sampleAgeMs,
+    y:sample0.y+vectorModel.rate.y*sampleAgeMs+.5*vectorModel.accel.y*sampleAgeMs*sampleAgeMs,
+    z:sample0.z+vectorModel.rate.z*sampleAgeMs+.5*vectorModel.accel.z*sampleAgeMs*sampleAgeMs
+   });
+   const targetNow=satelliteVectorToAltAz(targetVecNow);
+
    const rangeModel=Number.isFinite(nextRange)&&Number.isFinite(nextRange2)?satelliteMotionModel(rangeKm,nextRange,nextRange2,horizon,false):null;
-   sat.rangeRateKmMs=rangeModel?.rate??(Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0));
-   sat.rangeAccelKmMs2=rangeModel?.accel??(prior?.rangeAccelKmMs2||0);
+   const baseRangeRate=rangeModel?.rate??(Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0));
+   const rangeAccel=rangeModel?.accel??(prior?.rangeAccelKmMs2||0);
+   const targetRangeNow=Math.max(0,rangeKm+baseRangeRate*sampleAgeMs+.5*rangeAccel*sampleAgeMs*sampleAgeMs);
+
+   const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+raw.norad),az:prior?.displayAz??targetNow.az,el:prior?.displayEl??targetNow.el,
+    rangeKm:prior?.displayRangeKm??targetRangeNow,detail:"SGP4 · shared world-position snapshot",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
+    norad:String(raw.norad||"—"),objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
+   sat.displayAz=prior?.displayAz??targetNow.az;sat.displayEl=prior?.displayEl??targetNow.el;sat.displayRangeKm=prior?.displayRangeKm??targetRangeNow;
+   sat.displayVec=prior?.displayVec??targetVecNow;
+   sat.targetVec=targetVecNow;
+   sat.vectorRate={
+    x:vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs,
+    y:vectorModel.rate.y+vectorModel.accel.y*sampleAgeMs,
+    z:vectorModel.rate.z+vectorModel.accel.z*sampleAgeMs
+   };
+   sat.vectorAccel=vectorModel.accel;
+   sat.targetRangeKm=targetRangeNow;
+   sat.rangeRateKmMs=baseRangeRate+rangeAccel*sampleAgeMs;
+   sat.rangeAccelKmMs2=rangeAccel;
    sat.lastFrame=prior?.lastFrame??frameNow;sat.lastSeenAt=wallNow;
    next.push(sat);
   }
