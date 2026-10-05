@@ -26,6 +26,7 @@ class SatelliteInfoProvider:
     SATNOGS_MEDIA_BASE = "https://db-satnogs.freetls.fastly.net/media/"
     CACHE_TTL_SECONDS = 86400
     REFRESH_LOCK_SECONDS = 30
+    MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
     OWNER_NAMES = {
         "PRC": "People's Republic of China",
@@ -195,6 +196,55 @@ class SatelliteInfoProvider:
             ttl_seconds=self.CACHE_TTL_SECONDS,
         )
         return result
+
+    def image_bytes(
+        self,
+        norad: int,
+        name: str = "",
+    ) -> tuple[bytes, str] | None:
+        info = self.lookup(norad, name)
+        if not isinstance(info, dict):
+            return None
+        photo = info.get("photo")
+        if not isinstance(photo, dict):
+            return None
+        image_url = _clean(photo.get("image_url"))
+        if not (
+            image_url.startswith(self.SATNOGS_MEDIA_BASE)
+            or image_url.startswith("https://upload.wikimedia.org/")
+        ):
+            return None
+
+        try:
+            with httpx.Client(
+                timeout=20.0,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "ALEN/0.1 (satellite photo proxy)",
+                    "Accept": "image/avif,image/webp,image/png,image/jpeg,image/*",
+                },
+            ) as client:
+                response = client.get(image_url)
+                response.raise_for_status()
+                media_type = (
+                    response.headers.get("content-type", "")
+                    .split(";", 1)[0]
+                    .lower()
+                )
+                body = response.content
+        except httpx.HTTPError:
+            return None
+
+        if media_type not in {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/avif",
+        }:
+            return None
+        if not body or len(body) > self.MAX_IMAGE_BYTES:
+            return None
+        return body, media_type
 
     def _satcat(self, norad: int) -> dict[str, object] | None:
         try:
