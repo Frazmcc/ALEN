@@ -37,7 +37,6 @@ import {
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
 import {
-  aircraftGroupKey,
   aircraftMatchesActiveGroup,
   defaultAircraftGroupState,
   type AircraftGroupKey,
