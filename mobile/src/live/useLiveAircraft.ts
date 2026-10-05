@@ -123,6 +123,7 @@ export function useLiveAircraft(
 
         next.set(id, {
           id,
+          icaoHex: String(raw.hex ?? '').trim().toUpperCase(),
           name:
             String(
               raw.flight ?? raw.registration ?? raw.hex ?? 'Aircraft',
