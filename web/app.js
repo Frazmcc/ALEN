@@ -76,7 +76,7 @@ const SATELLITE_GROUPS={
  cubesat:{label:"CubeSats",sources:["cubesat"],enabled:false,color:"#b7f7d0",glyph:"□",priority:50,limit:900},
  debris:{label:"Space junk / debris",sources:["fengyun-1c-debris","iridium-33-debris","cosmos-2251-debris","cosmos-1408-debris"],enabled:false,color:"#ff6262",glyph:"×",priority:95,limit:2200}
 };
-for(const group of Object.values(SATELLITE_GROUPS)){group.labels=group.enabled;group.phase=group.enabled?0:2}
+for(const group of Object.values(SATELLITE_GROUPS)){group.labels=false;group.phase=group.enabled?1:2}
 
 const STAR_CATALOG=[
 {id:"vega",kind:"STAR",name:"Vega",ra:279.23473479,dec:38.78368896,mag:.03,color:"#dcecff",distance:"25.0 ly",detail:"A0 V",fact:"Vega is a rapidly rotating A-type star and one of the brightest stars in the northern sky."},
@@ -760,17 +760,9 @@ function logicalSatelliteMemberships(sourceGroups){
 }
 const SATELLITE_REFRESH_MS=10000;
 const SATELLITE_GRACE_MS=30000;
-const SATELLITE_POSITION_RESPONSE_MS=850;
+const SATELLITE_POSITION_RESPONSE_MS=420;
 const SATELLITE_MAX_FRAME_DT_MS=250;
-function satelliteMotionRate(current,next,horizonSeconds,isAngle=false){
- const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
- return (isAngle?adiff(next,current):(next-current))/h;
-}
-function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false){
- const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
- const d1=isAngle?adiff(next,current):(next-current),d2=isAngle?adiff(next2,next):(next2-next);
- return{rate:d1/h,accel:(d2-d1)/(h*h)};
-}
+const MAX_SATELLITE_LABELS=18;
 function satelliteSkyVector(az,el){
  const azr=az*DEG,elr=el*DEG,c=Math.cos(elr);
  return{x:c*Math.sin(azr),y:c*Math.cos(azr),z:Math.sin(elr)};
@@ -783,19 +775,49 @@ function satelliteVectorToAltAz(v){
  const n=normalizeSkyVector(v),horizontal=Math.hypot(n.x,n.y);
  return{az:norm360(Math.atan2(n.x,n.y)*RAD),el:Math.atan2(n.z,horizontal)*RAD};
 }
-function satelliteVectorModel(v0,v1,v2,horizonSeconds){
- const h=Math.max(.25,Number(horizonSeconds)||2)*1000;
- return{
-  rate:{x:(v1.x-v0.x)/h,y:(v1.y-v0.y)/h,z:(v1.z-v0.z)/h},
-  accel:{x:(v2.x-2*v1.x+v0.x)/(h*h),y:(v2.y-2*v1.y+v0.y)/(h*h),z:(v2.z-2*v1.z+v0.z)/(h*h)}
- };
+function satelliteSlerp(a,b,t){
+ const av=normalizeSkyVector(a),bv=normalizeSkyVector(b);
+ const dot=clamp(av.x*bv.x+av.y*bv.y+av.z*bv.z,-1,1),angle=Math.acos(dot);
+ if(angle<1e-7)return normalizeSkyVector({x:av.x+(bv.x-av.x)*t,y:av.y+(bv.y-av.y)*t,z:av.z+(bv.z-av.z)*t});
+ const sinAngle=Math.sin(angle);
+ if(Math.abs(sinAngle)<1e-7)return av;
+ const wa=Math.sin((1-t)*angle)/sinAngle,wb=Math.sin(t*angle)/sinAngle;
+ return normalizeSkyVector({x:av.x*wa+bv.x*wb,y:av.y*wa+bv.y*wb,z:av.z*wa+bv.z*wb});
 }
 function blendSkyVector(current,target,k){
- return normalizeSkyVector({
-  x:current.x+(target.x-current.x)*k,
-  y:current.y+(target.y-current.y)*k,
-  z:current.z+(target.z-current.z)*k
- });
+ return satelliteSlerp(current,target,clamp(k,0,1));
+}
+function satelliteTrajectory(raw,horizonSeconds=2){
+ const supplied=Array.isArray(raw.trajectory)?raw.trajectory:[];
+ const legacy=[
+  {offset_seconds:0,azimuth_deg:raw.azimuth_deg,elevation_deg:raw.elevation_deg,range_km:raw.range_km},
+  {offset_seconds:horizonSeconds,azimuth_deg:raw.azimuth_deg_next,elevation_deg:raw.elevation_deg_next,range_km:raw.range_km_next},
+  {offset_seconds:horizonSeconds*2,azimuth_deg:raw.azimuth_deg_next2,elevation_deg:raw.elevation_deg_next2,range_km:raw.range_km_next2}
+ ];
+ const source=supplied.length>=2?supplied:legacy;
+ return source.map(point=>{
+  const az=Number(point.azimuth_deg),el=Number(point.elevation_deg),rangeKm=Number(point.range_km),timeMs=Math.max(0,Number(point.offset_seconds)||0)*1000;
+  return Number.isFinite(az)&&Number.isFinite(el)&&Number.isFinite(rangeKm)?{timeMs,az,el,rangeKm,vec:satelliteSkyVector(az,el)}:null;
+ }).filter(Boolean).sort((a,b)=>a.timeMs-b.timeMs);
+}
+function satelliteTrajectorySample(points,elapsedMs){
+ if(!points?.length)return null;
+ if(points.length===1){
+  const p=points[0];return{vec:p.vec,az:p.az,el:p.el,rangeKm:p.rangeKm};
+ }
+ const tMs=Math.max(0,Number(elapsedMs)||0);
+ let a=points[0],b=points[1];
+ if(tMs>=points[points.length-1].timeMs){
+  a=points[points.length-2];b=points[points.length-1];
+ }else{
+  for(let i=1;i<points.length;i++)if(tMs<=points[i].timeMs){a=points[i-1];b=points[i];break}
+ }
+ const span=Math.max(1,b.timeMs-a.timeMs),t=clamp((tMs-a.timeMs)/span,0,tMs>b.timeMs?10:1);
+ const vec=satelliteSlerp(a.vec,b.vec,t),altaz=satelliteVectorToAltAz(vec);
+ return{vec,az:altaz.az,el:altaz.el,rangeKm:Math.max(0,a.rangeKm+(b.rangeKm-a.rangeKm)*t)};
+}
+function satelliteLabelText(s){
+ return String(s?.name||("NORAD "+(s?.norad||""))).replace(/\s+/g," ").trim();
 }
 function satelliteVisualType(s){
  if(s.group==="stations")return"station";
@@ -889,47 +911,23 @@ async function refreshSatellites(force=false){
   }
   satelliteDiagnostics=data.diagnostics||null;
   satelliteRequestState="ok";
-  const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[];
-  const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,2000);
+  const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
+  const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,3000);
   for(const raw of (Array.isArray(data.satellites)?data.satellites:[])){
+   const norad=String(raw.norad||"").trim();
+   if(!norad||seenNorad.has(norad))continue;
+   seenNorad.add(norad);
    const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
-   const id="sat:"+raw.norad,prior=previous.get(id);
-   const az=Number(raw.azimuth_deg),el=Number(raw.elevation_deg),rangeKm=Number(raw.range_km);
-   const nextAz=Number(raw.azimuth_deg_next),nextEl=Number(raw.elevation_deg_next),nextRange=Number(raw.range_km_next);
-   const nextAz2=Number(raw.azimuth_deg_next2),nextEl2=Number(raw.elevation_deg_next2),nextRange2=Number(raw.range_km_next2),horizon=Number(raw.motion_horizon_seconds)||2;
-   if(!Number.isFinite(az)||!Number.isFinite(el)||el<0)continue;
+   const id="sat:"+norad,prior=previous.get(id),horizon=Number(raw.motion_horizon_seconds)||2;
+   const trajectory=satelliteTrajectory(raw,horizon),targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs);
+   if(!targetNow||targetNow.el<0)continue;
 
-   const sample0=satelliteSkyVector(az,el);
-   const sample1=Number.isFinite(nextAz)&&Number.isFinite(nextEl)?satelliteSkyVector(nextAz,nextEl):sample0;
-   const sample2=Number.isFinite(nextAz2)&&Number.isFinite(nextEl2)?satelliteSkyVector(nextAz2,nextEl2):sample1;
-   const vectorModel=satelliteVectorModel(sample0,sample1,sample2,horizon);
-   const targetVecNow=normalizeSkyVector({
-    x:sample0.x+vectorModel.rate.x*sampleAgeMs+.5*vectorModel.accel.x*sampleAgeMs*sampleAgeMs,
-    y:sample0.y+vectorModel.rate.y*sampleAgeMs+.5*vectorModel.accel.y*sampleAgeMs*sampleAgeMs,
-    z:sample0.z+vectorModel.rate.z*sampleAgeMs+.5*vectorModel.accel.z*sampleAgeMs*sampleAgeMs
-   });
-   const targetNow=satelliteVectorToAltAz(targetVecNow);
-
-   const rangeModel=Number.isFinite(nextRange)&&Number.isFinite(nextRange2)?satelliteMotionModel(rangeKm,nextRange,nextRange2,horizon,false):null;
-   const baseRangeRate=rangeModel?.rate??(Number.isFinite(nextRange)?satelliteMotionRate(rangeKm,nextRange,horizon,false):(prior?.rangeRateKmMs||0));
-   const rangeAccel=rangeModel?.accel??(prior?.rangeAccelKmMs2||0);
-   const targetRangeNow=Math.max(0,rangeKm+baseRangeRate*sampleAgeMs+.5*rangeAccel*sampleAgeMs*sampleAgeMs);
-
-   const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+raw.norad),az:prior?.displayAz??targetNow.az,el:prior?.displayEl??targetNow.el,
-    rangeKm:prior?.displayRangeKm??targetRangeNow,detail:"SGP4 · shared world-position snapshot",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
-    norad:String(raw.norad||"—"),objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
-   sat.displayAz=prior?.displayAz??targetNow.az;sat.displayEl=prior?.displayEl??targetNow.el;sat.displayRangeKm=prior?.displayRangeKm??targetRangeNow;
-   sat.displayVec=prior?.displayVec??targetVecNow;
-   sat.targetVec=targetVecNow;
-   sat.vectorRate={
-    x:vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs,
-    y:vectorModel.rate.y+vectorModel.accel.y*sampleAgeMs,
-    z:vectorModel.rate.z+vectorModel.accel.z*sampleAgeMs
-   };
-   sat.vectorAccel=vectorModel.accel;
-   sat.targetRangeKm=targetRangeNow;
-   sat.rangeRateKmMs=baseRangeRate+rangeAccel*sampleAgeMs;
-   sat.rangeAccelKmMs2=rangeAccel;
+   const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+norad),az:prior?.displayAz??targetNow.az,el:prior?.displayEl??targetNow.el,
+    rangeKm:prior?.displayRangeKm??targetNow.rangeKm,detail:"SGP4 · shared world-position trajectory",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
+    norad,objectId:raw.international_id||"—",memberships,isNew:memberships.includes("new"),isDebris:memberships.includes("debris")});
+   sat.displayAz=prior?.displayAz??targetNow.az;sat.displayEl=prior?.displayEl??targetNow.el;sat.displayRangeKm=prior?.displayRangeKm??targetNow.rangeKm;
+   sat.displayVec=prior?.displayVec??targetNow.vec;
+   sat.trajectory=trajectory;sat.trajectoryReceivedAt=frameNow;sat.sampleAgeMs=sampleAgeMs;
    sat.lastFrame=prior?.lastFrame??frameNow;sat.lastSeenAt=wallNow;
    next.push(sat);
   }
@@ -959,19 +957,12 @@ function stepSatellites(now){
   const rawDt=Math.max(0,now-(s.lastFrame||now));s.lastFrame=now;
   if(rawDt<=0)continue;
   const dt=Math.min(SATELLITE_MAX_FRAME_DT_MS,rawDt),positionK=1-Math.exp(-dt/SATELLITE_POSITION_RESPONSE_MS);
-  const rate=s.vectorRate||{x:0,y:0,z:0},accel=s.vectorAccel||{x:0,y:0,z:0},target=s.targetVec||satelliteSkyVector(s.az,s.el);
-  s.targetVec=normalizeSkyVector({
-   x:target.x+rate.x*rawDt+.5*accel.x*rawDt*rawDt,
-   y:target.y+rate.y*rawDt+.5*accel.y*rawDt*rawDt,
-   z:target.z+rate.z*rawDt+.5*accel.z*rawDt*rawDt
-  });
-  s.vectorRate={x:rate.x+accel.x*rawDt,y:rate.y+accel.y*rawDt,z:rate.z+accel.z*rawDt};
-  s.displayVec=blendSkyVector(s.displayVec||satelliteSkyVector(s.az,s.el),s.targetVec,positionK);
+  const elapsedMs=(Number(s.sampleAgeMs)||0)+Math.max(0,now-(Number(s.trajectoryReceivedAt)||now));
+  const target=satelliteTrajectorySample(s.trajectory,elapsedMs);
+  if(!target)continue;
+  s.displayVec=blendSkyVector(s.displayVec||satelliteSkyVector(s.az,s.el),target.vec,positionK);
   const display=satelliteVectorToAltAz(s.displayVec);
-  const rangeRate=Number(s.rangeRateKmMs)||0,rangeAccel=Number(s.rangeAccelKmMs2)||0;
-  s.targetRangeKm=Math.max(0,(s.targetRangeKm??s.rangeKm)+rangeRate*rawDt+.5*rangeAccel*rawDt*rawDt);
-  s.rangeRateKmMs=rangeRate+rangeAccel*rawDt;
-  s.displayRangeKm=(s.displayRangeKm??s.rangeKm)+((s.targetRangeKm??s.rangeKm)-(s.displayRangeKm??s.rangeKm))*positionK;
+  s.displayRangeKm=(s.displayRangeKm??s.rangeKm)+(target.rangeKm-(s.displayRangeKm??s.rangeKm))*positionK;
   s.displayAz=display.az;s.displayEl=display.el;
   s.az=display.az;s.el=display.el;s.rangeKm=s.displayRangeKm;
  }
@@ -1131,7 +1122,7 @@ function draw(){
   }
  }
  if(layers.satellites){
-  const satelliteLabelBoxes=[];
+  const satelliteLabelBoxes=[];let satelliteLabelCount=0;
   const orderedSatellites=[...satellites].sort((a,b)=>(selected?.id===b.id)-(selected?.id===a.id)||b.el-a.el);
   for(const s of orderedSatellites){
    if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
@@ -1142,14 +1133,19 @@ function draw(){
    ctx.restore();
    if(active){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],satSize*.72+4,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
    const satGroup=SATELLITE_GROUPS[s.group];
-   if(layerLabelsOn("satellites")&&satGroup?.labels&&(s.el>28||active)){
-    ctx.font=active?"700 10px ui-monospace":"700 9px ui-monospace";
-    const w=ctx.measureText(s.name).width+8,h=13,x=p[0]+satSize*.55+3,y=p[1]-12;
-    const box={x,y,w,h};
+   if(layerLabelsOn("satellites")&&satGroup?.labels&&(s.el>18||active)&&(active||satelliteLabelCount<MAX_SATELLITE_LABELS)){
+    const label=satelliteLabelText(s);ctx.font=active?"700 10px ui-monospace":"700 9px ui-monospace";
+    const textW=ctx.measureText(label).width,boxW=textW+10,boxH=15;
+    const x=clamp(p[0]+satSize*.62+5,5,Math.max(5,width-boxW-5)),y=clamp(p[1]-boxH-5,5,Math.max(5,height-boxH-5));
+    const box={x,y,w:boxW,h:boxH};
     if(active||!labelBoxOverlaps(box,satelliteLabelBoxes)){
-     satelliteLabelBoxes.push(box);
-     ctx.fillStyle=dayMode?"rgba(237,247,252,.76)":"rgba(2,8,14,.68)";ctx.fillRect(x-3,y-1,w,h);
-     ctx.fillStyle=active?s.color:objectText;ctx.fillText(s.name,x,y+9);
+     satelliteLabelBoxes.push(box);satelliteLabelCount+=1;
+     ctx.strokeStyle=active?s.color:(dayMode?"rgba(8,40,63,.42)":"rgba(123,229,255,.35)");
+     ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p[0]+satSize*.4,p[1]-satSize*.2);ctx.lineTo(x,y+boxH*.55);ctx.stroke();
+     ctx.fillStyle=dayMode?"rgba(245,250,253,.9)":"rgba(2,8,14,.86)";
+     ctx.beginPath();ctx.roundRect(x,y,boxW,boxH,3);ctx.fill();
+     ctx.strokeStyle=active?s.color:(dayMode?"rgba(8,40,63,.3)":"rgba(123,229,255,.24)");ctx.stroke();
+     ctx.fillStyle=active?s.color:objectText;ctx.fillText(label,x+5,y+10.5);
     }
    }
   }

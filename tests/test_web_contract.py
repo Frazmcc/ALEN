@@ -111,10 +111,10 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert 'radius_nm:String(AIRCRAFT_RADIUS_NM)' in APP
     assert "requestAnimationFrame(tick)" in APP
     assert "API_BASE+\"/api/v1/satellites?\"" in APP
-    assert "SGP4 · shared world-position snapshot" in APP
+    assert "SGP4 · shared world-position trajectory" in APP
     assert 'id="aircraft-groups-button"' in HTML
     assert 'id="satellite-groups-button"' in HTML
-    assert 'data-satellite-group="starlink" aria-pressed="true"' in HTML
+    assert 'data-satellite-group="starlink" aria-pressed="mixed"' in HTML
     assert "fov=130" in APP
 
 
@@ -377,17 +377,18 @@ def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
 def test_satellite_shared_snapshot_is_advanced_to_now() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
     assert "POSITION_BUCKET_SECONDS = 1" in source
-    assert "MAX_POSITION_BUCKETS = 12" in source
+    assert "MAX_POSITION_BUCKETS = 20" in source
+    assert "MOTION_STEP_SECONDS = 2" in source
+    assert "MOTION_FORECAST_SECONDS = 12" in source
     assert "def _world_positions(" in source
     assert "observer_frame = _observer_frame(latitude_deg, longitude_deg, altitude_m)" in source
     assert "position_sample_age_seconds" in source
     assert "position_cache_hits" in source
     assert "position_cache_misses" in source
-    assert "const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,2000)" in APP
-    assert "const targetVecNow=normalizeSkyVector" in APP
-    assert "vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs" in APP
-    assert "targetRangeNow" in APP
-    assert 'detail:"SGP4 · shared world-position snapshot"' in APP
+    assert "const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,3000)" in APP
+    assert "const trajectory=satelliteTrajectory(raw,horizon)" in APP
+    assert "targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs)" in APP
+    assert 'detail:"SGP4 · shared world-position trajectory"' in APP
 
 
 def test_daylight_contrast_palette() -> None:
@@ -510,7 +511,9 @@ def test_aircraft_groups_and_label_modes() -> None:
 
 def test_satellite_groups_use_multistate_buttons() -> None:
     assert '<button type="button" class="sat-group is-on sat-new" data-satellite-group="new"' in HTML
+    assert 'data-satellite-group="new" aria-pressed="mixed"' in HTML
     assert '<input type="checkbox" data-satellite-group=' not in HTML
+    assert "for(const group of Object.values(SATELLITE_GROUPS)){group.labels=false;group.phase=group.enabled?1:2}" in APP
     assert "group.phase=advancePhase(group.phase)" in APP
     assert "group.enabled=phaseEnabled(group.phase)" in APP
     assert "group.labels=phaseLabels(group.phase)" in APP
@@ -646,26 +649,22 @@ def test_aircraft_icons_are_type_specific_and_heading_aware() -> None:
 
 def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
-    assert "sample_at + timedelta(seconds=2)" in source
+    assert "MOTION_FORECAST_SECONDS = 12" in source
+    assert '"trajectory": trajectory' in source
+    assert '"motion_forecast_seconds": self.MOTION_FORECAST_SECONDS' in source
     assert '"azimuth_deg_next"' in source
-    assert '"elevation_deg_next"' in source
-    assert '"range_km_next"' in source
     assert '"azimuth_deg_next2"' in source
-    assert '"elevation_deg_next2"' in source
-    assert '"range_km_next2"' in source
-    assert '"motion_horizon_seconds": 2' in source
 
     assert "const SATELLITE_GRACE_MS=30000" in APP
-    assert "const SATELLITE_POSITION_RESPONSE_MS=850" in APP
-    assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
+    assert "const SATELLITE_POSITION_RESPONSE_MS=420" in APP
+    assert "function satelliteTrajectory(raw,horizonSeconds=2)" in APP
+    assert "function satelliteTrajectorySample(points,elapsedMs)" in APP
+    assert "function satelliteSlerp(a,b,t)" in APP
     assert "sat.displayAz=prior?.displayAz??targetNow.az" in APP
-    assert "sat.displayVec=prior?.displayVec??targetVecNow" in APP
-    assert "sat.targetVec=targetVecNow" in APP
-    assert "vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs" in APP
-    assert "sat.vectorAccel=vectorModel.accel" in APP
-    assert "sat.rangeRateKmMs=" in APP
+    assert "sat.displayVec=prior?.displayVec??targetNow.vec" in APP
+    assert "sat.trajectory=trajectory;sat.trajectoryReceivedAt=frameNow;sat.sampleAgeMs=sampleAgeMs" in APP
     assert "function stepSatellites(now)" in APP
-    assert "s.targetVec=normalizeSkyVector" in APP
+    assert "const target=satelliteTrajectorySample(s.trajectory,elapsedMs)" in APP
     assert "s.displayVec=blendSkyVector" in APP
     assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
     assert "s.az=display.az;s.el=display.el;s.rangeKm=s.displayRangeKm" in APP
@@ -711,33 +710,35 @@ def test_satellite_visuals_are_category_specific_and_labels_declutter() -> None:
         assert f'return"{kind}"' in APP or f'return "{kind}"' in APP
     assert "function drawSatelliteIcon(kind,size,fill,stroke)" in APP
     assert "function labelBoxOverlaps(box,boxes)" in APP
-    assert "const satelliteLabelBoxes=[]" in APP
+    assert "const MAX_SATELLITE_LABELS=18" in APP
+    assert "const satelliteLabelBoxes=[];let satelliteLabelCount=0" in APP
+    assert "satelliteLabelCount<MAX_SATELLITE_LABELS" in APP
+    assert "function satelliteLabelText(s)" in APP
     assert "if(active||!labelBoxOverlaps(box,satelliteLabelBoxes))" in APP
+    assert "ctx.roundRect(x,y,boxW,boxH,3)" in APP
     assert "drawSatelliteIcon(visualType,satSize,s.color" in APP
 
 
-def test_satellite_motion_uses_curved_short_horizon_model() -> None:
+def test_satellite_motion_uses_sgp4_forecast_trajectory() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
-    assert "sample_at + timedelta(seconds=4)" in source
-    assert '"azimuth_deg_next2"' in source
-    assert '"elevation_deg_next2"' in source
-    assert '"range_km_next2"' in source
-    assert "function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false)" in APP
-    assert "vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs" in APP
-    assert "sat.vectorAccel=vectorModel.accel" in APP
-    assert "sat.rangeAccelKmMs2=" in APP
-    assert ".5*accel.x*rawDt*rawDt" in APP
-    assert "s.vectorRate={x:rate.x+accel.x*rawDt" in APP
+    assert "for offset_seconds in range(" in source
+    assert "self.MOTION_FORECAST_SECONDS + self.MOTION_STEP_SECONDS" in source
+    assert '"offset_seconds": offset_seconds' in source
+    assert '"trajectory": trajectory' in source
+    assert "function satelliteSlerp(a,b,t)" in APP
+    assert "const supplied=Array.isArray(raw.trajectory)?raw.trajectory:[]" in APP
+    assert "const vec=satelliteSlerp(a.vec,b.vec,t)" in APP
+    assert "tMs>b.timeMs?10:1" in APP
 
 
 def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
     assert "function satelliteSkyVector(az,el)" in APP
     assert "function normalizeSkyVector(v)" in APP
     assert "function satelliteVectorToAltAz(v)" in APP
-    assert "function satelliteVectorModel(v0,v1,v2,horizonSeconds)" in APP
+    assert "function satelliteSlerp(a,b,t)" in APP
     assert "function blendSkyVector(current,target,k)" in APP
-    assert "sat.displayVec=prior?.displayVec??targetVecNow" in APP
-    assert "sat.targetVec=targetVecNow" in APP
+    assert "sat.displayVec=prior?.displayVec??targetNow.vec" in APP
+    assert "const target=satelliteTrajectorySample(s.trajectory,elapsedMs)" in APP
     assert "s.displayVec=blendSkyVector" in APP
     assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
     assert "s.displayAz=display.az;s.displayEl=display.el" in APP
