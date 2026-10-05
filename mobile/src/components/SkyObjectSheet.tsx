@@ -1,6 +1,8 @@
 import {
+  Image,
   Modal,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -14,6 +16,11 @@ export type SkyObjectDetail = {
   altitude: number;
   azimuth: number;
   rows: Array<[string, string]>;
+  imageUrl?: string;
+  imageCredit?: string;
+  description?: string;
+  metadataLoading?: boolean;
+  metadataError?: string | null;
 };
 
 type Props = {
@@ -49,15 +56,22 @@ export function SkyObjectSheet({
             accessibilityRole="none"
             onPress={() => undefined}
             style={{
-              padding: 20,
-              paddingBottom: 28,
+              maxHeight: '90%',
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
               backgroundColor: colors.panel,
               borderWidth: 1,
               borderColor: colors.border,
+              overflow: 'hidden',
             }}
           >
+            <ScrollView
+              contentContainerStyle={{
+                padding: 20,
+                paddingBottom: 28,
+              }}
+              showsVerticalScrollIndicator={false}
+            >
             <View
               style={{
                 alignSelf: 'center',
@@ -119,6 +133,80 @@ export function SkyObjectSheet({
                 }}
               />
             </View>
+
+            {detail.imageUrl ? (
+              <View
+                style={{
+                  marginTop: 16,
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                }}
+              >
+                <Image
+                  source={{ uri: detail.imageUrl }}
+                  resizeMode="cover"
+                  accessibilityLabel={`${detail.name} image`}
+                  style={{
+                    width: '100%',
+                    height: 190,
+                  }}
+                />
+                {detail.imageCredit ? (
+                  <Text
+                    style={{
+                      color: colors.muted,
+                      fontSize: 9,
+                      lineHeight: 13,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                    }}
+                  >
+                    {detail.imageCredit}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {detail.description ? (
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 12,
+                  lineHeight: 18,
+                  marginTop: 14,
+                }}
+              >
+                {detail.description}
+              </Text>
+            ) : null}
+
+            {detail.metadataLoading ? (
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 11,
+                  marginTop: 12,
+                }}
+              >
+                Loading additional details…
+              </Text>
+            ) : null}
+
+            {detail.metadataError ? (
+              <Text
+                style={{
+                  color: colors.warning,
+                  fontSize: 11,
+                  lineHeight: 16,
+                  marginTop: 12,
+                }}
+              >
+                Additional details are temporarily unavailable.
+              </Text>
+            ) : null}
 
             <View
               style={{
@@ -254,6 +342,7 @@ export function SkyObjectSheet({
                 </Text>
               </Pressable>
             </View>
+            </ScrollView>
           </Pressable>
         ) : null}
       </Pressable>
