@@ -26,9 +26,9 @@ Windows can develop and test Android directly. Final local iOS signing/building 
 
 ## Current milestone
 
-M0 Bootstrap.
+M1-M3 integration.
 
-The current screens are a working native shell and visual direction, not the final sky renderer. The next engineering milestone is to connect the existing ALEN live-sky engine and then bridge native device position/orientation into it.
+The native live-sky renderer, observer location, phone aiming, full star catalogue, object search, pinch zoom and astronomy layer controls are functional baselines. Current work is focused on real-device tuning, richer object interaction, satellites, aircraft, depth cues and later camera-aligned AR.
 
 See:
 - docs/ARCHITECTURE.md
