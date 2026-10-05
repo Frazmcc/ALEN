@@ -36,6 +36,7 @@ import {
 } from '@/live/satelliteGroups';
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
+import { useLiveObjectMetadata } from '@/live/useLiveObjectMetadata';
 import {
   aircraftMatchesActiveGroup,
   defaultAircraftGroupState,
@@ -306,6 +307,23 @@ export default function SkyScreen() {
     ? resolveSelection(selectedObject, selectionContext)
     : null;
   const selectedDetail = resolvedSelection?.detail ?? null;
+  const liveMetadata = useLiveObjectMetadata(
+    selectedObject,
+    visibleSatelliteTracks,
+    visibleAircraftTracks,
+  );
+  const displayedDetail = selectedDetail
+    ? {
+        ...selectedDetail,
+        rows: [...selectedDetail.rows, ...liveMetadata.rows],
+        imageUrl: liveMetadata.imageUrl,
+        imageCredit: liveMetadata.imageCredit,
+        description: liveMetadata.description,
+        metadataLoading: liveMetadata.loading,
+        metadataError: liveMetadata.error,
+      }
+    : null;
+
   const canCalibrateSelection = Boolean(
     phoneAimActive &&
       resolvedSelection &&
@@ -873,7 +891,7 @@ export default function SkyScreen() {
       </View>
 
       <SkyObjectSheet
-        detail={selectedDetail}
+        detail={displayedDetail}
         onClose={() => setSelectedObject(null)}
         onCentre={resolvedSelection ? centreSelectedObject : undefined}
         onCalibrate={
