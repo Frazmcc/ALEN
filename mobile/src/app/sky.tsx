@@ -30,6 +30,7 @@ import { LiveSatelliteCanvas } from '@/components/LiveSatelliteCanvas';
 import { useLiveSatellites } from '@/live/useLiveSatellites';
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
+import { useLiveObjectMetadata } from '@/live/useLiveObjectMetadata';
 import { SkyObjectSheet } from '@/components/SkyObjectSheet';
 import {
   nearestSkySelection,
@@ -216,6 +217,22 @@ export default function SkyScreen() {
     ? resolveSelection(selectedObject, selectionContext)
     : null;
   const selectedDetail = resolvedSelection?.detail ?? null;
+  const liveMetadata = useLiveObjectMetadata(
+    selectedObject,
+    satelliteTracks,
+    aircraftTracks,
+  );
+  const displayedDetail = selectedDetail
+    ? {
+        ...selectedDetail,
+        rows: [...selectedDetail.rows, ...liveMetadata.rows],
+        imageUrl: liveMetadata.imageUrl,
+        imageCredit: liveMetadata.imageCredit,
+        description: liveMetadata.description,
+        metadataLoading: liveMetadata.loading,
+        metadataError: liveMetadata.error,
+      }
+    : null;
 
   const selectedStaticKind =
     selectedObject?.kind === 'star' || selectedObject?.kind === 'planet'
@@ -668,7 +685,7 @@ export default function SkyScreen() {
       </View>
 
       <SkyObjectSheet
-        detail={selectedDetail}
+        detail={displayedDetail}
         onClose={() => setSelectedObject(null)}
         onCentre={resolvedSelection ? centreSelectedObject : undefined}
       />
