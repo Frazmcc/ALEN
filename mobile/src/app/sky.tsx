@@ -222,7 +222,7 @@ export default function SkyScreen() {
     nowMs: now,
     stars,
     planets,
-    visibleSatelliteTracks,
+    satelliteTracks: visibleSatelliteTracks,
     aircraftTracks,
     observer,
     observerLabel,
