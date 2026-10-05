@@ -25,6 +25,8 @@ Status:
 - [x] Centre sky on a selected catalogue object
 - [x] High-performance Skia canvas for star/planet points
 - [x] Pinch-to-zoom
+- [x] Constellation guide lines and native sky-layer controls
+- [~] Live satellite and aircraft Skia overlays
 - [ ] Native tap selection in the sky
 - [~] Seamless horizon-anchored atmosphere gradient
 - [ ] Full website terrain fidelity
@@ -50,10 +52,10 @@ Status:
 - [x] Show in Sky handoff
 - [~] Native object detail presentation
 - [ ] Object images and richer facts
-- [ ] Distance/depth cues
+- [~] Distance/depth cues
 - [ ] Search filters/categories
-- [ ] Satellites
-- [ ] Aircraft
+- [~] Satellites
+- [~] Aircraft
 
 ## M4 - AR
 - [ ] Camera sky mode
