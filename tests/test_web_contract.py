@@ -417,7 +417,7 @@ def test_aircraft_photo_inspector_contract() -> None:
     assert "async function loadAircraftPhotoFallback" in APP
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
     assert "Loading aircraft photo…" in APP
-    assert "No PlaneSpotters photo found · ALEN illustration" in APP
+    assert "await loadAircraftFallbackChain(o,image,credit,token)" in APP
     assert "https://*.plnspttrs.net" in HTML
     assert 'loading="eager"' in HTML
     assert 'fetchpriority="high"' in HTML
