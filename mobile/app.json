@@ -20,6 +20,15 @@
         {
           "backgroundColor": "#020711"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ALEN uses your location while you are using the app to calculate the sky above you.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
       ]
     ],
     "experiments": {
