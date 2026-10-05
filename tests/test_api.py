@@ -730,6 +730,38 @@ def test_satellite_info_endpoint(monkeypatch) -> None:
     assert response.json()["satellite"] == sample
 
 
+def test_satellite_photo_proxy_serves_verified_image(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "alen.api._satellite_info.image_bytes",
+        lambda *args, **kwargs: (b"fake-satellite-jpeg", "image/jpeg"),
+    )
+    response = TestClient(app).get(
+        "/api/v1/satellite/photo/image?norad=25544&name=ISS%20%28ZARYA%29"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["cache-control"] == "public, max-age=21600"
+    assert response.headers["content-encoding"] == "identity"
+    assert response.content == b"fake-satellite-jpeg"
+
+
+def test_satellite_photo_provider_rejects_untrusted_image_host(monkeypatch) -> None:
+    from alen.cache import SharedCache
+    from alen.satellite_info import SatelliteInfoProvider
+
+    provider = SatelliteInfoProvider(
+        cache=SharedCache(namespace="test-satellite-photo-untrusted")
+    )
+    monkeypatch.setattr(
+        provider,
+        "lookup",
+        lambda *args, **kwargs: {
+            "photo": {"image_url": "https://evil.example/satellite.jpg"}
+        },
+    )
+    assert provider.image_bytes(25544, "ISS") is None
+
+
 def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) -> None:
     from alen.cache import SharedCache
     from alen.satellite_info import SatelliteInfoProvider
