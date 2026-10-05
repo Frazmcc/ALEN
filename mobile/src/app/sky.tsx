@@ -138,6 +138,7 @@ export default function SkyScreen() {
     elevation: phoneElevation,
     headingAccuracy,
     usingTrueNorth,
+    screenOrientation,
     error: phoneAimError,
     start: startPhoneAim,
     stop: stopPhoneAim,
@@ -772,7 +773,7 @@ export default function SkyScreen() {
           </Text>
           <Text style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>
             {phoneAimActive
-              ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · compass accuracy ${headingAccuracy ?? '—'}`
+              ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · accuracy ${headingAccuracy ?? '—'} · ${screenOrientation}`
               : 'Drag to look · pinch to zoom'}
           </Text>
         </View>

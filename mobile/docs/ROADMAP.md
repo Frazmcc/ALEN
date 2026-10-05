@@ -43,7 +43,7 @@ Status:
 - [x] Smoothed phone aiming
 - [x] Permission-denial fallback to manual view
 - [~] Calibration UX and real-device tuning
-- [ ] Orientation handling for portrait/landscape device rotations
+- [x] Orientation handling for portrait/landscape device rotations
 
 ## M3 - Mobile Object Experience
 - [x] Full 2,887-star catalogue search
