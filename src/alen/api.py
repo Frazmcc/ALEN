@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import __version__
 from .aircraft import AircraftProvider
@@ -29,6 +30,12 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["Accept", "Content-Type"],
+)
+
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1024,
+    compresslevel=5,
 )
 
 _aircraft = AircraftProvider()
@@ -247,7 +254,7 @@ def aircraft_photo_image(
     return Response(
         content=body,
         media_type=media_type,
-        headers={"Cache-Control": "public, max-age=21600"},
+        headers={"Cache-Control": "public, max-age=21600", "Content-Encoding": "identity"},
     )
 
 
