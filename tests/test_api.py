@@ -730,6 +730,69 @@ def test_satellite_info_endpoint(monkeypatch) -> None:
     assert response.json()["satellite"] == sample
 
 
+def test_satellite_info_endpoint_adds_proxy_image_path(monkeypatch) -> None:
+    sample = {
+        "name": "ISS (ZARYA)",
+        "norad": 25544,
+        "photo": {
+            "image_url": "https://upload.wikimedia.org/example.jpg",
+            "source_url": "https://commons.wikimedia.org/wiki/File:Example.jpg",
+            "credit": "Example Photographer",
+            "license": "CC BY-SA 4.0",
+            "match": "commons",
+        },
+    }
+    monkeypatch.setattr("alen.api._satellite_info.lookup", lambda *args, **kwargs: sample)
+
+    response = TestClient(app).get(
+        "/api/v1/satellite/info?norad=25544&name=ISS%20%28ZARYA%29"
+    )
+
+    assert response.status_code == 200
+    photo = response.json()["satellite"]["photo"]
+    assert photo["image_url"] == "https://upload.wikimedia.org/example.jpg"
+    assert photo["image_path"].startswith("/api/v1/satellite/photo/image?")
+    assert "norad=25544" in photo["image_path"]
+
+
+def test_satellite_photo_proxy_serves_verified_image(monkeypatch) -> None:
+    sample = {
+        "name": "ISS (ZARYA)",
+        "norad": 25544,
+        "photo": {
+            "image_url": "https://upload.wikimedia.org/example.jpg",
+            "source_url": "https://commons.wikimedia.org/wiki/File:Example.jpg",
+            "credit": "Example Photographer",
+            "license": "CC BY-SA 4.0",
+            "match": "commons",
+        },
+    }
+    monkeypatch.setattr("alen.api._satellite_info.lookup", lambda *args, **kwargs: sample)
+    monkeypatch.setattr(
+        "alen.api._satellite_info.image_bytes",
+        lambda photo: (b"fake-satellite-jpeg", "image/jpeg"),
+    )
+
+    response = TestClient(app).get(
+        "/api/v1/satellite/photo/image?norad=25544&name=ISS%20%28ZARYA%29"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["cache-control"] == "public, max-age=21600"
+    assert response.headers["content-encoding"] == "identity"
+    assert response.content == b"fake-satellite-jpeg"
+
+
+def test_satellite_photo_rejects_untrusted_image_host() -> None:
+    from alen.satellite_info import SatelliteInfoProvider
+
+    provider = SatelliteInfoProvider()
+    assert provider.image_bytes(
+        {"image_url": "https://evil.example/satellite.jpg"}
+    ) is None
+
+
 def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) -> None:
     from alen.cache import SharedCache
     from alen.satellite_info import SatelliteInfoProvider
