@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.8' in HTML
+    assert './app.js?v=1.6.9' in HTML
     assert './styles.css?v=0.9.2' in HTML
 
 
@@ -417,7 +417,12 @@ def test_aircraft_photo_inspector_contract() -> None:
     assert "async function loadAircraftPhotoFallback" in APP
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
     assert "Loading aircraft photo…" in APP
-    assert "No PlaneSpotters photo found · ALEN illustration" in APP
+    assert "await loadAircraftFallbackChain(o,image,credit,token)" in APP
+    assert "function exactAircraftModelSvg(o)" in APP
+    assert "function loadRegionalServicePhoto(o,image,credit,token)" in APP
+    assert "regional service representative · not the exact airframe" in APP
+    assert "plain single-colour exact-model reference" in APP
+    assert "Exact aircraft photo unavailable · exact-model artwork unavailable" in APP
     assert "https://*.plnspttrs.net" in HTML
     assert 'loading="eager"' in HTML
     assert 'fetchpriority="high"' in HTML
@@ -864,3 +869,38 @@ def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
     assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
     assert "s.displayAz=display.az;s.displayEl=display.el" in APP
     assert "s.displayAz=blendAngle" not in APP
+
+
+def test_aircraft_image_hard_fallback_policy() -> None:
+    assert "const AIRCRAFT_MODEL_SPECS={" in APP
+    assert 'B38M:{name:"Boeing 737 MAX 8"' in APP
+    assert 'A20N:{name:"Airbus A320neo"' in APP
+    assert 'EC35:{name:"Airbus H135 / EC135"' in APP
+    assert 'EC45:{name:"Airbus H145 / EC145"' in APP
+    assert 'A189:{name:"Leonardo AW189"' in APP
+    assert 'S92:{name:"Sikorsky S-92"' in APP
+    assert "function exactAircraftModelSvg(o)" in APP
+    assert "plain single-colour exact-model reference" in APP
+    assert "Exact model artwork unavailable" in APP
+    assert "no substitute model shown" in APP
+    assert 'if(photo.match!=="icao"&&photo.match!=="registration")return false' in APP
+    assert "async function loadAircraftFallbackChain" in APP
+
+
+def test_emergency_aircraft_use_regional_service_representative_before_model() -> None:
+    assert "function aircraftServiceImageKind(a)" in APP
+    assert 'return"police"' in APP
+    assert 'return"air_ambulance"' in APP
+    assert 'return"coastguard"' in APP
+    assert "function aircraftServiceRegion(a)" in APP
+    assert 'return"Scotland"' in APP
+    assert 'return"Wales"' in APP
+    assert 'return"Northern Ireland"' in APP
+    assert "async function loadRegionalServicePhoto(o,image,credit,token)" in APP
+    assert 'API_BASE+"/api/v1/aircraft/service-photo?"+qs' in APP
+    assert 'photo.match!=="regional_service"' in APP
+    assert "regional service representative · not the exact airframe" in APP
+    assert "async function loadAircraftRegionalOrModelFallback" in APP
+    regional = APP.index("if(await loadRegionalServicePhoto(o,image,credit,token))return true")
+    model = APP.index("image.onerror=null;image.src=exactAircraftModelSvg(o)", regional)
+    assert regional < model

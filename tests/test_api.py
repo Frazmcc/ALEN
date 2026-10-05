@@ -902,3 +902,54 @@ def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) 
     assert "spent stage" in str(info["cost"])
     assert info["period_minutes"] == 90.93
     assert info["apogee_km"] == 329.0
+
+
+def test_aircraft_photo_provider_never_uses_type_only_photo(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhotoProvider
+
+    provider = AircraftPhotoProvider()
+    monkeypatch.setattr(provider, "_search_planespotters", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provider, "_search_registration_category", lambda *args, **kwargs: None)
+    monkeypatch.setattr(provider, "_search_commons", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("type-only photo search must not run")))
+
+    assert provider.find("", "B38M", "") is None
+
+
+def test_regional_emergency_service_photo_endpoint(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhoto
+
+    sample = AircraftPhoto(
+        image_url="https://upload.wikimedia.org/example-service-aircraft.jpg",
+        source_url="https://commons.wikimedia.org/wiki/File:Regional_Service_Aircraft.jpg",
+        title="Regional Service Aircraft",
+        artist="Example Photographer",
+        license_name="CC BY-SA 4.0",
+        match="regional_service",
+        planespotters_url="",
+        provider="wikimedia",
+    )
+    monkeypatch.setattr(
+        "alen.api._aircraft_photos.find_regional_service",
+        lambda *args, **kwargs: sample,
+    )
+
+    response = TestClient(app).get(
+        "/api/v1/aircraft/service-photo"
+        "?service=air_ambulance&region=Scotland&aircraft_type=EC45"
+        "&operator=Scottish%20Ambulance%20Service"
+    )
+    assert response.status_code == 200
+    photo = response.json()["photo"]
+    assert photo["match"] == "regional_service"
+    assert photo["region"] == "Scotland"
+    assert photo["service"] == "air_ambulance"
+    assert photo["image_url"].startswith("https://upload.wikimedia.org/")
+
+
+def test_regional_service_lookup_requires_supported_service_and_region() -> None:
+    from alen.aircraft_photos import AircraftPhotoProvider
+
+    provider = AircraftPhotoProvider()
+    assert provider.find_regional_service("commercial", "Scotland", "B38M", "") is None
+    assert provider.find_regional_service("police", "", "EC35", "") is None
+    assert provider.find_regional_service("commercial", "", "B38M", "Example Airline") is None

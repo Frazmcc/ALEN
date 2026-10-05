@@ -1318,6 +1318,96 @@ function nearestObject(x,y){
  return best;
 }
 function escapeSvgText(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[ch]))}
+const AIRCRAFT_MODEL_SPECS={
+ A319:{name:"Airbus A319",kind:"jet",length:33.84,span:35.8,engines:2},
+ A19N:{name:"Airbus A319neo",kind:"jet",length:33.84,span:35.8,engines:2},
+ A320:{name:"Airbus A320",kind:"jet",length:37.57,span:35.8,engines:2},
+ A20N:{name:"Airbus A320neo",kind:"jet",length:37.57,span:35.8,engines:2},
+ A321:{name:"Airbus A321",kind:"jet",length:44.51,span:35.8,engines:2},
+ A21N:{name:"Airbus A321neo",kind:"jet",length:44.51,span:35.8,engines:2},
+ A332:{name:"Airbus A330-200",kind:"widejet",length:58.82,span:60.3,engines:2},
+ A333:{name:"Airbus A330-300",kind:"widejet",length:63.66,span:60.3,engines:2},
+ A339:{name:"Airbus A330-900neo",kind:"widejet",length:63.66,span:64,engines:2},
+ A359:{name:"Airbus A350-900",kind:"widejet",length:66.8,span:64.75,engines:2},
+ A35K:{name:"Airbus A350-1000",kind:"widejet",length:73.79,span:64.75,engines:2},
+ A388:{name:"Airbus A380-800",kind:"widejet",length:72.72,span:79.75,engines:4},
+ B738:{name:"Boeing 737-800",kind:"jet",length:39.47,span:35.8,engines:2},
+ B739:{name:"Boeing 737-900",kind:"jet",length:42.11,span:35.8,engines:2},
+ B37M:{name:"Boeing 737 MAX 7",kind:"jet",length:35.56,span:35.92,engines:2},
+ B38M:{name:"Boeing 737 MAX 8",kind:"jet",length:39.52,span:35.92,engines:2},
+ B39M:{name:"Boeing 737 MAX 9",kind:"jet",length:42.16,span:35.92,engines:2},
+ B3XM:{name:"Boeing 737 MAX 10",kind:"jet",length:43.8,span:35.92,engines:2},
+ B744:{name:"Boeing 747-400",kind:"widejet",length:70.66,span:64.44,engines:4},
+ B748:{name:"Boeing 747-8",kind:"widejet",length:76.25,span:68.4,engines:4},
+ B752:{name:"Boeing 757-200",kind:"jet",length:47.32,span:38.05,engines:2},
+ B763:{name:"Boeing 767-300",kind:"widejet",length:54.94,span:47.57,engines:2},
+ B77W:{name:"Boeing 777-300ER",kind:"widejet",length:73.86,span:64.8,engines:2},
+ B788:{name:"Boeing 787-8",kind:"widejet",length:56.72,span:60.12,engines:2},
+ B789:{name:"Boeing 787-9",kind:"widejet",length:62.81,span:60.12,engines:2},
+ B78X:{name:"Boeing 787-10",kind:"widejet",length:68.28,span:60.12,engines:2},
+ BCS1:{name:"Airbus A220-100",kind:"jet",length:35,span:35.1,engines:2},
+ BCS3:{name:"Airbus A220-300",kind:"jet",length:38.7,span:35.1,engines:2},
+ E190:{name:"Embraer E190",kind:"jet",length:36.24,span:28.72,engines:2},
+ E195:{name:"Embraer E195",kind:"jet",length:38.65,span:28.72,engines:2},
+ E290:{name:"Embraer E190-E2",kind:"jet",length:36.24,span:33.72,engines:2},
+ E295:{name:"Embraer E195-E2",kind:"jet",length:41.5,span:35.12,engines:2},
+ AT72:{name:"ATR 72",kind:"turboprop",length:27.17,span:27.05,engines:2},
+ AT76:{name:"ATR 72-600",kind:"turboprop",length:27.17,span:27.05,engines:2},
+ DH8D:{name:"De Havilland Dash 8-400",kind:"turboprop",length:32.84,span:28.42,engines:2},
+ C172:{name:"Cessna 172",kind:"light",length:8.28,span:11,engines:1},
+ C182:{name:"Cessna 182",kind:"light",length:8.84,span:10.97,engines:1},
+ SR22:{name:"Cirrus SR22",kind:"light",length:7.92,span:11.68,engines:1},
+ PC12:{name:"Pilatus PC-12",kind:"turboprop",length:14.4,span:16.28,engines:1},
+ C208:{name:"Cessna 208 Caravan",kind:"turboprop",length:12.67,span:15.88,engines:1},
+ EC35:{name:"Airbus H135 / EC135",kind:"helicopter",length:12.26,span:10.2,engines:2},
+ EC45:{name:"Airbus H145 / EC145",kind:"helicopter",length:13.64,span:11,engines:2},
+ A169:{name:"Leonardo AW169",kind:"helicopter",length:14.65,span:12.12,engines:2},
+ A189:{name:"Leonardo AW189",kind:"helicopter",length:17.6,span:14.6,engines:2},
+ S92:{name:"Sikorsky S-92",kind:"helicopter",length:17.1,span:17.17,engines:2}
+};
+function exactAircraftModelSvg(o){
+ const code=String(o.type||"").trim().toUpperCase(),spec=AIRCRAFT_MODEL_SPECS[code];
+ const title=escapeSvgText(spec?.name||code||"Aircraft"),paint="#dfeaf2",outline="#68879a";
+ let art="";
+ if(spec?.kind==="helicopter"){
+  const body=88,rotor=clamp(92*(spec.span/spec.length),72,125);
+  art=`<g transform="translate(360 162) rotate(-8)" fill="${paint}" stroke="${outline}" stroke-width="3"><ellipse cx="0" cy="0" rx="24" ry="${body}"/><path d="M0 ${body-8} 0 ${body+62}" stroke-width="10"/><path d="M-28 ${body+52}H28"/><circle cx="0" cy="-8" r="${rotor}" fill="none" opacity=".42"/><path d="M-${rotor} -8H${rotor}M0 -${rotor+8}V${rotor-8}" opacity=".8"/></g>`;
+ }else if(spec){
+  const fus=clamp(188*(spec.length/45),145,235),half=fus/2;
+  const wing=clamp(112*(spec.span/spec.length),78,145),wide=spec.kind==="widejet";
+  const root=wide?34:28,tail=wide?48:40;
+  const engineY=-8;
+  art=`<g transform="translate(360 162) rotate(-8)" fill="${paint}" stroke="${outline}" stroke-width="3"><path d="M0 -${half} Q18 -${half-8} 18 -${half-28} L14 -28 ${wing} 4 ${wing-4} 19 18 9 12 ${half-35} ${tail} ${half-11} ${tail} ${half+2} 0 ${half-14} -${tail} ${half+2} -${tail} ${half-11} -12 ${half-35} -18 9 -${wing-4} 19 -${wing} 4 -14 -28 -18 -${half-28} Q-18 -${half-8} 0 -${half}Z"/>${spec.engines>=2?`<ellipse cx="-44" cy="${engineY}" rx="9" ry="18"/><ellipse cx="44" cy="${engineY}" rx="9" ry="18"/>`:""}${spec.engines===4?`<ellipse cx="-78" cy="5" rx="8" ry="16"/><ellipse cx="78" cy="5" rx="8" ry="16"/>`:""}</g>`;
+ }else{
+  art=`<g transform="translate(360 156)"><rect x="-150" y="-52" width="300" height="104" rx="18" fill="rgba(223,234,242,.08)" stroke="${outline}" stroke-width="2" stroke-dasharray="8 8"/><text x="0" y="-4" text-anchor="middle" font-family="system-ui,sans-serif" font-size="22" font-weight="700" fill="${paint}">Exact model artwork unavailable</text><text x="0" y="30" text-anchor="middle" font-family="ui-monospace,monospace" font-size="17" fill="#8edcff">${escapeSvgText(code||"UNKNOWN TYPE")}</text></g>`;
+ }
+ const note=spec?"plain single-colour exact-model reference":"no substitute model shown";
+ const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#07111d"/><stop offset="1" stop-color="#010308"/></linearGradient></defs><rect width="720" height="360" fill="url(#bg)"/>${art}<text x="28" y="302" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#eef8ff">${title}</text><text x="28" y="331" font-family="system-ui,sans-serif" font-size="15" fill="#88a4b5">ICAO ${escapeSvgText(code||"—")} · ${note}</text></svg>`;
+ return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+}
+function aircraftServiceImageKind(a){
+ const squawk=String(a.squawk||"").padStart(4,"0"),callsign=String(a.callsign||a.name||"").toUpperCase(),op=String(a.operator||"").toUpperCase();
+ if(squawk==="0032"||/^(UKP|POLICE)/.test(callsign)||op.includes("POLICE"))return"police";
+ if(squawk==="0020"||/^(HLE|HELIMED)/.test(callsign)||op.includes("AIR AMBULANCE"))return"air_ambulance";
+ if((squawk==="0023"&&!aircraftIsMilitary(a))||/^(COASTGUARD|RESCUE|BRITISH RESCUE)/.test(callsign)||op.includes("COASTGUARD"))return"coastguard";
+ return"";
+}
+function aircraftServiceRegion(a){
+ const lat=Number(a.displayLat??a.lat),lon=Number(a.displayLon??a.lon);
+ if(!Number.isFinite(lat)||!Number.isFinite(lon))return"";
+ if(lat>=54&&lat<=55.5&&lon<=-5.1&&lon>=-8.3)return"Northern Ireland";
+ if(lat>=54.55&&lat<=61&&lon>=-8.5&&lon<=-0.4)return"Scotland";
+ if(lat>=51.2&&lat<=53.55&&lon>=-5.8&&lon<=-2.4)return"Wales";
+ if(lat>=51.25&&lat<=51.75&&lon>=-0.65&&lon<=0.35)return"London";
+ if(lat>=54.3&&lon>=-2.5&&lon<=0.8)return"North East England";
+ if(lat>=53.1&&lon<-1.5&&lon>=-4)return"North West England";
+ if(lat>=53.2&&lon>=-2.2&&lon<=-0.4)return"Yorkshire and Humber";
+ if(lat>=52&&lat<53.6&&lon>=-3.3&&lon<=0.2)return"Midlands England";
+ if(lat<52&&lon<-1.4&&lon>=-6.5)return"South West England";
+ if(lat<52.3&&lon>=-1.4&&lon<=1.8)return"South East England";
+ if(lat>=49.8&&lat<=56&&lon>=-6.5&&lon<=2)return"England";
+ return"";
+}
 function objectVisualSvg(o){
  const title=escapeSvgText(o.name||o.kind),kind=escapeSvgText(o.kind||"OBJECT"),color=escapeSvgText(o.color||"#9feaff");
  let art="",sub="";
@@ -1446,11 +1536,10 @@ function showPlaneSpottersPhoto(o,photo,image,credit,token){
  const imageUrl=trustedPlaneSpottersImageUrl(photo.thumbnail?.src||photo.thumbnail);
  if(!imageUrl)return false;
  const registration=o.registration&&o.registration!=="—"?o.registration:o.name;
- image.onerror=()=>{
+ image.onerror=async()=>{
   if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
   image.onerror=null;
-  image.src=objectVisualSvg(o);
-  credit.textContent="Aircraft photo unavailable · ALEN illustration";
+  await loadAircraftFallbackChain(o,image,credit,token);
  };
  image.src=imageUrl;
  image.alt=`${registration} aircraft photo`;
@@ -1469,24 +1558,73 @@ async function loadAircraftPhotoFallback(o,image,credit,token){
   const res=await fetch(API_BASE+"/api/v1/aircraft/photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
   if(!res.ok)throw new Error("aircraft photo fallback "+res.status);
   const data=await res.json(),photo=data.photo;
-  if(token!==inspectorMediaRequest||selected?.id!==o.id||!photo?.image_path)return;
-  image.onerror=()=>{if(token===inspectorMediaRequest&&selected?.id===o.id)image.src=objectVisualSvg(o)};
+  if(token!==inspectorMediaRequest||selected?.id!==o.id||!photo?.image_path)return false;
+  if(photo.match!=="icao"&&photo.match!=="registration")return false;
+  image.onerror=async()=>{
+   if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
+   image.onerror=null;
+   await loadAircraftRegionalOrModelFallback(o,image,credit,token);
+  };
   image.src=API_BASE+photo.image_path;
-  image.alt=`${registration||o.name} aircraft photo`;
-  const matchLabel=photo.match==="icao"?"exact aircraft":photo.match==="registration"?"exact registration":"aircraft type";
+  image.alt=`${registration||o.name} exact aircraft photo`;
+  const matchLabel=photo.match==="icao"?"exact aircraft":"exact registration";
   credit.replaceChildren(document.createTextNode(`${photo.artist||"Aircraft photographer"} · ${photo.license||"See source for usage terms"} · ${matchLabel}`));
   const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
   const planeSpottersSource=trustedExternalUrl(photo.source_url,"www.planespotters.net");
   if(commonsSource)appendInspectorLink(credit,"Source",commonsSource,"commons.wikimedia.org");
   else if(planeSpottersSource)appendInspectorLink(credit,"Source",planeSpottersSource,"www.planespotters.net");
+  return true;
  }catch(e){
-  if(token===inspectorMediaRequest)console.warn("ALEN aircraft photo fallback unavailable",e);
+  if(token===inspectorMediaRequest)console.warn("ALEN exact aircraft photo fallback unavailable",e);
+  return false;
  }
+}
+async function loadRegionalServicePhoto(o,image,credit,token){
+ const service=aircraftServiceImageKind(o),region=aircraftServiceRegion(o);
+ const operator=String(o.operator||"").trim()||String(o.callsign||o.name||"").trim();
+ if(!service||(!region&&!operator))return false;
+ try{
+  const qs=new URLSearchParams({service,region,aircraft_type:String(o.type||""),operator});
+  const res=await fetch(API_BASE+"/api/v1/aircraft/service-photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
+  if(!res.ok)throw new Error("regional service photo "+res.status);
+  const photo=(await res.json()).photo;
+  if(token!==inspectorMediaRequest||selected?.id!==o.id||!photo?.image_url||photo.match!=="regional_service")return false;
+  const imageUrl=trustedExternalUrl(photo.image_url,"upload.wikimedia.org");
+  if(!imageUrl)return false;
+  image.onerror=()=>{
+   if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
+   image.onerror=null;image.src=exactAircraftModelSvg(o);
+   credit.textContent=`Regional service image unavailable · ${String(o.type||"aircraft")} neutral model reference`;
+  };
+  image.src=imageUrl;
+  const regionalLabel=region||operator;
+  image.alt=`${regionalLabel} ${service.replace("_"," ")} representative aircraft`;
+  credit.replaceChildren(document.createTextNode(`${photo.artist||"Wikimedia Commons contributor"} · ${regionalLabel} · regional service representative · not the exact airframe`));
+  const source=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
+  if(source)appendInspectorLink(credit,"Source",source,"commons.wikimedia.org");
+  return true;
+ }catch(e){
+  if(token===inspectorMediaRequest)console.warn("ALEN regional service image unavailable",e);
+  return false;
+ }
+}
+async function loadAircraftRegionalOrModelFallback(o,image,credit,token){
+ if(await loadRegionalServicePhoto(o,image,credit,token))return true;
+ if(token!==inspectorMediaRequest||selected?.id!==o.id)return false;
+ image.onerror=null;image.src=exactAircraftModelSvg(o);
+ const code=String(o.type||"").trim().toUpperCase();
+ const spec=AIRCRAFT_MODEL_SPECS[code];
+ credit.textContent=spec?`${spec.name} · plain single-colour exact-model reference`:`Exact aircraft photo unavailable · exact-model artwork unavailable for ${code||"unknown type"}`;
+ return true;
+}
+async function loadAircraftFallbackChain(o,image,credit,token){
+ if(await loadAircraftPhotoFallback(o,image,credit,token))return true;
+ return loadAircraftRegionalOrModelFallback(o,image,credit,token);
 }
 async function updateInspectorMedia(o){
  const image=document.querySelector("#inspector-image");
  const credit=document.querySelector("#inspector-image-credit");
- const token=++inspectorMediaRequest,fallback=objectVisualSvg(o);
+ const token=++inspectorMediaRequest,fallback=o.kind==="AIRCRAFT"?exactAircraftModelSvg(o):objectVisualSvg(o);
  image.onerror=null;image.dataset.photoProvider="";
  image.src=fallback;image.alt=(o.name||o.kind)+" visual";
  credit.textContent=inspectorCreditText(o);
@@ -1498,7 +1636,7 @@ async function updateInspectorMedia(o){
 
  const directUrl=planeSpottersPhotoUrl(o);
  if(!directUrl){
-  await loadAircraftPhotoFallback(o,image,credit,token);
+  await loadAircraftFallbackChain(o,image,credit,token);
   return;
  }
 
@@ -1516,13 +1654,11 @@ async function updateInspectorMedia(o){
   aircraftPhotoCache.set(directUrl,data);
   const photos=data?.photos||data?.images||[];
   if(showPlaneSpottersPhoto(o,photos[0],image,credit,token))return;
-  if(token===inspectorMediaRequest&&selected?.id===o.id){
-   credit.textContent="No PlaneSpotters photo found · ALEN illustration";
-  }
+  if(token===inspectorMediaRequest&&selected?.id===o.id)await loadAircraftFallbackChain(o,image,credit,token);
  }catch(e){
   if(token===inspectorMediaRequest&&selected?.id===o.id){
-   console.warn("Direct PlaneSpotters lookup unavailable; using ALEN fallback",e);
-   await loadAircraftPhotoFallback(o,image,credit,token);
+   console.warn("Direct PlaneSpotters lookup unavailable; using strict fallback chain",e);
+   await loadAircraftFallbackChain(o,image,credit,token);
   }
  }
 }

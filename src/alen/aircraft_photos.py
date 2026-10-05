@@ -64,12 +64,6 @@ class AircraftPhotoProvider:
                 exact_token=reg,
                 match="registration",
             )
-        if photo is None and type_name and type_name not in {"AIRCRAFT", "—"}:
-            for query in _type_search_queries(type_name):
-                photo = self._search_commons(query, exact_token="", match="type")
-                if photo is not None:
-                    break
-
         if photo is not None and not photo.planespotters_url:
             gallery = (
                 f"https://www.planespotters.net/photos/reg/{quote(reg, safe='')}"
@@ -86,6 +80,64 @@ class AircraftPhotoProvider:
                 planespotters_url=gallery,
                 provider=photo.provider,
             )
+
+        self._cache[key] = (now, photo)
+        self._cache.move_to_end(key)
+        self._prune_metadata_cache(now)
+        return photo
+
+    def find_regional_service(
+        self,
+        service: str,
+        region: str,
+        aircraft_type: str = "",
+        operator: str = "",
+    ) -> AircraftPhoto | None:
+        service_key = re.sub(r"[^a-z_]", "", service.lower())
+        service_labels = {
+            "police": "police aviation",
+            "air_ambulance": "air ambulance",
+            "coastguard": "coastguard rescue",
+        }
+        label = service_labels.get(service_key)
+        region_name = region.strip()[:80]
+        operator_name = operator.strip()[:120]
+        type_name = aircraft_type.strip().upper()[:16]
+        if not label or (not region_name and not operator_name):
+            return None
+
+        key = f"regional|{service_key}|{region_name.upper()}|{operator_name.upper()}|{type_name}"
+        cached = self._cache.get(key)
+        now = time.monotonic()
+        if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
+            self._cache.move_to_end(key)
+            return cached[1]
+        if cached:
+            self._cache.pop(key, None)
+
+        model_terms = _type_search_queries(type_name) if type_name else ()
+        model_name = model_terms[0].removesuffix(" aircraft") if model_terms else type_name
+        queries: list[str] = []
+        if operator_name and region_name:
+            queries.append(f'"{region_name}" "{operator_name}" aircraft')
+        if operator_name and model_name:
+            queries.append(f'"{operator_name}" "{model_name}" aircraft')
+        if operator_name:
+            queries.append(f'"{operator_name}" aircraft')
+        if region_name and model_name:
+            queries.append(f'"{region_name}" "{label}" "{model_name}"')
+        if region_name:
+            queries.append(f'"{region_name}" "{label}" aircraft')
+
+        photo = None
+        for query in queries:
+            photo = self._search_commons(
+                query,
+                exact_token="",
+                match="regional_service",
+            )
+            if photo is not None:
+                break
 
         self._cache[key] = (now, photo)
         self._cache.move_to_end(key)
