@@ -21,7 +21,7 @@ let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,selecte
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
-let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,aircraftDiagnostics=null,aircraftRequestInFlight=false,satelliteDiagnostics=null,satelliteRequestState="idle",satelliteRequestInFlight=false;
+let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,aircraftDiagnostics=null,aircraftRequestInFlight=false,satelliteDiagnostics=null,satelliteRequestState="idle",satelliteRequestInFlight=false,satelliteRefreshQueued=false;
 const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
@@ -443,8 +443,7 @@ function onLocation(pos){
    yaw=observer.lat>=0?180:0;
    pitch=minPitch;
    refreshAircraft(true);
-   refreshSatellites(true);
-   setTimeout(()=>refreshSatellites(true),1500);
+   restartSatellitePolling(true);
    refreshTerrainProfile();
    refreshAirports();
  }
@@ -759,7 +758,8 @@ function logicalSatelliteMemberships(sourceGroups){
  for(const [key,group] of satelliteGroupEntries())if(group.sources.some(source=>sourceSet.has(source)))memberships.push(key);
  return memberships;
 }
-const SATELLITE_GRACE_MS=15000;
+const SATELLITE_REFRESH_MS=10000;
+const SATELLITE_GRACE_MS=30000;
 const SATELLITE_POSITION_RESPONSE_MS=850;
 const SATELLITE_MAX_FRAME_DT_MS=250;
 function satelliteMotionRate(current,next,horizonSeconds,isAngle=false){
@@ -835,8 +835,30 @@ function drawSatelliteIcon(kind,size,fill,stroke){
 function labelBoxOverlaps(box,boxes){
  return boxes.some(b=>!(box.x+box.w<b.x||b.x+b.w<box.x||box.y+box.h<b.y||b.y+b.h<box.y));
 }
+function stopSatellitePolling(){
+ if(satelliteTimer!==null){clearTimeout(satelliteTimer);satelliteTimer=null}
+}
+function scheduleSatelliteRefresh(delayMs=SATELLITE_REFRESH_MS){
+ stopSatellitePolling();
+ if(document.hidden||!observer||!layers.satellites)return;
+ satelliteTimer=setTimeout(async()=>{
+  satelliteTimer=null;
+  await refreshSatellites(false);
+  scheduleSatelliteRefresh();
+ },Math.max(0,delayMs));
+}
+function restartSatellitePolling(forceRefresh=false){
+ stopSatellitePolling();
+ if(document.hidden||!observer||!layers.satellites)return;
+ if(forceRefresh)refreshSatellites(true).finally(()=>scheduleSatelliteRefresh());
+ else scheduleSatelliteRefresh();
+}
 async function refreshSatellites(force=false){
- if(!observer||satelliteRequestInFlight)return;
+ if(!observer||document.hidden||!layers.satellites)return;
+ if(satelliteRequestInFlight){
+  if(force)satelliteRefreshQueued=true;
+  return;
+ }
  if(!force&&Date.now()-satellitesUpdated<8000)return;
  satellitesUpdated=Date.now();
  satelliteRequestInFlight=true;
@@ -846,6 +868,7 @@ async function refreshSatellites(force=false){
  const timeout=setTimeout(()=>controller.abort(),20000);
  try{
   const sources=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))];
+  const requestSignature=sources.slice().sort().join(",");
   if(!sources.length){
    satellites=[];
    satelliteDiagnostics={unique_orbits:0,visible:0,requested_groups:[]};
@@ -859,6 +882,11 @@ async function refreshSatellites(force=false){
   const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal});
   if(!res.ok)throw new Error("satellites "+res.status);
   const data=await res.json();
+  const currentSignature=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))].sort().join(",");
+  if(currentSignature!==requestSignature){
+   satelliteRefreshQueued=true;
+   return;
+  }
   satelliteDiagnostics=data.diagnostics||null;
   satelliteRequestState="ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[];
@@ -921,6 +949,9 @@ async function refreshSatellites(force=false){
   clearTimeout(timeout);
   satelliteRequestInFlight=false;
   setLiveStatus();
+  const queued=satelliteRefreshQueued;
+  satelliteRefreshQueued=false;
+  if(queued&&!document.hidden&&layers.satellites)setTimeout(()=>refreshSatellites(true),0);
  }
 }
 function stepSatellites(now){
@@ -1445,7 +1476,7 @@ document.querySelectorAll("[data-layer]").forEach(btn=>{
   }else layers[key]=!layers[key];
   syncLayerButton(btn,key);
   if(key==="aircraft"&&layers[key])refreshAircraft(true);
-  if(key==="satellites"&&layers[key])refreshSatellites(true);
+  if(key==="satellites")restartSatellitePolling(layers[key]);
   if(key==="airports"&&layers[key])refreshAirports();
   setLiveStatus();
  });
@@ -1460,6 +1491,7 @@ document.querySelectorAll("[data-satellite-group]").forEach(btn=>{
   group.labels=phaseLabels(group.phase);
   syncGroupButton(btn,group);
   await refreshSatellites(true);
+  restartSatellitePolling(false);
  });
 });
 document.querySelectorAll("[data-aircraft-group]").forEach(btn=>{
@@ -1522,7 +1554,10 @@ function tick(now){
  stepAircraft(now);stepSatellites(now);draw();requestAnimationFrame(tick);
 }
 aircraftTimer=setInterval(()=>refreshAircraft(false),3000);
-satelliteTimer=setInterval(()=>refreshSatellites(false),10000);
-window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);clearInterval(satelliteTimer)});
+document.addEventListener("visibilitychange",()=>{
+ if(document.hidden)stopSatellitePolling();
+ else restartSatellitePolling(true);
+});
+window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);stopSatellitePolling()});
 loadBrightStars();setLiveStatus();requestLocation();requestAnimationFrame(tick);
 })();
