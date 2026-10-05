@@ -354,9 +354,28 @@ def test_sky_colour_tracks_local_solar_elevation() -> None:
     assert "{el:-1" in APP
     assert "{el:6" in APP
     assert "{el:25" in APP
+    assert "warmRgb" in APP
     assert "const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el)" in APP
-    assert "g.addColorStop(0,sky.top)" in APP
+    assert "drawSolarHorizonGlow(sun,sky)" in APP
     assert "sky.starVisibility" in APP
+
+
+def test_atmosphere_is_anchored_to_real_horizon_elevation() -> None:
+    assert "function screenElevationAtY(y)" in APP
+    assert "return clamp(pitch+delta,-90,90)" in APP
+    assert "function skyColourAtElevation(sky,elevationDeg)" in APP
+    assert "function drawAtmosphericSky(sky)" in APP
+    assert "skyColourAtElevation(sky,screenElevationAtY(height*fraction))" in APP
+    assert "g.addColorStop(.62,layers.atmosphere?sky.mid:sky.top)" not in APP
+
+
+def test_sunrise_and_sunset_glow_stays_near_solar_horizon() -> None:
+    assert "function drawSolarHorizonGlow(sun,sky)" in APP
+    assert "const horizonY=screenYForElevation(0)" in APP
+    assert "const rise=clamp((sun.el+12)/10,0,1),fall=clamp((12-sun.el)/10,0,1)" in APP
+    assert "const sunX=width*.5+(adiff(sun.az,yaw)/Math.max(fov,1))*width" in APP
+    assert "horizonY-190" in APP
+    assert "horizonY+85" in APP
 
 
 def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
