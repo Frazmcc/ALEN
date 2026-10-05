@@ -345,30 +345,6 @@ export default function SkyScreen() {
           })}
 
         <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: horizonY,
-            bottom: 0,
-            backgroundColor: '#03080b',
-          }}
-        />
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: Math.max(0, horizonY - 1),
-            height: 2,
-            backgroundColor: palette.horizon,
-            opacity: 0.7,
-          }}
-        />
-
-        <View
           style={{
             position: 'absolute',
             left: 16,
