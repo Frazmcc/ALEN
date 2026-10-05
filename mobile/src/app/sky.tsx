@@ -26,6 +26,8 @@ import {
   SkyLayersControl,
   type SkyLayers,
 } from '@/components/SkyLayersControl';
+import { LiveSatelliteCanvas } from '@/components/LiveSatelliteCanvas';
+import { useLiveSatellites } from '@/live/useLiveSatellites';
 
 type Size = {
   width: number;
@@ -49,6 +51,7 @@ export default function SkyScreen() {
     planets: true,
     atmosphere: true,
     landscape: true,
+    satellites: false,
   });
   const gestureStart = useRef({ yaw: 180, pitch: 28, fov: 105 });
   const pinchStartDistance = useRef<number | null>(null);
@@ -64,6 +67,11 @@ export default function SkyScreen() {
     useManualLocation,
     useDemoLocation,
   } = useObserverLocation();
+  const {
+    tracks: satelliteTracks,
+    status: satelliteStatus,
+  } = useLiveSatellites(observer, layers.satellites);
+
   const {
     active: phoneAimActive,
     starting: phoneAimStarting,
@@ -291,6 +299,12 @@ export default function SkyScreen() {
           }}
         />
 
+        <LiveSatelliteCanvas
+          tracks={satelliteTracks}
+          viewport={viewport}
+          visible={layers.satellites}
+        />
+
         {layers.stars ? stars
           .filter(
             (star) =>
@@ -409,6 +423,17 @@ export default function SkyScreen() {
           layers={layers}
           onToggleOpen={() => setLayersOpen((open) => !open)}
           onToggleLayer={toggleLayer}
+          satelliteSummary={
+            satelliteStatus === 'live'
+              ? `${satelliteTracks.length} visible · labels off`
+              : satelliteStatus === 'loading'
+                ? 'Loading live positions…'
+                : satelliteStatus === 'stale'
+                  ? `${satelliteTracks.length} cached · reconnecting`
+                  : satelliteStatus === 'error'
+                    ? 'Feed unavailable'
+                    : 'Off · no location sent'
+          }
         />
 
         {phoneAimError ? (
