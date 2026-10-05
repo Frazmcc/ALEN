@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
+import math
 from time import time as unix_time
 from urllib.parse import urlencode
 
@@ -46,9 +47,16 @@ _satellites = SatelliteProvider()
 _satellite_info = SatelliteInfoProvider()
 _logger = logging.getLogger("alen.satellites")
 
-SATELLITE_OBSERVER_CACHE_SECONDS = 1
-SATELLITE_OBSERVER_COORD_DECIMALS = 3
-SATELLITE_OBSERVER_ALTITUDE_BUCKET_M = 25
+SATELLITE_OBSERVER_CACHE_SECONDS = 8
+SATELLITE_OBSERVER_CELL_DEGREES = 0.005
+SATELLITE_OBSERVER_ALTITUDE_BUCKET_M = 100
+
+
+def _satellite_observer_cell(value: float, minimum: float, maximum: float) -> float:
+    cell = SATELLITE_OBSERVER_CELL_DEGREES
+    index = math.floor((value - minimum) / cell)
+    center = minimum + (index + 0.5) * cell
+    return round(max(minimum, min(maximum, center)), 4)
 
 
 def _satellite_observer_cache_key(
@@ -58,15 +66,15 @@ def _satellite_observer_cache_key(
     groups: list[str],
     limit: int,
 ) -> str:
-    latitude = round(latitude_deg, SATELLITE_OBSERVER_COORD_DECIMALS)
-    longitude = round(longitude_deg, SATELLITE_OBSERVER_COORD_DECIMALS)
+    latitude = _satellite_observer_cell(latitude_deg, -90.0, 90.0)
+    longitude = _satellite_observer_cell(longitude_deg, -180.0, 180.0)
     altitude = int(
         round(altitude_m / SATELLITE_OBSERVER_ALTITUDE_BUCKET_M)
         * SATELLITE_OBSERVER_ALTITUDE_BUCKET_M
     )
     group_key = ",".join(sorted(set(groups)))
     return (
-        f"satellite-observer:v1:{latitude:.3f}:{longitude:.3f}:"
+        f"satellite-observer:v2:{latitude:.4f}:{longitude:.4f}:"
         f"{altitude}:{limit}:{group_key}"
     )
 
