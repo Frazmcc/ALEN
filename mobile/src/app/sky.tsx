@@ -28,6 +28,12 @@ import {
 } from '@/components/SkyLayersControl';
 import { LiveSatelliteCanvas } from '@/components/LiveSatelliteCanvas';
 import { useLiveSatellites } from '@/live/useLiveSatellites';
+import {
+  activeSatelliteSources,
+  defaultSatelliteGroupState,
+  satelliteMatchesActiveGroups,
+  type SatelliteGroupKey,
+} from '@/live/satelliteGroups';
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
 import { SkyObjectSheet } from '@/components/SkyObjectSheet';
@@ -54,6 +60,9 @@ export default function SkyScreen() {
   const [pitch, setPitch] = useState(28);
   const [fov, setFov] = useState(105);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [satelliteGroups, setSatelliteGroups] = useState(
+    defaultSatelliteGroupState,
+  );
   const [selectedObject, setSelectedObject] = useState<SkySelection | null>(null);
   const [layers, setLayers] = useState<SkyLayers>({
     stars: true,
@@ -78,10 +87,25 @@ export default function SkyScreen() {
     useManualLocation,
     useDemoLocation,
   } = useObserverLocation();
+  const satelliteSources = useMemo(
+    () => activeSatelliteSources(satelliteGroups),
+    [satelliteGroups],
+  );
   const {
-    tracks: satelliteTracks,
+    tracks: visibleSatelliteTracks,
     status: satelliteStatus,
-  } = useLiveSatellites(observer, layers.satellites);
+  } = useLiveSatellites(
+    observer,
+    layers.satellites,
+    satelliteSources,
+  );
+  const visibleSatelliteTracks = useMemo(
+    () =>
+      satelliteTracks.filter((track) =>
+        satelliteMatchesActiveGroups(track.groups, satelliteGroups),
+      ),
+    [satelliteGroups, satelliteTracks],
+  );
   const {
     tracks: aircraftTracks,
     status: aircraftStatus,
@@ -198,7 +222,7 @@ export default function SkyScreen() {
     nowMs: now,
     stars,
     planets,
-    satelliteTracks,
+    visibleSatelliteTracks,
     aircraftTracks,
     observer,
     observerLabel,
@@ -313,6 +337,13 @@ export default function SkyScreen() {
     setSize({ width, height });
   }
 
+  function toggleSatelliteGroup(group: SatelliteGroupKey) {
+    setSatelliteGroups((current) => ({
+      ...current,
+      [group]: !current[group],
+    }));
+  }
+
   function toggleLayer(layer: keyof SkyLayers) {
     const selectedLayer =
       selectedObject?.kind === 'star'
@@ -403,7 +434,7 @@ export default function SkyScreen() {
         />
 
         <LiveSatelliteCanvas
-          tracks={satelliteTracks}
+          tracks={visibleSatelliteTracks}
           viewport={viewport}
           visible={layers.satellites}
           selectedId={
@@ -561,15 +592,17 @@ export default function SkyScreen() {
           onToggleLayer={toggleLayer}
           satelliteSummary={
             satelliteStatus === 'live'
-              ? `${satelliteTracks.length} visible · labels off`
+              ? `${visibleSatelliteTracks.length} visible · labels off`
               : satelliteStatus === 'loading'
                 ? 'Loading live positions…'
                 : satelliteStatus === 'stale'
-                  ? `${satelliteTracks.length} cached · reconnecting`
+                  ? `${visibleSatelliteTracks.length} cached · reconnecting`
                   : satelliteStatus === 'error'
                     ? 'Feed unavailable'
                     : 'Off · no location sent'
           }
+          satelliteGroups={satelliteGroups}
+          onToggleSatelliteGroup={toggleSatelliteGroup}
           aircraftSummary={
             aircraftStatus === 'live'
               ? `${aircraftTracks.length} nearby · labels off`
