@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#02050a">
   <meta name="description" content="ALEN — Astronomical Live Environment & Navigation">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://celestrak.org https://www.celestrak.org https://s3.amazonaws.com https://alen-api-lquw.onrender.com; img-src 'self' data: https://upload.wikimedia.org https://db-satnogs.freetls.fastly.net https://alen-api-lquw.onrender.com; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://celestrak.org https://www.celestrak.org https://s3.amazonaws.com https://alen-api-lquw.onrender.com https://api.planespotters.net; img-src 'self' data: https://upload.wikimedia.org https://db-satnogs.freetls.fastly.net https://alen-api-lquw.onrender.com https://*.plnspttrs.net https://*.planespotters.net; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
   <title>ALEN — Astronomical Live Environment & Navigation</title>
   <link rel="icon" href="/favicon.ico?v=6" sizes="any">
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=6">
@@ -41,7 +41,7 @@
       <button id="inspector-close" type="button" class="close" aria-label="Close object details">×</button>
       <p id="inspector-kind" class="eyebrow">OBJECT</p>
       <h2 id="inspector-name">—</h2>
-      <figure id="inspector-media" class="inspector-media"><img id="inspector-image" alt="" decoding="async"><figcaption id="inspector-image-credit"></figcaption></figure>
+      <figure id="inspector-media" class="inspector-media"><img id="inspector-image" alt="" decoding="async" loading="eager" fetchpriority="high"><figcaption id="inspector-image-credit"></figcaption></figure>
       <dl id="inspector-details"></dl>
       <section class="facts"><h3>About</h3><p id="inspector-fact"></p></section>
     </aside>
