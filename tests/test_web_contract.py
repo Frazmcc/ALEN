@@ -401,17 +401,26 @@ def test_satellite_polling_pauses_when_not_visible_or_enabled() -> None:
 
 
 def test_aircraft_photo_inspector_contract() -> None:
+    assert "function planeSpottersPhotoUrl(o)" in APP
+    assert '"https://api.planespotters.net/pub/photos//hex/"' in APP
+    assert 'params.set("reg",registration)' in APP
+    assert 'params.set("icaoType",aircraftType)' in APP
+    assert "function trustedPlaneSpottersImageUrl(value)" in APP
+    assert 'host.endsWith(".plnspttrs.net")' in APP
+    assert 'host.endsWith(".planespotters.net")' in APP
+    assert 'const res=await fetch(directUrl,{mode:"cors",cache:"default",credentials:"omit"})' in APP
+    assert 'const photos=data?.photos||data?.images||[]' in APP
+    assert 'photo.thumbnail?.src||photo.thumbnail' in APP
+    assert 'image.src=imageUrl' in APP
+    assert "const aircraftPhotoCache=new Map()" in APP
+    assert "async function loadAircraftPhotoFallback" in APP
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
-    assert 'const icaoHex=String(o.hex||"").trim().toLowerCase()' in APP
-    assert 'new URLSearchParams({registration,aircraft_type:aircraftType,icao_hex:icaoHex})' in APP
-    assert 'if(!photo?.image_path)' in APP
-    assert 'const imageUrl=API_BASE+photo.image_path' in APP
-    assert "const probe=new Image()" in APP
-    assert 'photo.match==="icao"?"exact aircraft"' in APP
-    assert 'const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org")' in APP
-    assert 'const planeSpottersSource=trustedExternalUrl(photo.source_url,"www.planespotters.net")' in APP
-    assert 'appendInspectorLink(credit,"More photos",photo.planespotters_url,"www.planespotters.net")' in APP
-    assert "Aircraft photo source unavailable · ALEN illustration" in APP
+    assert "Loading aircraft photo…" in APP
+    assert "No PlaneSpotters photo found · ALEN illustration" in APP
+    assert "https://api.planespotters.net" in HTML
+    assert "https://*.plnspttrs.net" in HTML
+    assert 'loading="eager"' in HTML
+    assert 'fetchpriority="high"' in HTML
 
 
 def test_sky_colour_tracks_local_solar_elevation() -> None:
