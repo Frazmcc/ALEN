@@ -211,6 +211,15 @@ export function useLiveObjectMetadata(
   const [metadata, setMetadata] =
     useState<LiveObjectMetadata>(EMPTY);
 
+  const selectedSatellite =
+    selection?.kind === 'satellite'
+      ? satelliteTracks.find((item) => item.id === selection.id) ?? null
+      : null;
+  const selectedAircraft =
+    selection?.kind === 'aircraft'
+      ? aircraftTracks.find((item) => item.id === selection.id) ?? null
+      : null;
+
   useEffect(() => {
     if (
       !selection ||
@@ -232,9 +241,7 @@ export function useLiveObjectMetadata(
     const load = async () => {
       try {
         if (selection.kind === 'satellite') {
-          const track = satelliteTracks.find(
-            (item) => item.id === selection.id,
-          );
+          const track = selectedSatellite;
           if (!track) {
             if (active) setMetadata(EMPTY);
             return;
@@ -266,9 +273,7 @@ export function useLiveObjectMetadata(
           return;
         }
 
-        const track = aircraftTracks.find(
-          (item) => item.id === selection.id,
-        );
+        const track = selectedAircraft;
         if (!track) {
           if (active) setMetadata(EMPTY);
           return;
@@ -343,9 +348,14 @@ export function useLiveObjectMetadata(
       controller.abort();
     };
   }, [
-    aircraftTracks,
-    satelliteTracks,
-    selection,
+    selection?.kind,
+    selection?.id,
+    selectedSatellite?.norad,
+    selectedSatellite?.name,
+    selectedAircraft?.callsign,
+    selectedAircraft?.registration,
+    selectedAircraft?.type,
+    selectedAircraft?.icaoHex,
   ]);
 
   return metadata;
