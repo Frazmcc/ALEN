@@ -5,6 +5,11 @@ import {
   type SatelliteGroupKey,
   type SatelliteGroupState,
 } from '@/live/satelliteGroups';
+import {
+  AIRCRAFT_GROUPS,
+  type AircraftGroupKey,
+  type AircraftGroupState,
+} from '@/live/aircraftGroups';
 
 export type SkyLayers = {
   stars: boolean;
@@ -24,6 +29,8 @@ type Props = {
   satelliteSummary?: string;
   satelliteGroups: SatelliteGroupState;
   onToggleSatelliteGroup: (group: SatelliteGroupKey) => void;
+  aircraftGroups: AircraftGroupState;
+  onToggleAircraftGroup: (group: AircraftGroupKey) => void;
   aircraftSummary?: string;
 };
 
@@ -49,6 +56,8 @@ export function SkyLayersControl({
   satelliteSummary,
   satelliteGroups,
   onToggleSatelliteGroup,
+  aircraftGroups,
+  onToggleAircraftGroup,
   aircraftSummary,
 }: Props) {
   return (
@@ -216,6 +225,59 @@ export function SkyLayersControl({
                           >
                             {aircraftSummary}
                           </Text>
+                        ) : null}
+                        {option.key === 'aircraft' && enabled ? (
+                          <View
+                            style={{
+                              marginTop: 8,
+                              gap: 5,
+                            }}
+                          >
+                            {AIRCRAFT_GROUPS.map((group) => {
+                              const groupEnabled = aircraftGroups[group.key];
+                              return (
+                                <Pressable
+                                  key={group.key}
+                                  accessibilityRole="switch"
+                                  accessibilityState={{ checked: groupEnabled }}
+                                  onPress={() => onToggleAircraftGroup(group.key)}
+                                  style={{
+                                    minHeight: 30,
+                                    paddingHorizontal: 8,
+                                    borderRadius: 8,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    backgroundColor: groupEnabled
+                                      ? 'rgba(23,54,94,0.5)'
+                                      : 'rgba(10,20,36,0.7)',
+                                    borderWidth: 1,
+                                    borderColor: groupEnabled
+                                      ? group.color
+                                      : colors.border,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: groupEnabled ? colors.text : colors.muted,
+                                      fontSize: 10,
+                                    }}
+                                  >
+                                    {group.label}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: groupEnabled ? group.color : colors.muted,
+                                      fontSize: 9,
+                                      fontWeight: '700',
+                                    }}
+                                  >
+                                    {groupEnabled ? 'ON' : 'OFF'}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
                         ) : null}
                       </View>
                       <Text

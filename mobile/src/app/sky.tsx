@@ -36,6 +36,11 @@ import {
 } from '@/live/satelliteGroups';
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
+import {
+  aircraftMatchesActiveGroup,
+  defaultAircraftGroupState,
+  type AircraftGroupKey,
+} from '@/live/aircraftGroups';
 import { SkyObjectSheet } from '@/components/SkyObjectSheet';
 import {
   nearestSkySelection,
@@ -64,6 +69,9 @@ export default function SkyScreen() {
     defaultSatelliteGroupState,
   );
   const [selectedObject, setSelectedObject] = useState<SkySelection | null>(null);
+  const [aircraftGroups, setAircraftGroups] = useState(
+    defaultAircraftGroupState,
+  );
   const [layers, setLayers] = useState<SkyLayers>({
     stars: true,
     constellations: true,
@@ -110,6 +118,13 @@ export default function SkyScreen() {
     tracks: aircraftTracks,
     status: aircraftStatus,
   } = useLiveAircraft(observer, layers.aircraft);
+  const visibleAircraftTracks = useMemo(
+    () =>
+      aircraftTracks.filter((track) =>
+        aircraftMatchesActiveGroup(track, aircraftGroups),
+      ),
+    [aircraftGroups, aircraftTracks],
+  );
 
   const {
     active: phoneAimActive,
@@ -223,7 +238,7 @@ export default function SkyScreen() {
     stars,
     planets,
     satelliteTracks: visibleSatelliteTracks,
-    aircraftTracks,
+    aircraftTracks: visibleAircraftTracks,
     observer,
     observerLabel,
     viewport,
@@ -337,6 +352,13 @@ export default function SkyScreen() {
     setSize({ width, height });
   }
 
+  function toggleAircraftGroup(group: AircraftGroupKey) {
+    setAircraftGroups((current) => ({
+      ...current,
+      [group]: !current[group],
+    }));
+  }
+
   function toggleSatelliteGroup(group: SatelliteGroupKey) {
     setSatelliteGroups((current) => ({
       ...current,
@@ -444,7 +466,7 @@ export default function SkyScreen() {
           }
         />
         <LiveAircraftCanvas
-          tracks={aircraftTracks}
+          tracks={visibleAircraftTracks}
           observer={observer}
           viewport={viewport}
           visible={layers.aircraft}
@@ -603,13 +625,15 @@ export default function SkyScreen() {
           }
           satelliteGroups={satelliteGroups}
           onToggleSatelliteGroup={toggleSatelliteGroup}
+          aircraftGroups={aircraftGroups}
+          onToggleAircraftGroup={toggleAircraftGroup}
           aircraftSummary={
             aircraftStatus === 'live'
-              ? `${aircraftTracks.length} nearby · labels off`
+              ? `${visibleAircraftTracks.length} nearby · labels off`
               : aircraftStatus === 'loading'
                 ? 'Loading ADS-B positions…'
                 : aircraftStatus === 'stale'
-                  ? `${aircraftTracks.length} cached · reconnecting`
+                  ? `${visibleAircraftTracks.length} cached · reconnecting`
                   : aircraftStatus === 'error'
                     ? 'Feed unavailable'
                     : 'Off · no location sent'
