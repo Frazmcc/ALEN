@@ -1581,9 +1581,10 @@ async function loadAircraftPhotoFallback(o,image,credit,token){
 }
 async function loadRegionalServicePhoto(o,image,credit,token){
  const service=aircraftServiceImageKind(o),region=aircraftServiceRegion(o);
- if(!service||!region)return false;
+ const operator=String(o.operator||"").trim()||String(o.callsign||o.name||"").trim();
+ if(!service||(!region&&!operator))return false;
  try{
-  const qs=new URLSearchParams({service,region,aircraft_type:String(o.type||""),operator:String(o.operator||"")});
+  const qs=new URLSearchParams({service,region,aircraft_type:String(o.type||""),operator});
   const res=await fetch(API_BASE+"/api/v1/aircraft/service-photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
   if(!res.ok)throw new Error("regional service photo "+res.status);
   const photo=(await res.json()).photo;
@@ -1596,8 +1597,9 @@ async function loadRegionalServicePhoto(o,image,credit,token){
    credit.textContent=`Regional service image unavailable · ${String(o.type||"aircraft")} neutral model reference`;
   };
   image.src=imageUrl;
-  image.alt=`${region} ${service.replace("_"," ")} representative aircraft`;
-  credit.replaceChildren(document.createTextNode(`${photo.artist||"Wikimedia Commons contributor"} · ${region} · regional service representative · not the exact airframe`));
+  const regionalLabel=region||operator;
+  image.alt=`${regionalLabel} ${service.replace("_"," ")} representative aircraft`;
+  credit.replaceChildren(document.createTextNode(`${photo.artist||"Wikimedia Commons contributor"} · ${regionalLabel} · regional service representative · not the exact airframe`));
   const source=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
   if(source)appendInspectorLink(credit,"Source",source,"commons.wikimedia.org");
   return true;
