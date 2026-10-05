@@ -67,7 +67,11 @@ export function useLiveSatellites(
     if (!tracksRef.current.length) setStatus('loading');
     setError(null);
 
-    const timeout = setTimeout(() => controller.abort(), 20_000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 20_000);
 
     try {
       const query = [
@@ -141,10 +145,11 @@ export function useLiveSatellites(
       setTracks(next);
       setStatus('live');
     } catch (caught) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted && !timedOut) return;
 
-      const message =
-        caught instanceof Error
+      const message = timedOut
+        ? 'Satellite feed timed out'
+        : caught instanceof Error
           ? caught.message
           : 'Satellite feed unavailable';
 
