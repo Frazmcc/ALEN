@@ -401,6 +401,7 @@ def test_satellite_polling_pauses_when_not_visible_or_enabled() -> None:
 
 
 def test_aircraft_photo_inspector_contract() -> None:
+    # Keep the direct browser path covered whenever the PR is revalidated.
     assert "function planeSpottersPhotoUrl(o)" in APP
     assert '"https://api.planespotters.net/pub/photos//hex/"' in APP
     assert 'params.set("reg",registration)' in APP
