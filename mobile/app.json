@@ -29,6 +29,12 @@
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false
         }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "ALEN uses motion sensors while Aim with phone is enabled to align the live sky with the direction you point your device."
+        }
       ]
     ],
     "experiments": {
