@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
+  Pressable,
   Text,
   View,
   type LayoutChangeEvent,
@@ -17,11 +18,7 @@ import {
   type Observer,
 } from '@/sky/astronomy';
 import { projectAltAz } from '@/sky/projection';
-
-const DEMO_OBSERVER: Observer = {
-  lat: 51.4769,
-  lon: 0,
-};
+import { useObserverLocation } from '@/location/useObserverLocation';
 
 type Size = {
   width: number;
@@ -34,6 +31,14 @@ export default function SkyScreen() {
   const [yaw, setYaw] = useState(180);
   const [pitch, setPitch] = useState(28);
   const gestureStart = useRef({ yaw: 180, pitch: 28 });
+  const {
+    observer,
+    source,
+    requesting,
+    error: locationError,
+    useCurrentLocation,
+    useDemoLocation,
+  } = useObserverLocation();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -41,8 +46,8 @@ export default function SkyScreen() {
   }, []);
 
   const planets = useMemo(
-    () => currentPlanetPositions(now, DEMO_OBSERVER),
-    [now],
+    () => currentPlanetPositions(now, observer),
+    [now, observer],
   );
 
   const sun = planets.find((planet) => planet.id === 'sun');
@@ -56,10 +61,10 @@ export default function SkyScreen() {
           star.ra,
           star.dec,
           now,
-          DEMO_OBSERVER,
+          observer,
         ),
       })),
-    [now],
+    [now, observer],
   );
 
   const viewport = {
@@ -79,7 +84,7 @@ export default function SkyScreen() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gesture) =>
           Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2,
         onPanResponderGrant: () => {
@@ -256,7 +261,6 @@ export default function SkyScreen() {
         />
 
         <View
-          pointerEvents="none"
           style={{
             position: 'absolute',
             left: 16,
@@ -264,6 +268,7 @@ export default function SkyScreen() {
             top: 16,
             flexDirection: 'row',
             justifyContent: 'space-between',
+            alignItems: 'flex-start',
           }}
         >
           <View
@@ -290,31 +295,97 @@ export default function SkyScreen() {
             </Text>
           </View>
 
-          <View
-            style={{
-              alignItems: 'flex-end',
-              backgroundColor: 'rgba(9,18,33,0.86)',
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 16,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-            }}
-          >
-            <Text
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                source === 'device'
+                  ? 'Using current location'
+                  : 'Use current location'
+              }
+              disabled={requesting}
+              onPress={useCurrentLocation}
               style={{
-                color: colors.text,
-                fontSize: 12,
-                fontWeight: '700',
+                alignItems: 'flex-end',
+                backgroundColor: 'rgba(9,18,33,0.92)',
+                borderWidth: 1,
+                borderColor:
+                  source === 'device' ? colors.success : colors.border,
+                borderRadius: 16,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                opacity: requesting ? 0.7 : 1,
               }}
             >
-              Demo observer
-            </Text>
-            <Text style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>
-              Greenwich · GPS next
-            </Text>
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 12,
+                  fontWeight: '700',
+                }}
+              >
+                {requesting
+                  ? 'Finding location…'
+                  : source === 'device'
+                    ? 'Current location'
+                    : 'Demo observer'}
+              </Text>
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 10,
+                  marginTop: 2,
+                }}
+              >
+                {source === 'device'
+                  ? 'Foreground location only'
+                  : 'Tap to use your location'}
+              </Text>
+            </Pressable>
+
+            {source === 'device' ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={useDemoLocation}
+                style={{
+                  minHeight: 32,
+                  justifyContent: 'center',
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(9,18,33,0.88)',
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ color: colors.muted, fontSize: 10 }}>
+                  Use demo location
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
+
+        {locationError ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 18,
+              right: 18,
+              bottom: 78,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 14,
+              backgroundColor: 'rgba(35,18,18,0.94)',
+              borderWidth: 1,
+              borderColor: colors.warning,
+            }}
+          >
+            <Text style={{ color: colors.text, fontSize: 11, lineHeight: 16 }}>
+              {locationError}
+            </Text>
+          </View>
+        ) : null}
 
         <View
           pointerEvents="none"
