@@ -30,6 +30,8 @@ Update this file whenever a feature changes what data is collected, processed, s
 - If permission is denied, the application remains usable with the demo/manual-location path.
 - Star and planet calculations remain on-device.
 - The Satellites and Aircraft live layers are off by default.
+- Their master enabled/disabled state is not persisted across launches; reopening ALEN starts both live network layers off.
+- Astronomy/display layer choices and live-layer subgroup preferences may be stored locally on-device.
 - When the user enables Satellites, the active observer latitude/longitude is sent to the ALEN API to calculate which satellites are above that observer.
 - The satellite API rounds observer coordinates into an approximately 0.005° cache cell and retains that application-level cache for up to 8 seconds.
 - When the user enables Aircraft, the active observer latitude/longitude is sent to the ALEN API to filter nearby ADS-B aircraft.
