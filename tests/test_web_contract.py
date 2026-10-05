@@ -207,7 +207,7 @@ def test_landscape_is_one_edge_to_edge_terrain_silhouette() -> None:
     assert draw.index("if(layers.planets)") < draw.index("drawDistantTerrain(dayMode);")
     assert draw.index("if(layers.aircraft)") < draw.index("drawDistantTerrain(dayMode);")
     assert draw.index("if(layers.satellites)") < draw.index("drawDistantTerrain(dayMode);")
-    assert draw.index("drawLandscapeForeground();") < draw.index("if(layers.airports)")
+    assert draw.index("drawDistantTerrain(dayMode);") < draw.index("if(layers.airports)")
 
 
 def test_footer_controls_are_grouped_into_four_tabs() -> None:
