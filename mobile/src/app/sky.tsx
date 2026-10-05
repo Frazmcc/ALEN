@@ -18,6 +18,7 @@ import {
 } from '@/sky/astronomy';
 import { projectAltAz } from '@/sky/projection';
 import { useObserverLocation } from '@/location/useObserverLocation';
+import { useDevicePointing } from '@/orientation/useDevicePointing';
 
 type Size = {
   width: number;
@@ -38,11 +39,36 @@ export default function SkyScreen() {
     useCurrentLocation,
     useDemoLocation,
   } = useObserverLocation();
+  const {
+    active: phoneAimActive,
+    starting: phoneAimStarting,
+    heading: phoneHeading,
+    elevation: phoneElevation,
+    headingAccuracy,
+    usingTrueNorth,
+    error: phoneAimError,
+    start: startPhoneAim,
+    stop: stopPhoneAim,
+  } = useDevicePointing();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!phoneAimActive) return;
+    if (phoneHeading !== null) setYaw(phoneHeading);
+    if (phoneElevation !== null) {
+      setPitch(clamp(phoneElevation, 0, 84));
+    }
+  }, [phoneAimActive, phoneElevation, phoneHeading]);
+
+  useEffect(() => {
+    if (source !== 'device' && phoneAimActive) {
+      stopPhoneAim();
+    }
+  }, [phoneAimActive, source, stopPhoneAim]);
 
   const planets = useMemo(
     () => currentPlanetPositions(now, observer),
@@ -85,7 +111,8 @@ export default function SkyScreen() {
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2,
+          !phoneAimActive &&
+          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
         onPanResponderGrant: () => {
           gestureStart.current = { yaw, pitch };
         },
@@ -102,7 +129,7 @@ export default function SkyScreen() {
           );
         },
       }),
-    [pitch, yaw],
+    [phoneAimActive, pitch, yaw],
   );
 
   function onLayout(event: LayoutChangeEvent) {
@@ -281,7 +308,7 @@ export default function SkyScreen() {
             }}
           >
             <Text style={{ color: colors.text, fontWeight: '700' }}>
-              Live Sky · M1
+              Live Sky · M2
             </Text>
             <Text
               style={{
@@ -364,7 +391,7 @@ export default function SkyScreen() {
           </View>
         </View>
 
-        {locationError ? (
+        {locationError || phoneAimError ? (
           <View
             pointerEvents="none"
             style={{
@@ -381,7 +408,7 @@ export default function SkyScreen() {
             }}
           >
             <Text style={{ color: colors.text, fontSize: 11, lineHeight: 16 }}>
-              {locationError}
+              {locationError ?? phoneAimError}
             </Text>
           </View>
         ) : null}
@@ -404,9 +431,48 @@ export default function SkyScreen() {
             {Math.round(yaw)}° · {Math.round(pitch)}° elevation
           </Text>
           <Text style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>
-            Drag to look around
+            {phoneAimActive
+              ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · compass accuracy ${headingAccuracy ?? '—'}`
+              : 'Drag to look around'}
           </Text>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            phoneAimActive ? 'Turn off Aim with phone' : 'Turn on Aim with phone'
+          }
+          disabled={phoneAimStarting}
+          onPress={phoneAimActive ? stopPhoneAim : startPhoneAim}
+          style={{
+            position: 'absolute',
+            right: 18,
+            bottom: 18,
+            minHeight: 44,
+            minWidth: 118,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 14,
+            borderRadius: 14,
+            backgroundColor: phoneAimActive
+              ? 'rgba(24,72,52,0.94)'
+              : 'rgba(9,18,33,0.94)',
+            borderWidth: 1,
+            borderColor: phoneAimActive ? colors.success : colors.border,
+            opacity: phoneAimStarting ? 0.7 : 1,
+          }}
+        >
+          <Text style={{ color: colors.text, fontSize: 11, fontWeight: '700' }}>
+            {phoneAimStarting
+              ? 'Starting…'
+              : phoneAimActive
+                ? 'Phone aim ON'
+                : 'Aim with phone'}
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: 9, marginTop: 2 }}>
+            {phoneAimActive ? 'Tap for manual view' : 'Compass + motion'}
+          </Text>
+        </Pressable>
       </View>
     </AppScreen>
   );
