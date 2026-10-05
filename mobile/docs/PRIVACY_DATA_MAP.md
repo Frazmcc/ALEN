@@ -15,7 +15,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 | Contacts | No | No | No | No | N/A | N/A |
 | Photos/media | No | No | No | No | N/A | N/A |
 | Camera | No | No | No | No | Planned AR feature; not implemented yet | N/A |
-| Motion/orientation | No | No | No | No | Planned sky alignment; not implemented yet | N/A |
+| Motion/orientation | Optional | No | No | No | Align the live sky while Aim with phone is enabled | Current foreground session only |
 | Crash diagnostics | No | No | No | No | Not configured yet | N/A |
 | Analytics | No | No | No | No | Not configured yet | N/A |
 
@@ -28,6 +28,15 @@ Update this file whenever a feature changes what data is collected, processed, s
 - No location foreground service is enabled on Android.
 - If permission is denied, the application remains usable with the demo/manual-location path.
 - The current native astronomy implementation performs star and planet calculations on-device and does not transmit device coordinates to the ALEN API.
+
+## Motion/orientation rules
+
+- Motion access is requested only when the user enables Aim with phone.
+- Motion and compass readings are processed locally on-device.
+- Sensor readings are not stored by ALEN and are not sent to the ALEN API.
+- Turning Aim with phone off removes the active sensor subscriptions.
+- Manual drag remains available if motion access is denied or unavailable.
+- Sensor sampling is intentionally below Android's high-sampling-rate permission threshold.
 
 ## Future-change gate
 
