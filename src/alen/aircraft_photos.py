@@ -103,7 +103,7 @@ class AircraftPhotoProvider:
         region_name = region.strip()[:80]
         operator_name = operator.strip()[:120]
         type_name = aircraft_type.strip().upper()[:16]
-        if not label or not region_name:
+        if not label or (not region_name and not operator_name):
             return None
 
         key = f"regional|{service_key}|{region_name.upper()}|{operator_name.upper()}|{type_name}"
@@ -118,11 +118,16 @@ class AircraftPhotoProvider:
         model_terms = _type_search_queries(type_name) if type_name else ()
         model_name = model_terms[0].removesuffix(" aircraft") if model_terms else type_name
         queries: list[str] = []
-        if operator_name:
+        if operator_name and region_name:
             queries.append(f'"{region_name}" "{operator_name}" aircraft')
-        if model_name:
+        if operator_name and model_name:
+            queries.append(f'"{operator_name}" "{model_name}" aircraft')
+        if operator_name:
+            queries.append(f'"{operator_name}" aircraft')
+        if region_name and model_name:
             queries.append(f'"{region_name}" "{label}" "{model_name}"')
-        queries.append(f'"{region_name}" "{label}" aircraft')
+        if region_name:
+            queries.append(f'"{region_name}" "{label}" aircraft')
 
         photo = None
         for query in queries:
