@@ -23,10 +23,11 @@ Status:
 - [x] Horizon tied to viewing direction
 - [x] Manual drag-to-look
 - [x] Centre sky on a selected catalogue object
-- [~] Replace temporary native-view star renderer with high-performance canvas renderer
-- [ ] Pinch-to-zoom
+- [x] High-performance Skia canvas for star/planet points
+- [x] Pinch-to-zoom
 - [ ] Native tap selection in the sky
-- [ ] Full website atmosphere/terrain fidelity
+- [~] Seamless horizon-anchored atmosphere gradient
+- [ ] Full website terrain fidelity
 - [ ] Smooth background/foreground resume validation on real devices
 - [ ] Responsive landscape/tablet layout
 
