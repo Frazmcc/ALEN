@@ -19,13 +19,6 @@ import {
 
 const REFRESH_MS = 10_000;
 const MAX_SAMPLE_AGE_MS = 10_000;
-const DEFAULT_GROUPS = [
-  'last-30-days',
-  'stations',
-  'visual',
-  'starlink',
-];
-
 export type SatelliteFeedStatus =
   | 'off'
   | 'loading'
@@ -45,6 +38,7 @@ type SatelliteResponse = {
 export function useLiveSatellites(
   observer: Observer,
   enabled: boolean,
+  sources: string[],
 ) {
   const [tracks, setTracks] = useState<SatelliteTrack[]>([]);
   const [status, setStatus] =
@@ -78,7 +72,7 @@ export function useLiveSatellites(
         `lat=${encodeURIComponent(String(observer.lat))}`,
         `lon=${encodeURIComponent(String(observer.lon))}`,
         'altitude_m=0',
-        `groups=${encodeURIComponent(DEFAULT_GROUPS.join(','))}`,
+        `groups=${encodeURIComponent(sources.join(','))}`,
         'limit=320',
       ].join('&');
 
@@ -161,10 +155,10 @@ export function useLiveSatellites(
         abortRef.current = null;
       }
     }
-  }, [enabled, observer.lat, observer.lon]);
+  }, [enabled, observer.lat, observer.lon, sources]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !sources.length) {
       abortRef.current?.abort();
       abortRef.current = null;
       tracksRef.current = [];

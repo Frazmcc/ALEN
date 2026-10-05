@@ -1,5 +1,10 @@
 import { Pressable, Text, View } from 'react-native';
 import { colors } from '@/theme/colors';
+import {
+  SATELLITE_GROUPS,
+  type SatelliteGroupKey,
+  type SatelliteGroupState,
+} from '@/live/satelliteGroups';
 
 export type SkyLayers = {
   stars: boolean;
@@ -17,6 +22,8 @@ type Props = {
   onToggleOpen: () => void;
   onToggleLayer: (layer: keyof SkyLayers) => void;
   satelliteSummary?: string;
+  satelliteGroups: SatelliteGroupState;
+  onToggleSatelliteGroup: (group: SatelliteGroupKey) => void;
   aircraftSummary?: string;
 };
 
@@ -40,6 +47,8 @@ export function SkyLayersControl({
   onToggleOpen,
   onToggleLayer,
   satelliteSummary,
+  satelliteGroups,
+  onToggleSatelliteGroup,
   aircraftSummary,
 }: Props) {
   return (
@@ -143,6 +152,59 @@ export function SkyLayersControl({
                           >
                             {satelliteSummary}
                           </Text>
+                        ) : null}
+                        {option.key === 'satellites' && enabled ? (
+                          <View
+                            style={{
+                              marginTop: 8,
+                              gap: 5,
+                            }}
+                          >
+                            {SATELLITE_GROUPS.map((group) => {
+                              const groupEnabled = satelliteGroups[group.key];
+                              return (
+                                <Pressable
+                                  key={group.key}
+                                  accessibilityRole="switch"
+                                  accessibilityState={{ checked: groupEnabled }}
+                                  onPress={() => onToggleSatelliteGroup(group.key)}
+                                  style={{
+                                    minHeight: 30,
+                                    paddingHorizontal: 8,
+                                    borderRadius: 8,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    backgroundColor: groupEnabled
+                                      ? 'rgba(23,54,94,0.5)'
+                                      : 'rgba(10,20,36,0.7)',
+                                    borderWidth: 1,
+                                    borderColor: groupEnabled
+                                      ? group.color
+                                      : colors.border,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: groupEnabled ? colors.text : colors.muted,
+                                      fontSize: 10,
+                                    }}
+                                  >
+                                    {group.label}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: groupEnabled ? group.color : colors.muted,
+                                      fontSize: 9,
+                                      fontWeight: '700',
+                                    }}
+                                  >
+                                    {groupEnabled ? 'ON' : 'OFF'}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
                         ) : null}
                         {option.key === 'aircraft' && aircraftSummary ? (
                           <Text
