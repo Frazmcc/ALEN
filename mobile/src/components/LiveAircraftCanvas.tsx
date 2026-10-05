@@ -1,4 +1,5 @@
 import {
+  Fragment,
   memo,
   useEffect,
   useMemo,
@@ -222,7 +223,7 @@ export const LiveAircraftCanvas = memo(function LiveAircraftCanvas({
             item.visualType === 'military' ? 2 : 1.55;
 
           return (
-            <>
+            <Fragment key={item.id}>
               <Circle
                 key={`halo-${item.id}`}
                 cx={item.x}
@@ -255,7 +256,7 @@ export const LiveAircraftCanvas = memo(function LiveAircraftCanvas({
                 opacity={item.opacity}
                 strokeWidth={Math.max(1, width - 0.3)}
               />
-            </>
+            </Fragment>
           );
         })}
       </Canvas>
