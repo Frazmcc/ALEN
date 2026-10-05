@@ -1,0 +1,44 @@
+name: Load smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      users:
+        description: Concurrent simulated users
+        required: false
+        default: "100"
+  push:
+    branches:
+      - perf/load-smoke
+    paths:
+      - "scripts/load_smoke.py"
+      - ".github/workflows/load-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  load-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install HTTP client
+        run: python -m pip install "httpx[http2]>=0.27"
+
+      - name: Run bounded production load smoke
+        env:
+          LOAD_USERS: ${{ github.event.inputs.users || '100' }}
+        run: >
+          python scripts/load_smoke.py
+          --users "$LOAD_USERS"
+          --base-url "https://alen-api-lquw.onrender.com"
+          --p95-limit-ms 5000
