@@ -27,11 +27,35 @@ class SatelliteProvider:
     SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
     CACHE_SECONDS = 1800
     MAX_CACHE_GROUPS = 16
+    ALLOWED_GROUPS = frozenset(
+        {
+            "last-30-days",
+            "stations",
+            "visual",
+            "starlink",
+            "oneweb",
+            "kuiper",
+            "gnss",
+            "weather",
+            "earth-resources",
+            "science",
+            "amateur",
+            "geo",
+            "military",
+            "cubesat",
+            "fengyun-1c-debris",
+            "iridium-33-debris",
+            "cosmos-2251-debris",
+            "cosmos-1408-debris",
+        }
+    )
 
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, tuple[OrbitRecord, ...]]] = {}
         self._lock = Lock()
         self._executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="alen-sat")
+        self._group_locks = {group: Lock() for group in self.ALLOWED_GROUPS}
+        self._fallback_lock = Lock()
         self.last_diagnostics: dict[str, object] = {}
 
     def visible(
@@ -45,7 +69,11 @@ class SatelliteProvider:
     ) -> list[dict[str, object]]:
         now = datetime.now(timezone.utc)
         merged: dict[int, tuple[OrbitRecord, set[str]]] = {}
-        requested_groups = list(dict.fromkeys(groups))
+        requested_groups = [
+            group
+            for group in dict.fromkeys(groups)
+            if group in self.ALLOWED_GROUPS
+        ][:12]
         loaded_by_group: dict[str, int] = {group: 0 for group in requested_groups}
         records_by_group: dict[str, tuple[OrbitRecord, ...]] = {}
         if requested_groups:
@@ -147,17 +175,30 @@ class SatelliteProvider:
         return visible[: max(1, min(int(limit), 500))]
 
     def _load_group(self, group: str) -> tuple[OrbitRecord, ...]:
+        if group not in self.ALLOWED_GROUPS:
+            return ()
+
         now = time()
         with self._lock:
             cached = self._cache.get(group)
         if cached and now - cached[0] < self.CACHE_SECONDS:
             return cached[1]
 
-        records = self._fetch_group(group)
-        if records:
-            self._store_cache(group, records)
-            return records
-        return cached[1] if cached else ()
+        # Coalesce simultaneous refreshes for the same large catalog. Without
+        # this, several user requests arriving at expiry can each allocate and
+        # parse a full Starlink catalog at the same time.
+        with self._group_locks[group]:
+            now = time()
+            with self._lock:
+                cached = self._cache.get(group)
+            if cached and now - cached[0] < self.CACHE_SECONDS:
+                return cached[1]
+
+            records = self._fetch_group(group)
+            if records:
+                self._store_cache(group, records)
+                return records
+            return cached[1] if cached else ()
 
     def _load_fallback_catalog(self) -> tuple[OrbitRecord, ...]:
         key = "__public_fallback__"
@@ -167,13 +208,20 @@ class SatelliteProvider:
         if cached and now - cached[0] < self.CACHE_SECONDS:
             return cached[1]
 
-        records = self._fetch_fallback_catalog()
-        if not records:
-            records = self._fetch_orbitalwiki_catalog()
-        if records:
-            self._store_cache(key, records)
-            return records
-        return cached[1] if cached else ()
+        with self._fallback_lock:
+            now = time()
+            with self._lock:
+                cached = self._cache.get(key)
+            if cached and now - cached[0] < self.CACHE_SECONDS:
+                return cached[1]
+
+            records = self._fetch_fallback_catalog()
+            if not records:
+                records = self._fetch_orbitalwiki_catalog()
+            if records:
+                self._store_cache(key, records)
+                return records
+            return cached[1] if cached else ()
 
     def _store_cache(self, key: str, records: tuple[OrbitRecord, ...]) -> None:
         now = time()
