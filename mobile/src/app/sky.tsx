@@ -264,29 +264,6 @@ export default function SkyScreen() {
         {...panResponder.panHandlers}
         style={{ flex: 1, overflow: 'hidden', backgroundColor: palette.top }}
       >
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: '33%',
-            bottom: '25%',
-            backgroundColor: palette.middle,
-          }}
-        />
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: '62%',
-            bottom: Math.max(0, size.height - horizonY),
-            backgroundColor: palette.horizon,
-          }}
-        />
-
         <SkyObjectCanvas
           stars={stars}
           planets={planets}
@@ -294,6 +271,12 @@ export default function SkyScreen() {
           starVisibility={palette.stars}
           targetKind={targetKind}
           targetId={targetId}
+          horizonY={horizonY}
+          skyColors={{
+            top: palette.top,
+            middle: palette.middle,
+            horizon: palette.horizon,
+          }}
         />
 
         {stars
