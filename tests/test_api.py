@@ -283,6 +283,33 @@ def test_nearby_aircraft_endpoint(monkeypatch) -> None:
 
 
 
+def test_aircraft_shared_snapshot_stays_fresh_for_two_seconds(monkeypatch) -> None:
+    from alen.aircraft import AircraftProvider
+    from alen.cache import SharedCache
+
+    now = [100.0]
+    calls = {"count": 0}
+    provider = AircraftProvider(cache=SharedCache(namespace="test-aircraft-freshness"))
+
+    def fake_fetch(*args, **kwargs):
+        calls["count"] += 1
+        return {"fetched_at": now[0], "ac": []}
+
+    monkeypatch.setattr(provider, "_fetch_snapshot", fake_fetch)
+    monkeypatch.setattr("alen.aircraft.time.time", lambda: now[0])
+
+    provider.nearby(55.77, -4.09)
+    now[0] = 101.5
+    provider.nearby(55.78, -4.08)
+    assert calls["count"] == 1
+    assert provider.last_diagnostics["cache"] == "fresh"
+
+    now[0] = 102.1
+    provider.nearby(55.78, -4.08)
+    assert calls["count"] == 2
+    assert provider.last_diagnostics["cache"] == "refreshed"
+
+
 def test_aircraft_provider_uses_shared_geographic_snapshot(monkeypatch) -> None:
     from alen.aircraft import AircraftProvider
     from alen.cache import SharedCache
