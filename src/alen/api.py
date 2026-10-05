@@ -197,6 +197,25 @@ def satellite_info(
     return {"satellite": _satellite_info.lookup(norad, name)}
 
 
+@app.get("/api/v1/satellite/photo/image")
+def satellite_photo_image(
+    norad: int = Query(ge=1, le=999999999),
+    name: str = Query(default="", max_length=120),
+) -> Response:
+    image = _satellite_info.image_bytes(norad, name)
+    if image is None:
+        raise HTTPException(status_code=404, detail="Satellite photo not found")
+    body, media_type = image
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "public, max-age=21600",
+            "Content-Encoding": "identity",
+        },
+    )
+
+
 @app.get("/api/v1/aircraft")
 def nearby_aircraft(
     lat: float = Query(ge=-90.0, le=90.0),
