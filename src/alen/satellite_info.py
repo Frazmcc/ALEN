@@ -7,6 +7,8 @@ import time
 
 import httpx
 
+from .cache import SharedCache, shared_cache
+
 
 @dataclass(frozen=True)
 class SatellitePhoto:
@@ -22,7 +24,8 @@ class SatelliteInfoProvider:
     SATNOGS_URL = "https://db.satnogs.org/api/satellites/"
     COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
     SATNOGS_MEDIA_BASE = "https://db-satnogs.freetls.fastly.net/media/"
-    CACHE_TTL_SECONDS = 21600
+    CACHE_TTL_SECONDS = 86400
+    REFRESH_LOCK_SECONDS = 30
 
     OWNER_NAMES = {
         "PRC": "People's Republic of China",
@@ -82,20 +85,46 @@ class SatelliteInfoProvider:
         "D": "Decayed",
     }
 
-    def __init__(self) -> None:
-        self._cache: dict[int, tuple[float, dict[str, object] | None]] = {}
+    def __init__(self, cache: SharedCache | None = None) -> None:
+        self._cache = cache or shared_cache
 
     def lookup(self, norad: int, name: str = "") -> dict[str, object] | None:
         norad = int(norad)
-        now = time.monotonic()
-        cached = self._cache.get(norad)
-        if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
-            return cached[1]
+        key = f"satellite-info:{norad}"
+        cached = self._cache.get_json(key)
+        if isinstance(cached, dict) and "found" in cached:
+            value = cached.get("value")
+            return value if isinstance(value, dict) else None
 
+        token = self._cache.acquire_lock(key, ttl_seconds=self.REFRESH_LOCK_SECONDS)
+        if token is None:
+            for _ in range(60):
+                time.sleep(0.05)
+                cached = self._cache.get_json(key)
+                if isinstance(cached, dict) and "found" in cached:
+                    value = cached.get("value")
+                    return value if isinstance(value, dict) else None
+            return None
+
+        try:
+            return self._lookup_uncached(norad, name, key)
+        finally:
+            self._cache.release_lock(key, token)
+
+    def _lookup_uncached(
+        self,
+        norad: int,
+        name: str,
+        cache_key: str,
+    ) -> dict[str, object] | None:
         satcat = self._satcat(norad)
         satnogs = self._satnogs(norad)
         if satcat is None and satnogs is None:
-            self._cache[norad] = (now, None)
+            self._cache.set_json(
+                cache_key,
+                {"found": False, "value": None},
+                ttl_seconds=3600,
+            )
             return None
 
         object_name = str((satcat or {}).get("OBJECT_NAME") or (satnogs or {}).get("name") or name or f"NORAD {norad}").strip()
@@ -160,7 +189,11 @@ class SatelliteInfoProvider:
                 "match": photo.match,
             }
 
-        self._cache[norad] = (now, result)
+        self._cache.set_json(
+            cache_key,
+            {"found": True, "value": result},
+            ttl_seconds=self.CACHE_TTL_SECONDS,
+        )
         return result
 
     def _satcat(self, norad: int) -> dict[str, object] | None:
