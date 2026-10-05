@@ -111,10 +111,10 @@ def test_live_aircraft_and_satellite_contract() -> None:
     assert 'radius_nm:String(AIRCRAFT_RADIUS_NM)' in APP
     assert "requestAnimationFrame(tick)" in APP
     assert "API_BASE+\"/api/v1/satellites?\"" in APP
-    assert "SGP4 · shared world-position snapshot" in APP
+    assert "SGP4 · shared world-position trajectory" in APP
     assert 'id="aircraft-groups-button"' in HTML
     assert 'id="satellite-groups-button"' in HTML
-    assert 'data-satellite-group="starlink" aria-pressed="true"' in HTML
+    assert 'data-satellite-group="starlink" aria-pressed="mixed"' in HTML
     assert "fov=130" in APP
 
 
