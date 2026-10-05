@@ -17,7 +17,8 @@ const DEG=Math.PI/180,RAD=180/Math.PI,EARTH_KM=6371.0088,MU=398600.4418;
 const API_BASE="https://alen-api-lquw.onrender.com";
 const AIRCRAFT_RADIUS_MILES=50,AIRCRAFT_RADIUS_KM=80.4672,AIRCRAFT_RADIUS_NM=43.4488;
 const AIRPORT_RADIUS_MILES=50,AIRPORT_RADIUS_KM=80.4672;
-let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,selected=null;
+let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,pinch=null,selected=null;
+const activePointers=new Map();
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
@@ -294,13 +295,26 @@ function updateMinPitch(){
  const normalized=(targetY-height*.5)/Math.max(1,height*.5);
  minPitch=Math.atan(normalized*Math.tan(vfov/2))*RAD;
 }
+function fovLimits(){
+ const min=18,maxHorizontal=130;
+ const portraitOrNarrow=width<=900||height>width;
+ const maxVertical=(portraitOrNarrow?120:138)*DEG;
+ const aspect=Math.max(.2,width/Math.max(height,1));
+ const verticalLimited=2*Math.atan(Math.tan(maxVertical/2)*aspect)*RAD;
+ return{min,max:clamp(verticalLimited,48,maxHorizontal)};
+}
+function setFov(next){
+ const limits=fovLimits();
+ fov=clamp(next,limits.min,limits.max);
+ updateMinPitch();
+ pitch=Math.max(pitch,minPitch);
+}
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
  width=Math.max(1,canvas.clientWidth);height=Math.max(1,canvas.clientHeight);
  canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
  ctx.setTransform(dpr,0,0,dpr,0,0);
- updateMinPitch();
- pitch=Math.max(pitch,minPitch);
+ setFov(fov);
 }
 new ResizeObserver(resize).observe(canvas);resize();
 
@@ -1546,20 +1560,81 @@ function showObject(o){
 }
 function clearSelection(){selected=null;inspector.hidden=true}
 
-canvas.addEventListener("pointerdown",e=>{canvas.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,yaw,pitch,moved:false}});
+function pointerPair(){
+ return [...activePointers.entries()].slice(0,2);
+}
+function beginPinch(){
+ const pair=pointerPair();
+ if(pair.length<2){pinch=null;return}
+ const a=pair[0][1],b=pair[1][1];
+ const distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y));
+ pinch={
+  startDistance:distance,
+  startFov:fov,
+  midX:(a.x+b.x)/2,
+  midY:(a.y+b.y)/2,
+  startYaw:yaw,
+  startPitch:pitch,
+  moved:false
+ };
+ drag=null;
+}
+canvas.addEventListener("pointerdown",e=>{
+ if(e.pointerType==="mouse"&&e.button!==0)return;
+ e.preventDefault();
+ try{canvas.setPointerCapture(e.pointerId)}catch{}
+ activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(activePointers.size===1){
+  drag={pointerId:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch,moved:false};
+ }else if(activePointers.size===2){
+  beginPinch();
+ }
+});
 canvas.addEventListener("pointermove",e=>{
- if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>3)drag.moved=true;
- yaw=norm360(drag.yaw-dx/width*fov);
- pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89);
+ if(!activePointers.has(e.pointerId))return;
+ e.preventDefault();
+ activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(activePointers.size>=2){
+  if(!pinch)beginPinch();
+  const pair=pointerPair();
+  if(pair.length<2||!pinch)return;
+  const a=pair[0][1],b=pair[1][1];
+  const distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y));
+  const midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;
+  if(Math.abs(distance-pinch.startDistance)>2||Math.hypot(midX-pinch.midX,midY-pinch.midY)>2)pinch.moved=true;
+  setFov(pinch.startFov*pinch.startDistance/distance);
+  yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
+  pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62,minPitch,89);
+  return;
+ }
+ if(!drag||drag.pointerId!==e.pointerId)return;
+ const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+ if(Math.hypot(dx,dy)>3)drag.moved=true;
+ yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
+ pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89);
 });
-canvas.addEventListener("pointerup",e=>{
- if(!drag)return;const moved=drag.moved;drag=null;try{canvas.releasePointerCapture(e.pointerId)}catch{}
- if(moved)return;const r=canvas.getBoundingClientRect(),o=nearestObject(e.clientX-r.left,e.clientY-r.top);if(!o)return;
+function finishPointer(e,cancelled=false){
+ const wasPinching=pinch!==null||activePointers.size>1;
+ activePointers.delete(e.pointerId);
+ try{canvas.releasePointerCapture(e.pointerId)}catch{}
+ if(wasPinching){
+  pinch=null;
+  const remaining=[...activePointers.entries()][0];
+  drag=remaining?{pointerId:remaining[0],x:remaining[1].x,y:remaining[1].y,yaw,pitch,moved:true}:null;
+  return;
+ }
+ if(cancelled){drag=null;return}
+ if(!drag||drag.pointerId!==e.pointerId)return;
+ const moved=drag.moved;drag=null;
+ if(moved)return;
+ const r=canvas.getBoundingClientRect(),o=nearestObject(e.clientX-r.left,e.clientY-r.top);if(!o)return;
  if(selected?.id===o.id)clearSelection();else showObject(o);
-});
+}
+canvas.addEventListener("pointerup",e=>finishPointer(e,false));
+canvas.addEventListener("pointercancel",e=>finishPointer(e,true));
 canvas.addEventListener("wheel",e=>{
- e.preventDefault();fov=clamp(fov*(e.deltaY<0?.88:1.12),18,130);
- updateMinPitch();pitch=Math.max(pitch,minPitch);
+ e.preventDefault();
+ setFov(fov*(e.deltaY<0?.88:1.12));
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 canvas.addEventListener("keydown",e=>{
