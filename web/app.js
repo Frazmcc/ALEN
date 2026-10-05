@@ -21,7 +21,7 @@ let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,selecte
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
 let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
-let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,satelliteDiagnostics=null,satelliteRequestState="idle",satelliteRequestInFlight=false;
+let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,aircraftDiagnostics=null,aircraftRequestInFlight=false,satelliteDiagnostics=null,satelliteRequestState="idle",satelliteRequestInFlight=false;
 const satelliteGroupCache=new Map();
 let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
@@ -621,20 +621,29 @@ function drawAircraftIcon(kind,size,fill,stroke){
  ctx.restore();
 }
 
-const AIRCRAFT_GRACE_MS=20000;
+const AIRCRAFT_GRACE_MS=60000;
 const AIRCRAFT_POSITION_RESPONSE_MS=4200;
 const AIRCRAFT_MOTION_RESPONSE_MS=1800;
 const AIRCRAFT_ALTITUDE_RESPONSE_MS=2200;
 const AIRCRAFT_MAX_FRAME_DT_MS=250;
 async function refreshAircraft(force=false){
- if(!observer||!layers.aircraft)return;
+ if(!observer||!layers.aircraft||aircraftRequestInFlight)return;
  if(!force&&Date.now()-aircraftUpdated<2500)return;
  aircraftUpdated=Date.now();
+ aircraftRequestInFlight=true;
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),8000);
  try{
    const qs=new URLSearchParams({lat:String(observer.lat),lon:String(observer.lon),radius_nm:String(AIRCRAFT_RADIUS_NM),limit:"450"});
-   const res=await fetch(API_BASE+"/api/v1/aircraft?"+qs,{mode:"cors",cache:"no-store",credentials:"omit"});
+   const res=await fetch(API_BASE+"/api/v1/aircraft?"+qs,{mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal});
    if(!res.ok)throw new Error("aircraft "+res.status);
    const data=await res.json(),frameNow=performance.now(),wallNow=Date.now();
+   aircraftDiagnostics=data.diagnostics||null;
+   const cacheAge=Number(aircraftDiagnostics?.cache_age_seconds)||0;
+   if(aircraft.length&&cacheAge>8){
+     aircraft=aircraft.filter(a=>wallNow-(Number(a.lastSeenAt)||wallNow)<=AIRCRAFT_GRACE_MS);
+     return;
+   }
    const previous=new Map(aircraft.map(a=>[a.id,a]));
    const next=new Map();
    for(const a of (Array.isArray(data.aircraft)?data.aircraft:[])){
@@ -643,7 +652,7 @@ async function refreshAircraft(force=false){
      if(!id)continue;
      const prior=previous.get(id),lat=Number(a.lat),lon=Number(a.lon);
      const measuredGs=Math.max(0,Number(a.gs)||0),measuredTrack=norm360(Number(a.track)||0);
-     const seenSeconds=clamp(Number(a.seen)||0,0,30);
+     const seenSeconds=clamp(Number(a.seen)||0,0,45);
      const projected=destinationPoint(lat,lon,measuredTrack,measuredGs*1.852*seenSeconds/3600);
      const measuredAltM=aircraftAltitudeM({alt_geom:a.alt_geom,alt_baro:a.alt_baro});
      next.set(id,{
@@ -669,8 +678,11 @@ async function refreshAircraft(force=false){
    console.warn("ALEN aircraft feed unavailable; retaining recent aircraft",e);
    const wallNow=Date.now();
    aircraft=aircraft.filter(a=>wallNow-(Number(a.lastSeenAt)||wallNow)<=AIRCRAFT_GRACE_MS);
+ }finally{
+   clearTimeout(timeout);
+   aircraftRequestInFlight=false;
+   setLiveStatus();
  }
- setLiveStatus();
 }
 function stepAircraft(now){
  for(const a of aircraft){

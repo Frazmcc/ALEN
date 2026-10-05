@@ -9,6 +9,7 @@ def test_health() -> None:
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["name"] == "ALEN"
+    assert payload["cache"] in {"local", "redis"}
 
 
 def test_nearby_airports_endpoint(monkeypatch) -> None:
@@ -89,12 +90,17 @@ def test_nearby_aircraft_endpoint(monkeypatch) -> None:
     assert response.json()["aircraft"] == sample
 
 
-def test_aircraft_provider_rounds_radius_for_adsb_api(monkeypatch) -> None:
-    from alen.aircraft import AircraftProvider
 
-    requested = {}
+def test_aircraft_provider_uses_shared_geographic_snapshot(monkeypatch) -> None:
+    from alen.aircraft import AircraftProvider
+    from alen.cache import SharedCache
+
+    requested = {"count": 0}
 
     class Response:
+        status_code = 200
+        headers = {}
+
         def raise_for_status(self) -> None:
             return None
 
@@ -112,13 +118,18 @@ def test_aircraft_provider_rounds_radius_for_adsb_api(monkeypatch) -> None:
             return None
 
         def get(self, url: str):
+            requested["count"] += 1
             requested["url"] = url
             return Response()
 
     monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
-    AircraftProvider().nearby(55.77, -4.09, radius_nm=43.4488)
-    assert requested["url"].endswith("/dist/44")
+    provider = AircraftProvider(cache=SharedCache(namespace="test-aircraft-shared"))
+    provider.nearby(55.77, -4.09, radius_nm=43.4488)
+    provider.nearby(55.78, -4.08, radius_nm=43.4488)
 
+    assert requested["count"] == 1
+    assert "/lat/55.5000/lon/-4.5000/dist/100" in requested["url"]
+    assert provider.last_diagnostics["cache"] == "fresh"
 
 def test_aircraft_photo_endpoint(monkeypatch) -> None:
     from alen.aircraft_photos import AircraftPhoto
@@ -282,6 +293,14 @@ def test_aircraft_photo_proxy_serves_verified_image(monkeypatch) -> None:
     assert response.content == b"fake-jpeg"
 
 
+def test_aircraft_photo_provider_does_not_retain_image_bytes() -> None:
+    from alen.aircraft_photos import AircraftPhotoProvider
+
+    provider = AircraftPhotoProvider()
+    assert not hasattr(provider, "_image_cache")
+    assert provider.MAX_METADATA_CACHE_ENTRIES == 512
+
+
 def test_aircraft_photo_rejects_untrusted_image_host() -> None:
     from alen.aircraft_photos import AircraftPhoto, AircraftPhotoProvider
 
@@ -348,6 +367,7 @@ def test_orbitalwiki_elements_fallback(monkeypatch) -> None:
 
 def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
     from alen.aircraft import AircraftProvider
+    from alen.cache import SharedCache
 
     class Response:
         def raise_for_status(self) -> None:
@@ -387,11 +407,73 @@ def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
             return Response()
 
     monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
-    aircraft = AircraftProvider().nearby(55.77, -4.09)
+    aircraft = AircraftProvider(cache=SharedCache(namespace="test-aircraft-operator")).nearby(55.77, -4.09)
     assert aircraft[0]["flight"] == "SHT16E"
     assert aircraft[0]["operator"] == "British Airways"
     assert aircraft[0]["squawk"] == "0032"
     assert aircraft[0]["db_flags"] == 1
+
+
+def test_aircraft_route_provider_reuses_shared_cache(monkeypatch) -> None:
+    from alen.aircraft_routes import AircraftRouteProvider
+    from alen.cache import SharedCache
+
+    calls = {"count": 0}
+
+    class Response:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {
+                "callsign": "SHT16E",
+                "airline_code": "BAW",
+                "_airports": [
+                    {
+                        "name": "London Heathrow Airport",
+                        "iata": "LHR",
+                        "icao": "EGLL",
+                        "location": "London",
+                        "countryiso2": "GB",
+                    },
+                    {
+                        "name": "Glasgow Airport",
+                        "iata": "GLA",
+                        "icao": "EGPF",
+                        "location": "Glasgow",
+                        "countryiso2": "GB",
+                    },
+                ],
+            }
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str):
+            calls["count"] += 1
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft_routes.httpx.Client", Client)
+    provider = AircraftRouteProvider(
+        cache=SharedCache(namespace="test-aircraft-route")
+    )
+    first = provider.lookup("SHT16E")
+    second = provider.lookup("SHT16E")
+
+    assert calls["count"] == 1
+    assert first == second
+    assert first is not None
+    assert first["departure"]["iata"] == "LHR"
+    assert first["arrival"]["iata"] == "GLA"
 
 
 def test_aircraft_route_endpoint(monkeypatch) -> None:
@@ -429,9 +511,12 @@ def test_satellite_info_endpoint(monkeypatch) -> None:
 
 
 def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) -> None:
+    from alen.cache import SharedCache
     from alen.satellite_info import SatelliteInfoProvider
 
-    provider = SatelliteInfoProvider()
+    provider = SatelliteInfoProvider(
+        cache=SharedCache(namespace="test-satellite-info")
+    )
     monkeypatch.setattr(
         provider,
         "_satcat",

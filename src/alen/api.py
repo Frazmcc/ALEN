@@ -12,6 +12,7 @@ from .aircraft import AircraftProvider
 from .aircraft_photos import AircraftPhotoProvider
 from .aircraft_routes import AircraftRouteProvider
 from .airports import AirportProvider
+from .cache import shared_cache
 from .satellites import SatelliteProvider
 from .satellite_info import SatelliteInfoProvider
 
@@ -44,6 +45,7 @@ def health() -> dict[str, str]:
         "status": "ok",
         "name": "ALEN",
         "version": __version__,
+        "cache": "redis" if shared_cache.distributed else "local",
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -106,13 +108,15 @@ def nearby_aircraft(
     radius_nm: float = Query(default=43.4488, ge=1.0, le=250.0),
     limit: int = Query(default=450, ge=1, le=500),
 ) -> dict[str, object]:
+    aircraft = _aircraft.nearby(
+        lat,
+        lon,
+        radius_nm=radius_nm,
+        limit=limit,
+    )
     return {
-        "aircraft": _aircraft.nearby(
-            lat,
-            lon,
-            radius_nm=radius_nm,
-            limit=limit,
-        )
+        "aircraft": aircraft,
+        "diagnostics": _aircraft.last_diagnostics,
     }
 
 

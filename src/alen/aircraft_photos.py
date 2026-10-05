@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from html import unescape
 import re
@@ -25,12 +26,11 @@ class AircraftPhotoProvider:
     COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
     PLANESPOTTERS_API_BASE = "https://api.planespotters.net/pub/photos"
     CACHE_TTL_SECONDS = 86400
-    IMAGE_CACHE_TTL_SECONDS = 21600
-    MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    MAX_METADATA_CACHE_ENTRIES = 512
+    MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
     def __init__(self) -> None:
-        self._cache: dict[str, tuple[float, AircraftPhoto | None]] = {}
-        self._image_cache: dict[str, tuple[float, bytes, str]] = {}
+        self._cache: OrderedDict[str, tuple[float, AircraftPhoto | None]] = OrderedDict()
 
     def find(
         self,
@@ -45,7 +45,10 @@ class AircraftPhotoProvider:
         cached = self._cache.get(key)
         now = time.monotonic()
         if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
+            self._cache.move_to_end(key)
             return cached[1]
+        if cached:
+            self._cache.pop(key, None)
 
         photo = None
         if hex_code:
@@ -85,16 +88,13 @@ class AircraftPhotoProvider:
             )
 
         self._cache[key] = (now, photo)
+        self._cache.move_to_end(key)
+        self._prune_metadata_cache(now)
         return photo
 
     def image_bytes(self, photo: AircraftPhoto) -> tuple[bytes, str] | None:
         if not _trusted_image_url(photo.image_url):
             return None
-        now = time.monotonic()
-        cached = self._image_cache.get(photo.image_url)
-        if cached and now - cached[0] < self.IMAGE_CACHE_TTL_SECONDS:
-            return cached[1], cached[2]
-
         try:
             with httpx.Client(
                 timeout=20.0,
@@ -116,8 +116,21 @@ class AircraftPhotoProvider:
             return None
         if not body or len(body) > self.MAX_IMAGE_BYTES:
             return None
-        self._image_cache[photo.image_url] = (now, body, mime)
+        # Do not retain image bytes in process memory. Browsers receive a
+        # long Cache-Control lifetime from the API endpoint, while the server
+        # releases the temporary response body immediately after this request.
         return body, mime
+
+    def _prune_metadata_cache(self, now: float) -> None:
+        expired = [
+            key
+            for key, (created_at, _) in self._cache.items()
+            if now - created_at >= self.CACHE_TTL_SECONDS
+        ]
+        for key in expired:
+            self._cache.pop(key, None)
+        while len(self._cache) > self.MAX_METADATA_CACHE_ENTRIES:
+            self._cache.popitem(last=False)
 
     def _search_planespotters(
         self,
