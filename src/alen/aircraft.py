@@ -5,7 +5,7 @@ import time
 
 import httpx
 
-from .cache import shared_cache
+from .cache import SharedCache, shared_cache
 
 
 class AircraftProvider:
@@ -20,7 +20,8 @@ class AircraftProvider:
     CACHE_STALE_SECONDS = 20.0
     REFRESH_LOCK_SECONDS = 8
 
-    def __init__(self) -> None:
+    def __init__(self, cache: SharedCache | None = None) -> None:
+        self._cache = cache or shared_cache
         self.last_diagnostics: dict[str, object] = {}
 
     def nearby(
@@ -44,7 +45,7 @@ class AircraftProvider:
             f"aircraft:{cell_lat:+06.2f}:{cell_lon:+07.2f}:r{upstream_radius_nm}"
         )
 
-        snapshot = shared_cache.get_json(cache_key)
+        snapshot = self._cache.get_json(cache_key)
         now = time.time()
         age = self._snapshot_age(snapshot, now)
         cache_state = "miss"
@@ -52,8 +53,8 @@ class AircraftProvider:
         if isinstance(snapshot, dict) and age <= self.CACHE_FRESH_SECONDS:
             cache_state = "fresh"
         else:
-            cooldown = shared_cache.get_json(f"{cache_key}:cooldown")
-            lock_token = None if cooldown else shared_cache.acquire_lock(
+            cooldown = self._cache.get_json(f"{cache_key}:cooldown")
+            lock_token = None if cooldown else self._cache.acquire_lock(
                 cache_key,
                 ttl_seconds=self.REFRESH_LOCK_SECONDS,
             )
@@ -68,7 +69,7 @@ class AircraftProvider:
                         snapshot = fresh
                         age = 0.0
                         cache_state = "refreshed"
-                        shared_cache.set_json(
+                        self._cache.set_json(
                             cache_key,
                             fresh,
                             ttl_seconds=self.CACHE_STALE_SECONDS,
@@ -78,7 +79,7 @@ class AircraftProvider:
                     else:
                         cache_state = "unavailable"
                 finally:
-                    shared_cache.release_lock(cache_key, lock_token)
+                    self._cache.release_lock(cache_key, lock_token)
             elif isinstance(snapshot, dict):
                 cache_state = "stale"
             else:
@@ -86,7 +87,7 @@ class AircraftProvider:
                 # briefly; this path occurs on cold start rather than every poll.
                 for _ in range(10):
                     time.sleep(0.05)
-                    candidate = shared_cache.get_json(cache_key)
+                    candidate = self._cache.get_json(cache_key)
                     if isinstance(candidate, dict):
                         snapshot = candidate
                         age = self._snapshot_age(snapshot, time.time())
@@ -149,7 +150,7 @@ class AircraftProvider:
         self.last_diagnostics = {
             "cache": cache_state,
             "cache_age_seconds": round(cache_age_seconds, 3),
-            "shared_cache": shared_cache.distributed,
+            "shared_cache": self._cache.distributed,
             "cell": [cell_lat, cell_lon],
             "upstream_radius_nm": upstream_radius_nm,
             "returned": len(found),
@@ -190,7 +191,7 @@ class AircraftProvider:
                             )
                         except (TypeError, ValueError):
                             retry_after = 10
-                    shared_cache.set_json(
+                    self._cache.set_json(
                         self._cooldown_key(latitude_deg, longitude_deg, radius_nm),
                         {"status": status_code},
                         ttl_seconds=retry_after,
