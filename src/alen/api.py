@@ -319,9 +319,18 @@ def aircraft_service_photo(
     )
     if photo is None:
         return {"photo": None}
+    image_query = "?" + urlencode(
+        {
+            "service": service,
+            "region": region,
+            "aircraft_type": aircraft_type,
+            "operator": operator,
+        }
+    )
     return {
         "photo": {
             "image_url": photo.image_url,
+            "image_path": "/api/v1/aircraft/service-photo/image" + image_query,
             "source_url": photo.source_url,
             "title": photo.title,
             "artist": photo.artist,
@@ -332,6 +341,35 @@ def aircraft_service_photo(
             "service": service,
         }
     }
+
+
+@app.get("/api/v1/aircraft/service-photo/image")
+def aircraft_service_photo_image(
+    service: str = Query(max_length=32),
+    region: str = Query(default="", max_length=80),
+    aircraft_type: str = Query(default="", max_length=32),
+    operator: str = Query(default="", max_length=120),
+) -> Response:
+    photo = _aircraft_photos.find_regional_service(
+        service,
+        region,
+        aircraft_type,
+        operator,
+    )
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Regional service photo not found")
+    image = _aircraft_photos.image_bytes(photo)
+    if image is None:
+        raise HTTPException(status_code=502, detail="Regional service photo source unavailable")
+    body, media_type = image
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "public, max-age=21600",
+            "Content-Encoding": "identity",
+        },
+    )
 
 
 @app.get("/api/v1/aircraft/photo/image")
