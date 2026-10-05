@@ -26,6 +26,7 @@ class SatelliteProvider:
     ORBITALWIKI_URL = "https://www.orbitalwiki.com/api/v1/elements"
     SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
     CACHE_SECONDS = 1800
+    MAX_CACHE_GROUPS = 16
 
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, tuple[OrbitRecord, ...]]] = {}
