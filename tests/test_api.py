@@ -31,6 +31,43 @@ def test_nearby_airports_endpoint(monkeypatch) -> None:
     assert response.json()["airports"] == sample
 
 
+def test_large_json_responses_use_gzip(monkeypatch) -> None:
+    sample = [
+        {
+            "norad": 30000 + i,
+            "name": f"TEST SATELLITE {i}",
+            "international_id": f"2026-{i:03d}A",
+            "azimuth_deg": float(i % 360),
+            "elevation_deg": 30.0,
+            "range_km": 1000.0 + i,
+            "azimuth_deg_next": float((i + 1) % 360),
+            "elevation_deg_next": 30.1,
+            "range_km_next": 999.0 + i,
+            "azimuth_deg_next2": float((i + 2) % 360),
+            "elevation_deg_next2": 30.2,
+            "range_km_next2": 998.0 + i,
+            "motion_horizon_seconds": 2,
+            "groups": ["visual"],
+        }
+        for i in range(80)
+    ]
+    monkeypatch.setattr("alen.api._satellites.visible", lambda *args, **kwargs: sample)
+    monkeypatch.setattr(
+        "alen.api._satellites.last_diagnostics",
+        {"unique_orbits": 80, "visible": 80, "position_sample_age_seconds": 0.1},
+    )
+
+    response = TestClient(app).get(
+        "/api/v1/satellites?lat=12.345&lon=67.890&altitude_m=10&groups=visual&limit=80",
+        headers={"Accept-Encoding": "gzip"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert "Accept-Encoding" in response.headers.get("vary", "")
+    assert len(response.json()["satellites"]) == 80
+
+
 def test_visible_satellites_endpoint(monkeypatch) -> None:
     sample = [
         {
@@ -420,6 +457,7 @@ def test_aircraft_photo_proxy_serves_verified_image(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/jpeg")
     assert response.headers["cache-control"] == "public, max-age=21600"
+    assert response.headers["content-encoding"] == "identity"
     assert response.content == b"fake-jpeg"
 
 
