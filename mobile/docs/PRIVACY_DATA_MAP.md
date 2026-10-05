@@ -29,10 +29,12 @@ Update this file whenever a feature changes what data is collected, processed, s
 - No location foreground service is enabled on Android.
 - If permission is denied, the application remains usable with the demo/manual-location path.
 - Star and planet calculations remain on-device.
-- The Satellites layer is off by default.
+- The Satellites and Aircraft live layers are off by default.
 - When the user enables Satellites, the active observer latitude/longitude is sent to the ALEN API to calculate which satellites are above that observer.
 - The satellite API rounds observer coordinates into an approximately 0.005° cache cell and retains that application-level cache for up to 8 seconds.
-- The mobile app does not send observer coordinates directly to CelesTrak or another satellite-data provider.
+- When the user enables Aircraft, the active observer latitude/longitude is sent to the ALEN API to filter nearby ADS-B aircraft.
+- The aircraft backend shares upstream snapshots by an approximately 1° geographic cell and may retain those shared snapshots for up to 60 seconds; exact observer coordinates are used for per-request distance filtering.
+- The mobile app does not send observer coordinates directly to CelesTrak, adsb.lol or another live-data provider.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
 - Manual coordinates may be persisted locally because they are explicitly entered as an observer location; they are not transmitted to ALEN services.
 
