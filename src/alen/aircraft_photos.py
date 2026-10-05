@@ -29,8 +29,7 @@ class AircraftPhotoProvider:
     MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
     def __init__(self) -> None:
-        self._cache: dict[str, tuple[float, AircraftPhoto | None]] = {}
-        self._image_cache: dict[str, tuple[float, bytes, str]] = {}
+        self._cache: OrderedDict[str, tuple[float, AircraftPhoto | None]] = OrderedDict()
 
     def find(
         self,
@@ -45,7 +44,10 @@ class AircraftPhotoProvider:
         cached = self._cache.get(key)
         now = time.monotonic()
         if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
+            self._cache.move_to_end(key)
             return cached[1]
+        if cached:
+            self._cache.pop(key, None)
 
         photo = None
         if hex_code:
@@ -85,16 +87,13 @@ class AircraftPhotoProvider:
             )
 
         self._cache[key] = (now, photo)
+        self._cache.move_to_end(key)
+        self._prune_metadata_cache(now)
         return photo
 
     def image_bytes(self, photo: AircraftPhoto) -> tuple[bytes, str] | None:
         if not _trusted_image_url(photo.image_url):
             return None
-        now = time.monotonic()
-        cached = self._image_cache.get(photo.image_url)
-        if cached and now - cached[0] < self.IMAGE_CACHE_TTL_SECONDS:
-            return cached[1], cached[2]
-
         try:
             with httpx.Client(
                 timeout=20.0,
@@ -116,7 +115,9 @@ class AircraftPhotoProvider:
             return None
         if not body or len(body) > self.MAX_IMAGE_BYTES:
             return None
-        self._image_cache[photo.image_url] = (now, body, mime)
+        # Do not retain image bytes in process memory. Browsers receive a
+        # long Cache-Control lifetime from the API endpoint, while the server
+        # releases the temporary response body immediately after this request.
         return body, mime
 
     def _search_planespotters(
