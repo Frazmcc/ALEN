@@ -944,6 +944,42 @@ def test_regional_emergency_service_photo_endpoint(monkeypatch) -> None:
     assert photo["region"] == "Scotland"
     assert photo["service"] == "air_ambulance"
     assert photo["image_url"].startswith("https://upload.wikimedia.org/")
+    assert photo["image_path"].startswith("/api/v1/aircraft/service-photo/image?")
+
+
+def test_regional_emergency_service_photo_proxy(monkeypatch) -> None:
+    from alen.aircraft_photos import AircraftPhoto
+
+    sample = AircraftPhoto(
+        image_url="https://upload.wikimedia.org/example-service-aircraft.jpg",
+        source_url="https://commons.wikimedia.org/wiki/File:Regional_Service_Aircraft.jpg",
+        title="Regional Service Aircraft",
+        artist="Example Photographer",
+        license_name="CC BY-SA 4.0",
+        match="regional_service",
+        planespotters_url="",
+        provider="wikimedia",
+    )
+    monkeypatch.setattr(
+        "alen.api._aircraft_photos.find_regional_service",
+        lambda *args, **kwargs: sample,
+    )
+    monkeypatch.setattr(
+        "alen.api._aircraft_photos.image_bytes",
+        lambda photo: (b"fake-regional-jpeg", "image/jpeg"),
+    )
+
+    response = TestClient(app).get(
+        "/api/v1/aircraft/service-photo/image"
+        "?service=air_ambulance&region=Scotland&aircraft_type=EC45"
+        "&operator=Scottish%20Ambulance%20Service"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["cache-control"] == "public, max-age=21600"
+    assert response.headers["content-encoding"] == "identity"
+    assert response.content == b"fake-regional-jpeg"
 
 
 def test_regional_service_lookup_requires_supported_service_and_region() -> None:
