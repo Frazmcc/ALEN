@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import {
   Pressable,
   ScrollView,
@@ -145,6 +146,19 @@ export default function ObjectsScreen() {
       ],
     };
   }, [now, observer, observerLabel, planets, selected]);
+
+  function showSelectedInSky() {
+    if (!selected || !selectedDetail || selectedDetail.altitude < 0) return;
+
+    router.push({
+      pathname: '/sky',
+      params: {
+        targetKind: selected.kind,
+        targetId:
+          selected.kind === 'star' ? selected.star.id : selected.id,
+      },
+    });
+  }
 
   return (
     <AppScreen>
@@ -353,24 +367,63 @@ export default function ObjectsScreen() {
                 ))}
               </View>
 
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setSelected(null)}
+              <View
                 style={{
-                  alignSelf: 'flex-end',
-                  minHeight: 40,
-                  justifyContent: 'center',
-                  paddingHorizontal: 12,
-                  marginTop: 8,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
+                  flexDirection: 'row',
+                  justifyContent: 'flex-end',
+                  gap: 8,
+                  marginTop: 10,
                 }}
               >
-                <Text style={{ color: colors.muted, fontSize: 11 }}>
-                  Close details
-                </Text>
-              </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={selectedDetail.altitude < 0}
+                  onPress={showSelectedInSky}
+                  style={{
+                    minHeight: 42,
+                    justifyContent: 'center',
+                    paddingHorizontal: 14,
+                    borderRadius: 12,
+                    backgroundColor:
+                      selectedDetail.altitude >= 0
+                        ? colors.accent
+                        : colors.panelSoft,
+                    opacity: selectedDetail.altitude >= 0 ? 1 : 0.55,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color:
+                        selectedDetail.altitude >= 0
+                          ? '#fff'
+                          : colors.muted,
+                      fontSize: 11,
+                      fontWeight: '700',
+                    }}
+                  >
+                    {selectedDetail.altitude >= 0
+                      ? 'Show in Sky'
+                      : 'Below horizon'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSelected(null)}
+                  style={{
+                    minHeight: 42,
+                    justifyContent: 'center',
+                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Text style={{ color: colors.muted, fontSize: 11 }}>
+                    Close
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           ) : null}
 
