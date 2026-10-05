@@ -1,6 +1,8 @@
 import {
+  Image,
   Modal,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -14,6 +16,11 @@ export type SkyObjectDetail = {
   altitude: number;
   azimuth: number;
   rows: Array<[string, string]>;
+  imageUrl?: string;
+  imageCredit?: string;
+  description?: string;
+  metadataLoading?: boolean;
+  metadataError?: string | null;
 };
 
 type Props = {
@@ -51,247 +58,329 @@ export function SkyObjectSheet({
             accessibilityRole="none"
             onPress={() => undefined}
             style={{
-              padding: 20,
-              paddingBottom: 28,
+              maxHeight: '90%',
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
               backgroundColor: colors.panel,
               borderWidth: 1,
               borderColor: colors.border,
+              overflow: 'hidden',
             }}
           >
-            <View
-              style={{
-                alignSelf: 'center',
-                width: 42,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: colors.border,
-                marginBottom: 16,
+            <ScrollView
+              contentContainerStyle={{
+                padding: 20,
+                paddingBottom: 28,
               }}
-            />
-
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 14,
-              }}
+              showsVerticalScrollIndicator={false}
             >
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: colors.muted,
-                    fontSize: 10,
-                    fontWeight: '700',
-                    letterSpacing: 1.1,
-                  }}
-                >
-                  {detail.kind}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 26,
-                    fontWeight: '700',
-                    marginTop: 2,
-                  }}
-                >
-                  {detail.name}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.muted,
-                    fontSize: 12,
-                    marginTop: 3,
-                  }}
-                >
-                  {detail.subtitle}
-                </Text>
-              </View>
-
               <View
                 style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  backgroundColor: detail.color,
-                  marginTop: 6,
+                  alignSelf: 'center',
+                  width: 42,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: colors.border,
+                  marginBottom: 16,
                 }}
               />
-            </View>
 
-            <View
-              style={{
-                flexDirection: 'row',
-                gap: 10,
-                marginTop: 16,
-              }}
-            >
               <View
                 style={{
-                  flex: 1,
-                  padding: 12,
-                  borderRadius: 14,
-                  backgroundColor: colors.background,
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 14,
                 }}
               >
-                <Text style={{ color: colors.muted, fontSize: 10 }}>
-                  ALTITUDE
-                </Text>
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 20,
-                    fontWeight: '700',
-                    marginTop: 3,
-                  }}
-                >
-                  {detail.altitude.toFixed(1)}°
-                </Text>
-              </View>
-              <View
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  borderRadius: 14,
-                  backgroundColor: colors.background,
-                }}
-              >
-                <Text style={{ color: colors.muted, fontSize: 10 }}>
-                  AZIMUTH
-                </Text>
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 20,
-                    fontWeight: '700',
-                    marginTop: 3,
-                  }}
-                >
-                  {detail.azimuth.toFixed(1)}°
-                </Text>
-              </View>
-            </View>
-
-            <View style={{ marginTop: 12 }}>
-              {detail.rows.map(([label, value]) => (
-                <View
-                  key={label}
-                  style={{
-                    minHeight: 38,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.border,
-                  }}
-                >
+                <View style={{ flex: 1 }}>
                   <Text
                     style={{
                       color: colors.muted,
-                      fontSize: 11,
-                      flex: 1,
+                      fontSize: 10,
+                      fontWeight: '700',
+                      letterSpacing: 1.1,
                     }}
                   >
-                    {label}
+                    {detail.kind}
                   </Text>
                   <Text
                     style={{
                       color: colors.text,
-                      fontSize: 11,
-                      fontWeight: '600',
-                      textAlign: 'right',
-                      flex: 1,
+                      fontSize: 26,
+                      fontWeight: '700',
+                      marginTop: 2,
                     }}
                   >
-                    {value}
+                    {detail.name}
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.muted,
+                      fontSize: 12,
+                      marginTop: 3,
+                    }}
+                  >
+                    {detail.subtitle}
                   </Text>
                 </View>
-              ))}
-            </View>
 
-            {onCalibrate ? (
-              <Text
+                <View
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: detail.color,
+                    marginTop: 6,
+                  }}
+                />
+              </View>
+
+              <View
                 style={{
-                  color: colors.muted,
-                  fontSize: 11,
-                  lineHeight: 16,
-                  marginTop: 12,
+                  flexDirection: 'row',
+                  gap: 10,
+                  marginTop: 16,
                 }}
               >
-                Point the phone directly at this object in the real sky, then
-                tap Calibrate aim. The correction lasts only for this app
-                session.
-              </Text>
-            ) : null}
-
-            <View
-              style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                justifyContent: 'flex-end',
-                gap: 8,
-                marginTop: 14,
-              }}
-            >
-              {onCalibrate ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={onCalibrate}
+                <View
                   style={{
-                    minHeight: 44,
-                    justifyContent: 'center',
-                    paddingHorizontal: 16,
-                    borderRadius: 12,
-                    backgroundColor: 'rgba(24,72,52,0.94)',
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 14,
+                    backgroundColor: colors.background,
+                  }}
+                >
+                  <Text style={{ color: colors.muted, fontSize: 10 }}>
+                    ALTITUDE
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.text,
+                      fontSize: 20,
+                      fontWeight: '700',
+                      marginTop: 3,
+                    }}
+                  >
+                    {detail.altitude.toFixed(1)}°
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 14,
+                    backgroundColor: colors.background,
+                  }}
+                >
+                  <Text style={{ color: colors.muted, fontSize: 10 }}>
+                    AZIMUTH
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.text,
+                      fontSize: 20,
+                      fontWeight: '700',
+                      marginTop: 3,
+                    }}
+                  >
+                    {detail.azimuth.toFixed(1)}°
+                  </Text>
+                </View>
+              </View>
+
+              {detail.imageUrl ? (
+                <View
+                  style={{
+                    marginTop: 16,
+                    borderRadius: 16,
+                    overflow: 'hidden',
                     borderWidth: 1,
-                    borderColor: colors.success,
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
                   }}
                 >
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>
-                    Calibrate aim
-                  </Text>
-                </Pressable>
+                  <Image
+                    source={{ uri: detail.imageUrl }}
+                    resizeMode="cover"
+                    accessibilityLabel={`${detail.name} image`}
+                    style={{
+                      width: '100%',
+                      height: 190,
+                    }}
+                  />
+                  {detail.imageCredit ? (
+                    <Text
+                      style={{
+                        color: colors.muted,
+                        fontSize: 9,
+                        lineHeight: 13,
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
+                      }}
+                    >
+                      {detail.imageCredit}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
 
-              {onCentre ? (
+              {detail.description ? (
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 12,
+                    lineHeight: 18,
+                    marginTop: 14,
+                  }}
+                >
+                  {detail.description}
+                </Text>
+              ) : null}
+
+              {detail.metadataLoading ? (
+                <Text
+                  style={{
+                    color: colors.muted,
+                    fontSize: 11,
+                    marginTop: 12,
+                  }}
+                >
+                  Loading additional details…
+                </Text>
+              ) : null}
+
+              {detail.metadataError ? (
+                <Text
+                  style={{
+                    color: colors.warning,
+                    fontSize: 11,
+                    lineHeight: 16,
+                    marginTop: 12,
+                  }}
+                >
+                  Additional details are temporarily unavailable.
+                </Text>
+              ) : null}
+
+              <View style={{ marginTop: 12 }}>
+                {detail.rows.map(([label, value], index) => (
+                  <View
+                    key={`${label}-${index}`}
+                    style={{
+                      minHeight: 38,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: colors.muted,
+                        fontSize: 11,
+                        flex: 1,
+                      }}
+                    >
+                      {label}
+                    </Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontSize: 11,
+                        fontWeight: '600',
+                        textAlign: 'right',
+                        flex: 1,
+                      }}
+                    >
+                      {value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              {onCalibrate ? (
+                <Text
+                  style={{
+                    color: colors.muted,
+                    fontSize: 11,
+                    lineHeight: 16,
+                    marginTop: 12,
+                  }}
+                >
+                  Point the phone directly at this object in the real sky, then
+                  tap Calibrate aim. The correction lasts only for this app
+                  session.
+                </Text>
+              ) : null}
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
+                  gap: 8,
+                  marginTop: 14,
+                }}
+              >
+                {onCalibrate ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={onCalibrate}
+                    style={{
+                      minHeight: 44,
+                      justifyContent: 'center',
+                      paddingHorizontal: 16,
+                      borderRadius: 12,
+                      backgroundColor: 'rgba(24,72,52,0.94)',
+                      borderWidth: 1,
+                      borderColor: colors.success,
+                    }}
+                  >
+                    <Text style={{ color: colors.text, fontWeight: '700' }}>
+                      Calibrate aim
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                {onCentre ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={onCentre}
+                    style={{
+                      minHeight: 44,
+                      justifyContent: 'center',
+                      paddingHorizontal: 16,
+                      borderRadius: 12,
+                      backgroundColor: colors.accent,
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>
+                      Centre object
+                    </Text>
+                  </Pressable>
+                ) : null}
+
                 <Pressable
                   accessibilityRole="button"
-                  onPress={onCentre}
+                  onPress={onClose}
                   style={{
                     minHeight: 44,
                     justifyContent: 'center',
                     paddingHorizontal: 16,
                     borderRadius: 12,
-                    backgroundColor: colors.accent,
+                    borderWidth: 1,
+                    borderColor: colors.border,
                   }}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>
-                    Centre object
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>
+                    Close
                   </Text>
                 </Pressable>
-              ) : null}
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={onClose}
-                style={{
-                  minHeight: 44,
-                  justifyContent: 'center',
-                  paddingHorizontal: 16,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text style={{ color: colors.text, fontWeight: '600' }}>
-                  Close
-                </Text>
-              </Pressable>
-            </View>
+              </View>
+            </ScrollView>
           </Pressable>
         ) : null}
       </Pressable>
