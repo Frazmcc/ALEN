@@ -367,6 +367,21 @@ def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
     assert "satelliteRequestInFlight=false" in APP
 
 
+def test_satellite_shared_snapshot_is_advanced_to_now() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert "POSITION_BUCKET_SECONDS = 1" in source
+    assert "MAX_POSITION_BUCKETS = 12" in source
+    assert "def _world_positions(" in source
+    assert "position_sample_age_seconds" in source
+    assert "position_cache_hits" in source
+    assert "position_cache_misses" in source
+    assert "const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,2000)" in APP
+    assert "const targetVecNow=normalizeSkyVector" in APP
+    assert "vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs" in APP
+    assert "targetRangeNow" in APP
+    assert 'detail:"SGP4 · shared world-position snapshot"' in APP
+
+
 def test_daylight_contrast_palette() -> None:
     css = Path("web/styles.css").read_text(encoding="utf-8")
     assert 'root.dataset.skyMode=dayMode?"day":"night"' in APP
