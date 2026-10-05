@@ -220,7 +220,16 @@ export function useLiveObjectMetadata(
   satelliteTracks: SatelliteTrack[],
   aircraftTracks: AircraftTrack[],
 ) {
-  const [metadata, setMetadata] = useState<LiveObjectMetadata>(EMPTY);
+  const selectionKey = selection
+    ? `${selection.kind}:${selection.id}`
+    : '';
+  const [metadataState, setMetadataState] = useState<{
+    key: string;
+    value: LiveObjectMetadata;
+  }>({
+    key: '',
+    value: EMPTY,
+  });
 
   const selectedSatellite =
     selection?.kind === 'satellite'
@@ -236,17 +245,20 @@ export function useLiveObjectMetadata(
       !selection ||
       (selection.kind !== 'satellite' && selection.kind !== 'aircraft')
     ) {
-      setMetadata(EMPTY);
+      setMetadataState({ key: selectionKey, value: EMPTY });
       return;
     }
 
     const controller = new AbortController();
     let active = true;
 
-    setMetadata({
-      loading: true,
-      error: null,
-      rows: [],
+    setMetadataState({
+      key: selectionKey,
+      value: {
+        loading: true,
+        error: null,
+        rows: [],
+      },
     });
 
     const load = async () => {
@@ -254,7 +266,7 @@ export function useLiveObjectMetadata(
         if (selection.kind === 'satellite') {
           const track = selectedSatellite;
           if (!track) {
-            if (active) setMetadata(EMPTY);
+            if (active) setMetadataState({ key: selectionKey, value: EMPTY });
             return;
           }
 
@@ -279,14 +291,17 @@ export function useLiveObjectMetadata(
           };
 
           if (active) {
-            setMetadata(satelliteMetadata(payload.satellite ?? null));
+            setMetadataState({
+              key: selectionKey,
+              value: satelliteMetadata(payload.satellite ?? null),
+            });
           }
           return;
         }
 
         const track = selectedAircraft;
         if (!track) {
-          if (active) setMetadata(EMPTY);
+          if (active) setMetadataState({ key: selectionKey, value: EMPTY });
           return;
         }
 
@@ -366,20 +381,24 @@ export function useLiveObjectMetadata(
         }
 
         if (active) {
-          setMetadata(
-            aircraftMetadata(track, route, exactPhoto, regionalPhoto),
-          );
+          setMetadataState({
+            key: selectionKey,
+            value: aircraftMetadata(track, route, exactPhoto, regionalPhoto),
+          });
         }
       } catch (caught) {
         if (controller.signal.aborted || !active) return;
 
-        setMetadata({
-          loading: false,
-          error:
-            caught instanceof Error
-              ? caught.message
-              : 'Additional object details are unavailable',
-          rows: [],
+        setMetadataState({
+          key: selectionKey,
+          value: {
+            loading: false,
+            error:
+              caught instanceof Error
+                ? caught.message
+                : 'Additional object details are unavailable',
+            rows: [],
+          },
         });
       }
     };
@@ -402,5 +421,20 @@ export function useLiveObjectMetadata(
     selectedAircraft?.operator,
   ]);
 
-  return metadata;
+  if (
+    !selection ||
+    (selection.kind !== 'satellite' && selection.kind !== 'aircraft')
+  ) {
+    return EMPTY;
+  }
+
+  if (metadataState.key !== selectionKey) {
+    return {
+      loading: true,
+      error: null,
+      rows: [],
+    };
+  }
+
+  return metadataState.value;
 }
