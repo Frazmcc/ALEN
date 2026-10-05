@@ -21,6 +21,7 @@ import { projectAltAz } from '@/sky/projection';
 import { useObserverLocation } from '@/location/useObserverLocation';
 import { useDevicePointing } from '@/orientation/useDevicePointing';
 import { LocationControl } from '@/components/LocationControl';
+import { SkyObjectCanvas } from '@/components/SkyObjectCanvas';
 
 type Size = {
   width: number;
@@ -236,56 +237,45 @@ export default function SkyScreen() {
           }}
         />
 
+        <SkyObjectCanvas
+          stars={stars}
+          planets={planets}
+          viewport={viewport}
+          starVisibility={palette.stars}
+          targetKind={targetKind}
+          targetId={targetId}
+        />
+
         {stars
-          .filter((star) => star.el >= 0)
+          .filter(
+            (star) =>
+              star.el >= 0 &&
+              (star.mag <= 0.15 ||
+                (targetKind === 'star' && targetId === star.id)),
+          )
           .map((star) => {
             const point = projectAltAz(star.az, star.el, viewport);
             if (!point || palette.stars <= 0.02) return null;
 
-            const isTarget =
-              targetKind === 'star' && targetId === star.id;
-            const dotSize = isTarget
-              ? 9
-              : clamp(4.5 - star.mag, 1.5, 5.5);
-            const showLabel = isTarget || star.mag <= 0.15;
-
             return (
-              <View
-                key={star.id}
+              <Text
+                key={`label-${star.id}`}
                 pointerEvents="none"
                 style={{
                   position: 'absolute',
-                  left: point.x - 28,
-                  top: point.y - 8,
-                  width: 70,
-                  alignItems: 'center',
+                  left: point.x - 42,
+                  top: point.y + 7,
+                  width: 84,
+                  color: '#eef6ff',
+                  fontSize: 10,
+                  textAlign: 'center',
+                  textShadowColor: '#000',
+                  textShadowRadius: 3,
                   opacity: clamp(palette.stars, 0, 1),
                 }}
               >
-                <View
-                  style={{
-                    width: dotSize,
-                    height: dotSize,
-                    borderRadius: dotSize / 2,
-                    backgroundColor: star.color,
-                    borderWidth: isTarget ? 2 : 0,
-                    borderColor: isTarget ? colors.accent : 'transparent',
-                  }}
-                />
-                {showLabel ? (
-                  <Text
-                    style={{
-                      marginTop: 4,
-                      color: '#eef6ff',
-                      fontSize: 10,
-                      textShadowColor: '#000',
-                      textShadowRadius: 3,
-                    }}
-                  >
-                    {star.name}
-                  </Text>
-                ) : null}
-              </View>
+                {star.name}
+              </Text>
             );
           })}
 
@@ -299,41 +289,25 @@ export default function SkyScreen() {
             );
             if (!point) return null;
 
-            const isSun = planet.id === 'sun';
-
             return (
-              <View
-                key={planet.id}
+              <Text
+                key={`label-${planet.id}`}
                 pointerEvents="none"
                 style={{
                   position: 'absolute',
                   left: point.x - 42,
-                  top: point.y - 12,
+                  top: point.y + 8,
                   width: 84,
-                  alignItems: 'center',
+                  color: '#ffffff',
+                  fontSize: 11,
+                  fontWeight: '600',
+                  textAlign: 'center',
+                  textShadowColor: '#000000',
+                  textShadowRadius: 4,
                 }}
               >
-                <View
-                  style={{
-                    width: isSun ? 14 : 9,
-                    height: isSun ? 14 : 9,
-                    borderRadius: isSun ? 7 : 4.5,
-                    backgroundColor: planet.color,
-                  }}
-                />
-                <Text
-                  style={{
-                    marginTop: 4,
-                    color: '#ffffff',
-                    fontSize: 11,
-                    fontWeight: '600',
-                    textShadowColor: '#000000',
-                    textShadowRadius: 4,
-                  }}
-                >
-                  {planet.name}
-                </Text>
-              </View>
+                {planet.name}
+              </Text>
             );
           })}
 
