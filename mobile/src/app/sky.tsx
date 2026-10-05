@@ -37,7 +37,9 @@ export default function SkyScreen() {
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [yaw, setYaw] = useState(180);
   const [pitch, setPitch] = useState(28);
-  const gestureStart = useRef({ yaw: 180, pitch: 28 });
+  const [fov, setFov] = useState(105);
+  const gestureStart = useRef({ yaw: 180, pitch: 28, fov: 105 });
+  const pinchStartDistance = useRef<number | null>(null);
   const appliedTarget = useRef<string | null>(null);
   const {
     observer,
@@ -166,7 +168,7 @@ export default function SkyScreen() {
     ...size,
     yaw,
     pitch,
-    fov: 105,
+    fov,
   };
 
   const horizon = projectAltAz(yaw, 0, viewport);
@@ -179,14 +181,56 @@ export default function SkyScreen() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          !phoneAimActive &&
-          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
-        onPanResponderGrant: () => {
-          gestureStart.current = { yaw, pitch };
+        onStartShouldSetPanResponder: (event) =>
+          event.nativeEvent.touches.length >= 2,
+        onMoveShouldSetPanResponder: (event, gesture) =>
+          event.nativeEvent.touches.length >= 2 ||
+          (!phoneAimActive &&
+            (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2)),
+        onPanResponderGrant: (event) => {
+          gestureStart.current = { yaw, pitch, fov };
+
+          if (event.nativeEvent.touches.length >= 2) {
+            const [a, b] = event.nativeEvent.touches;
+            pinchStartDistance.current = Math.hypot(
+              b.pageX - a.pageX,
+              b.pageY - a.pageY,
+            );
+          } else {
+            pinchStartDistance.current = null;
+          }
         },
-        onPanResponderMove: (_, gesture) => {
+        onPanResponderMove: (event, gesture) => {
+          if (event.nativeEvent.touches.length >= 2) {
+            const [a, b] = event.nativeEvent.touches;
+            const distance = Math.hypot(
+              b.pageX - a.pageX,
+              b.pageY - a.pageY,
+            );
+
+            if (
+              pinchStartDistance.current === null ||
+              pinchStartDistance.current < 1
+            ) {
+              pinchStartDistance.current = distance;
+              gestureStart.current.fov = fov;
+              return;
+            }
+
+            const scale = distance / pinchStartDistance.current;
+            setFov(
+              clamp(
+                gestureStart.current.fov / Math.max(scale, 0.2),
+                35,
+                130,
+              ),
+            );
+            return;
+          }
+
+          pinchStartDistance.current = null;
+          if (phoneAimActive) return;
+
           setYaw(
             norm360(gestureStart.current.yaw - gesture.dx * 0.22),
           );
@@ -198,8 +242,14 @@ export default function SkyScreen() {
             ),
           );
         },
+        onPanResponderRelease: () => {
+          pinchStartDistance.current = null;
+        },
+        onPanResponderTerminate: () => {
+          pinchStartDistance.current = null;
+        },
       }),
-    [phoneAimActive, pitch, yaw],
+    [fov, phoneAimActive, pitch, yaw],
   );
 
   function onLayout(event: LayoutChangeEvent) {
@@ -420,12 +470,12 @@ export default function SkyScreen() {
           }}
         >
           <Text style={{ color: colors.text, fontSize: 11, fontWeight: '700' }}>
-            {Math.round(yaw)}° · {Math.round(pitch)}° elevation
+            {Math.round(yaw)}° · {Math.round(pitch)}° elevation · {Math.round(fov)}° FOV
           </Text>
           <Text style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>
             {phoneAimActive
               ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · compass accuracy ${headingAccuracy ?? '—'}`
-              : 'Drag to look around'}
+              : 'Drag to look · pinch to zoom'}
           </Text>
         </View>
 
