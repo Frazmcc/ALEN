@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Production rerun marker: tuned aircraft cache
+# Production rerun marker: tuned aircraft cache second pass
 
 import argparse
 import asyncio
