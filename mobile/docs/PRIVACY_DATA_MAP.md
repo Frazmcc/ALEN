@@ -8,9 +8,9 @@ Update this file whenever a feature changes what data is collected, processed, s
 
 | Data category | Used | Stored by ALEN | Sent to ALEN backend | Shared with third parties | Purpose | Retention |
 |---|---|---|---|---|---|---|
-| Precise device location | Optional | No | No | No | Calculate the observer's sky locally | Current foreground session only |
-| Approximate device location | Optional | No | No | No | Same foreground sky calculation | Current foreground session only |
-| Manual observer coordinates | Optional | Yes, on device only | No | No | Reopen the sky at a user-selected location | Until the user changes/clears the observer preference |
+| Precise device location | Optional | No | Only while a live Satellites or Aircraft layer is enabled | No direct sharing of the exact observer coordinate | Calculate the local sky and filter observer-relative live objects | Foreground session; live API requests are processed transiently |
+| Approximate device location | Optional | No | Only while a live Satellites or Aircraft layer is enabled | No direct sharing of the exact observer coordinate | Same observer-relative sky/live-object calculation | Foreground session; live API requests are processed transiently |
+| Manual observer coordinates | Optional | Yes, on device only | Only while a live Satellites or Aircraft layer is enabled | No direct sharing of the exact observer coordinate | Reopen a user-selected observer and calculate live objects there | On device until changed/cleared; live API requests are processed transiently |
 | Account data | No | No | No | No | N/A | N/A |
 | Advertising ID | No | No | No | No | N/A | N/A |
 | Contacts | No | No | No | No | N/A | N/A |
@@ -36,7 +36,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 - The aircraft backend shares upstream snapshots by an approximately 1° geographic cell and may retain those shared snapshots for up to 60 seconds; exact observer coordinates are used for per-request distance filtering.
 - The mobile app does not send observer coordinates directly to CelesTrak, adsb.lol or another live-data provider.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
-- Manual coordinates may be persisted locally because they are explicitly entered as an observer location; they are not transmitted to ALEN services.
+- Manual coordinates may be persisted locally because they are explicitly entered as an observer location. They stay local unless the user enables Satellites or Aircraft, in which case the active manual observer coordinate is sent to the ALEN API for that live layer in the same way as a device-derived observer.
 
 ## Motion/orientation rules
 
@@ -49,4 +49,4 @@ Update this file whenever a feature changes what data is collected, processed, s
 
 ## Future-change gate
 
-Before aircraft, satellite, weather, terrain, reverse-geocoding or analytics features send coordinates or identifiers to a server, this data map must be updated first and the store privacy declarations must be reviewed.
+Before any additional feature such as weather, terrain, reverse-geocoding, analytics or future live-data integrations sends coordinates or identifiers to a server, this data map must be updated first and the store privacy declarations must be reviewed.
