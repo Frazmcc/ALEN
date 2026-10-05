@@ -621,7 +621,7 @@ function drawAircraftIcon(kind,size,fill,stroke){
  ctx.restore();
 }
 
-const AIRCRAFT_GRACE_MS=30000;
+const AIRCRAFT_GRACE_MS=60000;
 const AIRCRAFT_POSITION_RESPONSE_MS=4200;
 const AIRCRAFT_MOTION_RESPONSE_MS=1800;
 const AIRCRAFT_ALTITUDE_RESPONSE_MS=2200;
@@ -639,6 +639,11 @@ async function refreshAircraft(force=false){
    if(!res.ok)throw new Error("aircraft "+res.status);
    const data=await res.json(),frameNow=performance.now(),wallNow=Date.now();
    aircraftDiagnostics=data.diagnostics||null;
+   const cacheAge=Number(aircraftDiagnostics?.cache_age_seconds)||0;
+   if(aircraft.length&&cacheAge>8){
+     aircraft=aircraft.filter(a=>wallNow-(Number(a.lastSeenAt)||wallNow)<=AIRCRAFT_GRACE_MS);
+     return;
+   }
    const previous=new Map(aircraft.map(a=>[a.id,a]));
    const next=new Map();
    for(const a of (Array.isArray(data.aircraft)?data.aircraft:[])){
