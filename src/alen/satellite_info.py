@@ -26,6 +26,7 @@ class SatelliteInfoProvider:
     SATNOGS_MEDIA_BASE = "https://db-satnogs.freetls.fastly.net/media/"
     CACHE_TTL_SECONDS = 86400
     REFRESH_LOCK_SECONDS = 30
+    MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
     OWNER_NAMES = {
         "PRC": "People's Republic of China",
@@ -196,6 +197,45 @@ class SatelliteInfoProvider:
         )
         return result
 
+    def image_bytes(
+        self,
+        photo: dict[str, object],
+    ) -> tuple[bytes, str] | None:
+        image_url = _clean(photo.get("image_url"))
+        if not _trusted_satellite_image_url(image_url):
+            return None
+
+        try:
+            with httpx.Client(
+                timeout=20.0,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "ALEN/0.1 (satellite photo proxy)",
+                    "Accept": "image/avif,image/webp,image/png,image/jpeg,image/*",
+                },
+            ) as client:
+                response = client.get(image_url)
+                response.raise_for_status()
+                mime = (
+                    response.headers.get("content-type", "")
+                    .split(";", 1)[0]
+                    .lower()
+                )
+                body = response.content
+        except httpx.HTTPError:
+            return None
+
+        if mime not in {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/avif",
+        }:
+            return None
+        if not body or len(body) > self.MAX_IMAGE_BYTES:
+            return None
+        return body, mime
+
     def _satcat(self, norad: int) -> dict[str, object] | None:
         try:
             with httpx.Client(timeout=10.0, follow_redirects=True, headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"}) as client:
@@ -359,3 +399,11 @@ def _metadata_text(metadata: dict[str, object], key: str) -> str:
     value = str(raw.get("value") or "")
     value = re.sub(r"<[^>]*>", "", value)
     return unescape(value).strip()
+
+
+def _trusted_satellite_image_url(value: str) -> bool:
+    return value.startswith(
+        "https://upload.wikimedia.org/"
+    ) or value.startswith(
+        "https://db-satnogs.freetls.fastly.net/media/"
+    )
