@@ -89,12 +89,17 @@ def test_nearby_aircraft_endpoint(monkeypatch) -> None:
     assert response.json()["aircraft"] == sample
 
 
-def test_aircraft_provider_rounds_radius_for_adsb_api(monkeypatch) -> None:
-    from alen.aircraft import AircraftProvider
 
-    requested = {}
+def test_aircraft_provider_uses_shared_geographic_snapshot(monkeypatch) -> None:
+    from alen.aircraft import AircraftProvider
+    from alen.cache import SharedCache
+
+    requested = {"count": 0}
 
     class Response:
+        status_code = 200
+        headers = {}
+
         def raise_for_status(self) -> None:
             return None
 
@@ -112,13 +117,18 @@ def test_aircraft_provider_rounds_radius_for_adsb_api(monkeypatch) -> None:
             return None
 
         def get(self, url: str):
+            requested["count"] += 1
             requested["url"] = url
             return Response()
 
     monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
-    AircraftProvider().nearby(55.77, -4.09, radius_nm=43.4488)
-    assert requested["url"].endswith("/dist/44")
+    provider = AircraftProvider(cache=SharedCache(namespace="test-aircraft-shared"))
+    provider.nearby(55.77, -4.09, radius_nm=43.4488)
+    provider.nearby(55.78, -4.08, radius_nm=43.4488)
 
+    assert requested["count"] == 1
+    assert "/lat/55.5000/lon/-4.5000/dist/100" in requested["url"]
+    assert provider.last_diagnostics["cache"] == "fresh"
 
 def test_aircraft_photo_endpoint(monkeypatch) -> None:
     from alen.aircraft_photos import AircraftPhoto
@@ -282,6 +292,14 @@ def test_aircraft_photo_proxy_serves_verified_image(monkeypatch) -> None:
     assert response.content == b"fake-jpeg"
 
 
+def test_aircraft_photo_provider_does_not_retain_image_bytes() -> None:
+    from alen.aircraft_photos import AircraftPhotoProvider
+
+    provider = AircraftPhotoProvider()
+    assert not hasattr(provider, "_image_cache")
+    assert provider.MAX_METADATA_CACHE_ENTRIES == 512
+
+
 def test_aircraft_photo_rejects_untrusted_image_host() -> None:
     from alen.aircraft_photos import AircraftPhoto, AircraftPhotoProvider
 
@@ -348,6 +366,7 @@ def test_orbitalwiki_elements_fallback(monkeypatch) -> None:
 
 def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
     from alen.aircraft import AircraftProvider
+    from alen.cache import SharedCache
 
     class Response:
         def raise_for_status(self) -> None:
@@ -387,7 +406,7 @@ def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
             return Response()
 
     monkeypatch.setattr("alen.aircraft.httpx.Client", Client)
-    aircraft = AircraftProvider().nearby(55.77, -4.09)
+    aircraft = AircraftProvider(cache=SharedCache(namespace="test-aircraft-operator")).nearby(55.77, -4.09)
     assert aircraft[0]["flight"] == "SHT16E"
     assert aircraft[0]["operator"] == "British Airways"
     assert aircraft[0]["squawk"] == "0032"
