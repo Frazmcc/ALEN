@@ -30,6 +30,7 @@ class SatelliteProvider:
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, tuple[OrbitRecord, ...]]] = {}
         self._lock = Lock()
+        self._executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="alen-sat")
         self.last_diagnostics: dict[str, object] = {}
 
     def visible(
@@ -47,17 +48,16 @@ class SatelliteProvider:
         loaded_by_group: dict[str, int] = {group: 0 for group in requested_groups}
         records_by_group: dict[str, tuple[OrbitRecord, ...]] = {}
         if requested_groups:
-            with ThreadPoolExecutor(max_workers=min(6, len(requested_groups))) as executor:
-                futures = {
-                    executor.submit(self._load_group, group): group
-                    for group in requested_groups
-                }
-                for future in as_completed(futures):
-                    group = futures[future]
-                    try:
-                        records_by_group[group] = future.result()
-                    except Exception:
-                        records_by_group[group] = ()
+            futures = {
+                self._executor.submit(self._load_group, group): group
+                for group in requested_groups
+            }
+            for future in as_completed(futures):
+                group = futures[future]
+                try:
+                    records_by_group[group] = future.result()
+                except Exception:
+                    records_by_group[group] = ()
 
         for group in requested_groups:
             records = records_by_group.get(group, ())
@@ -154,8 +154,7 @@ class SatelliteProvider:
 
         records = self._fetch_group(group)
         if records:
-            with self._lock:
-                self._cache[group] = (time(), records)
+            self._store_cache(group, records)
             return records
         return cached[1] if cached else ()
 
@@ -171,10 +170,27 @@ class SatelliteProvider:
         if not records:
             records = self._fetch_orbitalwiki_catalog()
         if records:
-            with self._lock:
-                self._cache[key] = (time(), records)
+            self._store_cache(key, records)
             return records
         return cached[1] if cached else ()
+
+    def _store_cache(self, key: str, records: tuple[OrbitRecord, ...]) -> None:
+        now = time()
+        with self._lock:
+            expired = [
+                name
+                for name, (created_at, _) in self._cache.items()
+                if now - created_at >= self.CACHE_SECONDS
+            ]
+            for name in expired:
+                self._cache.pop(name, None)
+            self._cache[key] = (now, records)
+            while len(self._cache) > self.MAX_CACHE_GROUPS:
+                oldest = min(self._cache, key=lambda name: self._cache[name][0])
+                if oldest == key and len(self._cache) > 1:
+                    candidates = [name for name in self._cache if name != key]
+                    oldest = min(candidates, key=lambda name: self._cache[name][0])
+                self._cache.pop(oldest, None)
 
     def _fetch_fallback_catalog(self) -> tuple[OrbitRecord, ...]:
         try:
