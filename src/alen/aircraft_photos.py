@@ -26,8 +26,8 @@ class AircraftPhotoProvider:
     COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
     PLANESPOTTERS_API_BASE = "https://api.planespotters.net/pub/photos"
     CACHE_TTL_SECONDS = 86400
-    IMAGE_CACHE_TTL_SECONDS = 21600
-    MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    MAX_METADATA_CACHE_ENTRIES = 512
+    MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
     def __init__(self) -> None:
         self._cache: OrderedDict[str, tuple[float, AircraftPhoto | None]] = OrderedDict()
@@ -120,6 +120,17 @@ class AircraftPhotoProvider:
         # long Cache-Control lifetime from the API endpoint, while the server
         # releases the temporary response body immediately after this request.
         return body, mime
+
+    def _prune_metadata_cache(self, now: float) -> None:
+        expired = [
+            key
+            for key, (created_at, _) in self._cache.items()
+            if now - created_at >= self.CACHE_TTL_SECONDS
+        ]
+        for key in expired:
+            self._cache.pop(key, None)
+        while len(self._cache) > self.MAX_METADATA_CACHE_ENTRIES:
+            self._cache.popitem(last=False)
 
     def _search_planespotters(
         self,
