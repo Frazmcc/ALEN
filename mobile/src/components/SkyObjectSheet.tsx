@@ -20,12 +20,14 @@ type Props = {
   detail: SkyObjectDetail | null;
   onClose: () => void;
   onCentre?: () => void;
+  onCalibrate?: () => void;
 };
 
 export function SkyObjectSheet({
   detail,
   onClose,
   onCentre,
+  onCalibrate,
 }: Props) {
   return (
     <Modal
@@ -211,14 +213,50 @@ export function SkyObjectSheet({
               ))}
             </View>
 
+            {onCalibrate ? (
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 11,
+                  lineHeight: 16,
+                  marginTop: 12,
+                }}
+              >
+                Point the phone directly at this object in the real sky, then
+                tap Calibrate aim. The correction lasts only for this app
+                session.
+              </Text>
+            ) : null}
+
             <View
               style={{
                 flexDirection: 'row',
+                flexWrap: 'wrap',
                 justifyContent: 'flex-end',
                 gap: 8,
                 marginTop: 14,
               }}
             >
+              {onCalibrate ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={onCalibrate}
+                  style={{
+                    minHeight: 44,
+                    justifyContent: 'center',
+                    paddingHorizontal: 16,
+                    borderRadius: 12,
+                    backgroundColor: 'rgba(24,72,52,0.94)',
+                    borderWidth: 1,
+                    borderColor: colors.success,
+                  }}
+                >
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>
+                    Calibrate aim
+                  </Text>
+                </Pressable>
+              ) : null}
+
               {onCentre ? (
                 <Pressable
                   accessibilityRole="button"
