@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ALEN",
+    "slug": "alen-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "alen",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.frazmcc.alen.dev"
+    },
+    "android": {
+      "package": "com.frazmcc.alen.dev",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#020711"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
