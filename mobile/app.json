@@ -6,14 +6,12 @@
     "orientation": "portrait",
     "scheme": "alen",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.frazmcc.alen.dev"
     },
     "android": {
-      "package": "com.frazmcc.alen.dev",
-      "edgeToEdgeEnabled": true
+      "package": "com.frazmcc.alen.dev"
     },
     "plugins": [
       "expo-router",
