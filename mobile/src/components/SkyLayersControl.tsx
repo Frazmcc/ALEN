@@ -7,6 +7,8 @@ export type SkyLayers = {
   planets: boolean;
   atmosphere: boolean;
   landscape: boolean;
+  aircraft: boolean;
+  satellites: boolean;
 };
 
 type Props = {
@@ -19,13 +21,15 @@ type Props = {
 const options: Array<{
   key: keyof SkyLayers;
   label: string;
-  group: 'Astronomy' | 'Display';
+  group: 'Astronomy' | 'Display' | 'Live';
 }> = [
   { key: 'stars', label: 'Stars', group: 'Astronomy' },
   { key: 'constellations', label: 'Constellations', group: 'Astronomy' },
   { key: 'planets', label: 'Planets', group: 'Astronomy' },
   { key: 'atmosphere', label: 'Atmosphere', group: 'Display' },
   { key: 'landscape', label: 'Landscape', group: 'Display' },
+  { key: 'aircraft', label: 'Aircraft', group: 'Live' },
+  { key: 'satellites', label: 'Satellites', group: 'Live' },
 ];
 
 export function SkyLayersControl({
@@ -76,7 +80,7 @@ export function SkyLayersControl({
             gap: 8,
           }}
         >
-          {(['Astronomy', 'Display'] as const).map((group) => (
+          {(['Astronomy', 'Live', 'Display'] as const).map((group) => (
             <View key={group} style={{ gap: 6 }}>
               <Text
                 style={{
