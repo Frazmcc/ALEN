@@ -30,6 +30,15 @@ import { LiveSatelliteCanvas } from '@/components/LiveSatelliteCanvas';
 import { useLiveSatellites } from '@/live/useLiveSatellites';
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
+import {
+  SkyObjectSheet,
+  type SkyObjectDetail,
+} from '@/components/SkyObjectSheet';
+import {
+  liveObjectSnapshots,
+  nearestLiveObject,
+  type LiveSelection,
+} from '@/live/liveSelection';
 
 type Size = {
   width: number;
@@ -47,6 +56,7 @@ export default function SkyScreen() {
   const [pitch, setPitch] = useState(28);
   const [fov, setFov] = useState(105);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [selectedLive, setSelectedLive] = useState<LiveSelection | null>(null);
   const [layers, setLayers] = useState<SkyLayers>({
     stars: true,
     constellations: true,
@@ -186,6 +196,92 @@ export default function SkyScreen() {
     fov,
   };
 
+  const selectedLiveSnapshot = useMemo(() => {
+    if (!selectedLive) return null;
+
+    return (
+      liveObjectSnapshots({
+        satelliteTracks,
+        aircraftTracks,
+        observer,
+        nowMs: now,
+        includeSatellites: layers.satellites,
+        includeAircraft: layers.aircraft,
+      }).find(
+        (snapshot) =>
+          snapshot.kind === selectedLive.kind &&
+          snapshot.id === selectedLive.id,
+      ) ?? null
+    );
+  }, [
+    aircraftTracks,
+    layers.aircraft,
+    layers.satellites,
+    now,
+    observer,
+    satelliteTracks,
+    selectedLive,
+  ]);
+
+  const selectedDetail = useMemo<SkyObjectDetail | null>(() => {
+    if (!selectedLiveSnapshot) return null;
+
+    if (selectedLiveSnapshot.kind === 'satellite') {
+      const track = selectedLiveSnapshot.track;
+      const groups = track.groups.length
+        ? track.groups
+            .map((group) => group.replace(/-/g, ' '))
+            .join(', ')
+        : 'Unclassified';
+
+      return {
+        kind: 'SATELLITE',
+        name: selectedLiveSnapshot.name,
+        subtitle: `${Math.round(selectedLiveSnapshot.rangeKm)} km line of sight`,
+        color: selectedLiveSnapshot.color,
+        altitude: selectedLiveSnapshot.el,
+        azimuth: selectedLiveSnapshot.az,
+        rows: [
+          ['NORAD', track.norad],
+          ['International ID', track.internationalId],
+          ['Range', `${Math.round(selectedLiveSnapshot.rangeKm)} km`],
+          ['Groups', groups],
+        ],
+      };
+    }
+
+    const track = selectedLiveSnapshot.track;
+    const predicted = selectedLiveSnapshot.predicted;
+
+    return {
+      kind: 'AIRCRAFT',
+      name: selectedLiveSnapshot.name,
+      subtitle: [
+        track.visualType.replace(/-/g, ' '),
+        track.registration,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      color: selectedLiveSnapshot.color,
+      altitude: selectedLiveSnapshot.el,
+      azimuth: selectedLiveSnapshot.az,
+      rows: [
+        ['Callsign', track.callsign || '—'],
+        ['Operator', track.operator || 'Unknown'],
+        ['Aircraft type', track.type || 'Unknown'],
+        ['Registration', track.registration || '—'],
+        ['Altitude', `${Math.round(predicted.altM).toLocaleString()} m`],
+        ['Speed', `${Math.round(predicted.gs)} kt`],
+        ['Track', `${Math.round(predicted.track)}°`],
+        ['Slant range', `${selectedLiveSnapshot.rangeKm.toFixed(1)} km`],
+        ['Squawk', track.squawk || '—'],
+      ],
+    };
+  }, [selectedLiveSnapshot]);
+
+  const activeTargetKind = selectedLive ? undefined : targetKind;
+  const activeTargetId = selectedLive ? undefined : targetId;
+
   const horizon = projectAltAz(yaw, 0, viewport);
   const horizonY = clamp(
     horizon?.y ?? size.height * 0.78,
@@ -273,10 +369,80 @@ export default function SkyScreen() {
   }
 
   function toggleLayer(layer: keyof SkyLayers) {
+    if (
+      layers[layer] &&
+      ((layer === 'satellites' && selectedLive?.kind === 'satellite') ||
+        (layer === 'aircraft' && selectedLive?.kind === 'aircraft'))
+    ) {
+      setSelectedLive(null);
+    }
+
     setLayers((current) => ({
       ...current,
       [layer]: !current[layer],
     }));
+  }
+
+  function selectLiveObjectAt(x: number, y: number) {
+    if (!layers.satellites && !layers.aircraft) {
+      setSelectedLive(null);
+      return;
+    }
+
+    const nearest = nearestLiveObject(
+      liveObjectSnapshots({
+        satelliteTracks,
+        aircraftTracks,
+        observer,
+        nowMs: Date.now(),
+        includeSatellites: layers.satellites,
+        includeAircraft: layers.aircraft,
+      }),
+      viewport,
+      x,
+      y,
+    );
+
+    if (!nearest) {
+      setSelectedLive(null);
+      return;
+    }
+
+    if (
+      selectedLive?.kind === nearest.kind &&
+      selectedLive.id === nearest.id
+    ) {
+      setSelectedLive(null);
+      return;
+    }
+
+    setSelectedLive({
+      kind: nearest.kind,
+      id: nearest.id,
+    });
+  }
+
+  function centreSelectedLive() {
+    if (!selectedLive) return;
+
+    const snapshot = liveObjectSnapshots({
+      satelliteTracks,
+      aircraftTracks,
+      observer,
+      nowMs: Date.now(),
+      includeSatellites: layers.satellites,
+      includeAircraft: layers.aircraft,
+    }).find(
+      (item) =>
+        item.kind === selectedLive.kind &&
+        item.id === selectedLive.id,
+    );
+
+    if (!snapshot) return;
+
+    if (phoneAimActive) stopPhoneAim();
+    setYaw(snapshot.az);
+    setPitch(clamp(snapshot.el, 0, 84));
   }
 
   return (
@@ -296,8 +462,8 @@ export default function SkyScreen() {
           showPlanets={layers.planets}
           showAtmosphere={layers.atmosphere}
           showLandscape={layers.landscape}
-          targetKind={targetKind}
-          targetId={targetId}
+          targetKind={activeTargetKind}
+          targetId={activeTargetId}
           horizonY={horizonY}
           skyColors={{
             top: palette.top,
@@ -310,12 +476,39 @@ export default function SkyScreen() {
           tracks={satelliteTracks}
           viewport={viewport}
           visible={layers.satellites}
+          selectedId={
+            selectedLive?.kind === 'satellite'
+              ? selectedLive.id
+              : undefined
+          }
         />
         <LiveAircraftCanvas
           tracks={aircraftTracks}
           observer={observer}
           viewport={viewport}
           visible={layers.aircraft}
+          selectedId={
+            selectedLive?.kind === 'aircraft'
+              ? selectedLive.id
+              : undefined
+          }
+        />
+
+        <Pressable
+          accessible={false}
+          onPress={(event) =>
+            selectLiveObjectAt(
+              event.nativeEvent.locationX,
+              event.nativeEvent.locationY,
+            )
+          }
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+          }}
         />
 
         {layers.stars ? stars
@@ -323,7 +516,7 @@ export default function SkyScreen() {
             (star) =>
               star.el >= 0 &&
               (star.mag <= 0.15 ||
-                (targetKind === 'star' && targetId === star.id)),
+                (activeTargetKind === 'star' && activeTargetId === star.id)),
           )
           .map((star) => {
             const point = projectAltAz(star.az, star.el, viewport);
@@ -543,6 +736,12 @@ export default function SkyScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <SkyObjectSheet
+        detail={selectedDetail}
+        onClose={() => setSelectedLive(null)}
+        onCentre={selectedLiveSnapshot ? centreSelectedLive : undefined}
+      />
     </AppScreen>
   );
 }
