@@ -53,6 +53,35 @@ def test_visible_satellites_endpoint(monkeypatch) -> None:
     assert response.json()["diagnostics"]["visible"] == 1
 
 
+def test_satellite_observer_cache_key_quantizes_only_nearby_positions() -> None:
+    from alen.api import _satellite_observer_cache_key
+
+    first = _satellite_observer_cache_key(
+        54.32121,
+        -3.21021,
+        80,
+        ["visual", "stations"],
+        17,
+    )
+    nearby = _satellite_observer_cache_key(
+        54.32124,
+        -3.21024,
+        81,
+        ["stations", "visual"],
+        17,
+    )
+    farther = _satellite_observer_cache_key(
+        54.323,
+        -3.21024,
+        81,
+        ["stations", "visual"],
+        17,
+    )
+
+    assert first == nearby
+    assert first != farther
+
+
 def test_satellite_observer_response_is_reused_for_nearby_users(monkeypatch) -> None:
     sample = [
         {
