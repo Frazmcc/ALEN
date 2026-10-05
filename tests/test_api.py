@@ -53,6 +53,52 @@ def test_visible_satellites_endpoint(monkeypatch) -> None:
     assert response.json()["diagnostics"]["visible"] == 1
 
 
+def test_satellite_world_positions_are_shared_within_time_bucket(monkeypatch) -> None:
+    from datetime import datetime, timezone
+
+    from alen.satellites import OrbitRecord, SatelliteProvider
+
+    provider = SatelliteProvider()
+    calls = {"count": 0}
+
+    def fake_ecef(record, when):
+        calls["count"] += 1
+        return (7000.0 + record.norad, 100.0, 50.0)
+
+    monkeypatch.setattr("alen.satellites._ecef_from_tle", fake_ecef)
+    record = OrbitRecord(
+        name="TEST SAT",
+        norad=12345,
+        international_id="2026-001A",
+        satellite=object(),
+    )
+    when = datetime(2026, 10, 5, 14, 0, 0, 700000, tzinfo=timezone.utc)
+
+    sample1, positions1, hits1, misses1 = provider._world_positions([record], when)
+    sample2, positions2, hits2, misses2 = provider._world_positions([record], when)
+
+    assert sample1 == sample2
+    assert sample1.microsecond == 0
+    assert positions1 == positions2
+    assert calls["count"] == 1
+    assert (hits1, misses1) == (0, 1)
+    assert (hits2, misses2) == (1, 0)
+
+
+def test_satellite_topocentric_conversion_depends_on_exact_observer() -> None:
+    from alen.satellites import _topocentric_from_ecef
+
+    position = (7000.0, 1200.0, 800.0)
+    glasgow = _topocentric_from_ecef(position, 55.8642, -4.2518, 50.0)
+    london = _topocentric_from_ecef(position, 51.5074, -0.1278, 50.0)
+
+    assert glasgow is not None
+    assert london is not None
+    assert glasgow["azimuth_deg"] != london["azimuth_deg"]
+    assert glasgow["elevation_deg"] != london["elevation_deg"]
+
+
+
 def test_custom_domain_cors_is_allowed() -> None:
     response = TestClient(app).options(
         "/api/v1/health",
