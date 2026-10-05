@@ -952,3 +952,4 @@ def test_regional_service_lookup_requires_supported_service_and_region() -> None
     provider = AircraftPhotoProvider()
     assert provider.find_regional_service("commercial", "Scotland", "B38M", "") is None
     assert provider.find_regional_service("police", "", "EC35", "") is None
+    assert provider.find_regional_service("commercial", "", "B38M", "Example Airline") is None
