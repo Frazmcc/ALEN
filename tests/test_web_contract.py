@@ -181,7 +181,9 @@ def test_dense_stars_and_real_planets_are_present() -> None:
 
 def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
-    assert 'satelliteTimer=setInterval(()=>refreshSatellites(false),10000)' in APP
+    assert "const SATELLITE_REFRESH_MS=10000" in APP
+    assert "function scheduleSatelliteRefresh(delayMs=SATELLITE_REFRESH_MS)" in APP
+    assert "satelliteTimer=setTimeout(async()=>{" in APP
     assert 'function stepSatellites(now)' in APP
     assert "satelliteDiagnostics=data.diagnostics||null" in APP
     assert "satellite feed unavailable" in APP
