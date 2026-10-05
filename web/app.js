@@ -1002,42 +1002,79 @@ function screenYForElevation(el,az=yaw){
  const vfov=verticalFovRad(),delta=(el-pitch)*DEG;
  return height*.5-Math.tan(delta)/Math.tan(vfov/2)*height*.5;
 }
+function interpolateTerrainEdge(a,b,x){
+ const dx=b[0]-a[0];
+ if(Math.abs(dx)<1e-6)return[x,a[1]];
+ const t=clamp((x-a[0])/dx,0,1);
+ return[x,a[1]+(b[1]-a[1])*t];
+}
 function traceTerrainSkyline(){
- const points=[],step=4,margin=Math.max(80,width*.08);
- for(let x=-margin;x<=width+margin;x+=step){
-   const az=norm360(yaw+(x-width*.5)/width*fov);
-   const el=terrainHorizonElevation(az);
-   points.push([x,screenYForElevation(el,az)]);
+ const projected=[];
+ const halfSpan=Math.min(179,fov*.72+18);
+ const azStep=Math.max(.35,Math.min(1.2,fov/180));
+ for(let offset=-halfSpan;offset<=halfSpan;offset+=azStep){
+   const az=norm360(yaw+offset),el=terrainHorizonElevation(az),p=project(az,el);
+   if(p&&Number.isFinite(p[0])&&Number.isFinite(p[1]))projected.push([p[0],p[1]]);
  }
- return{points,margin};
+ projected.sort((a,b)=>a[0]-b[0]);
+ if(projected.length<2)return[];
+
+ const points=[];
+ for(let i=1;i<projected.length;i++){
+   const a=projected[i-1],b=projected[i];
+   if(a[0]<=0&&b[0]>=0)points.push(interpolateTerrainEdge(a,b,0));
+   if(b[0]>0&&b[0]<width)points.push(b);
+   if(a[0]<=width&&b[0]>=width){
+    points.push(interpolateTerrainEdge(a,b,width));
+    break;
+   }
+ }
+ if(!points.length)return[];
+
+ if(points[0][0]>0){
+   const first=projected.find(p=>p[0]>=points[0][0])||projected[0];
+   points.unshift([0,first[1]]);
+ }
+ if(points[points.length-1][0]<width){
+   const last=projected.slice().reverse().find(p=>p[0]<=points[points.length-1][0])||projected[projected.length-1];
+   points.push([width,last[1]]);
+ }
+ points[0][0]=0;
+ points[points.length-1][0]=width;
+ return points;
 }
 function drawDistantTerrain(dayMode){
  if(!layers.landscape||!terrainProfile?.length)return;
- const horizonY=screenYForElevation(0);
- if(horizonY>=height+180)return;
- const {points,margin}=traceTerrainSkyline();
- if(!points.length)return;
+ const points=traceTerrainSkyline();
+ if(points.length<2)return;
+
+ const minY=Math.min(...points.map(point=>point[1]));
+ const terrainShade=ctx.createLinearGradient(0,Math.max(0,minY-18),0,height);
+ if(dayMode){
+  terrainShade.addColorStop(0,"rgba(45,70,82,.62)");
+  terrainShade.addColorStop(.32,"rgba(24,42,50,.88)");
+  terrainShade.addColorStop(1,"rgba(6,12,16,.985)");
+ }else{
+  terrainShade.addColorStop(0,"rgba(13,23,29,.82)");
+  terrainShade.addColorStop(.32,"rgba(7,14,18,.96)");
+  terrainShade.addColorStop(1,"rgba(2,5,7,.995)");
+ }
 
  ctx.beginPath();
- ctx.moveTo(points[0][0],points[0][1]);
+ ctx.moveTo(0,points[0][1]);
  for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
- ctx.lineTo(width+margin,horizonY);ctx.lineTo(-margin,horizonY);ctx.closePath();
+ ctx.lineTo(width,height);
+ ctx.lineTo(0,height);
+ ctx.closePath();
+ ctx.fillStyle=terrainShade;
+ ctx.fill();
 
- const top=Math.max(0,horizonY-150),bottom=Math.min(height,horizonY+4);
- const terrainShade=ctx.createLinearGradient(0,top,0,bottom);
- if(dayMode){
-  terrainShade.addColorStop(0,"rgba(45,70,82,.58)");
-  terrainShade.addColorStop(1,"rgba(16,28,34,.90)");
- }else{
-  terrainShade.addColorStop(0,"rgba(13,23,29,.76)");
-  terrainShade.addColorStop(1,"rgba(3,8,11,.96)");
- }
- ctx.fillStyle=terrainShade;ctx.fill();
-
- ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);
+ ctx.beginPath();
+ ctx.moveTo(0,points[0][1]);
  for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
- ctx.strokeStyle=dayMode?"rgba(120,155,168,.34)":"rgba(105,145,160,.22)";
- ctx.lineWidth=.8;ctx.stroke();
+ ctx.strokeStyle=dayMode?"rgba(120,155,168,.30)":"rgba(105,145,160,.18)";
+ ctx.lineWidth=.8;
+ ctx.stroke();
 }
 function drawAtmosphericSky(sky){
  if(!layers.atmosphere){
@@ -1055,47 +1092,39 @@ function drawAtmosphericSky(sky){
 function drawSolarHorizonGlow(sun,sky){
  if(!layers.atmosphere||!sun||!Number.isFinite(sun.el)||!Number.isFinite(sun.az))return;
  const horizonY=screenYForElevation(0);
- if(horizonY<-180||horizonY>height+180)return;
+ if(horizonY<-260||horizonY>height+260)return;
  const rise=clamp((sun.el+12)/10,0,1),fall=clamp((12-sun.el)/10,0,1);
  const strength=rise*fall;
  if(strength<=.01)return;
- const sunX=width*.5+(adiff(sun.az,yaw)/Math.max(fov,1))*width;
- const radius=Math.max(260,width*.48);
- const glow=ctx.createRadialGradient(sunX,horizonY,0,sunX,horizonY,radius);
- glow.addColorStop(0,rgbaCss(sky.warmRgb,.48*strength));
- glow.addColorStop(.26,rgbaCss(sky.warmRgb,.28*strength));
- glow.addColorStop(.62,rgbaCss(sky.warmRgb,.09*strength));
+
+ const sunPoint=project(sun.az,0);
+ const sunX=sunPoint?.[0]??(width*.5+(adiff(sun.az,yaw)/Math.max(fov,1))*width);
+ const radiusX=Math.max(280,width*.42),radiusY=Math.max(130,height*.20);
+
+ ctx.save();
+ ctx.translate(sunX,horizonY);
+ ctx.scale(radiusX,radiusY);
+ const glow=ctx.createRadialGradient(0,0,0,0,0,1);
+ glow.addColorStop(0,rgbaCss(sky.warmRgb,.42*strength));
+ glow.addColorStop(.22,rgbaCss(sky.warmRgb,.24*strength));
+ glow.addColorStop(.5,rgbaCss(sky.warmRgb,.08*strength));
+ glow.addColorStop(.78,rgbaCss(sky.warmRgb,.025*strength));
  glow.addColorStop(1,rgbaCss(sky.warmRgb,0));
  ctx.fillStyle=glow;
- const top=Math.max(0,horizonY-190),bottom=Math.min(height,horizonY+85);
- if(bottom>top)ctx.fillRect(0,top,width,bottom-top);
+ ctx.beginPath();
+ ctx.arc(0,0,1,0,Math.PI*2);
+ ctx.fill();
+ ctx.restore();
 }
-function drawHorizon(sky){
+function drawHorizon(){
  const horizonY=screenYForElevation(0);
- if(layers.atmosphere){
-  const top=Math.max(0,horizonY-110),bottom=Math.min(height,horizonY+24);
-  if(bottom>top){
-   const glow=ctx.createLinearGradient(0,top,0,bottom);
-   glow.addColorStop(0,rgbaCss(sky.horizonRgb,0));
-   glow.addColorStop(.72,rgbaCss(sky.horizonRgb,.10+.05*sky.daylight));
-   glow.addColorStop(1,"rgba(0,0,0,.24)");
-   ctx.fillStyle=glow;ctx.fillRect(0,top,width,bottom-top);
-  }
- }
  if(horizonY>=0&&horizonY<=height){
-   ctx.strokeStyle="rgba(190,225,240,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,horizonY);ctx.lineTo(width,horizonY);ctx.stroke();
- }
-}
-function drawLandscapeForeground(){
- if(!layers.landscape)return;
- const horizonY=screenYForElevation(0);
- if(horizonY>=height+180)return;
- const y=clamp(horizonY,-2,height+2);
- ctx.fillStyle="rgba(2,5,7,.985)";
- ctx.fillRect(0,y,width,height-y+2);
- if(y>=0&&y<=height){
-  ctx.strokeStyle="rgba(125,160,172,.16)";ctx.lineWidth=.8;
-  ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(width,y+.5);ctx.stroke();
+   ctx.strokeStyle="rgba(190,225,240,.10)";
+   ctx.lineWidth=.7;
+   ctx.beginPath();
+   ctx.moveTo(0,horizonY+.5);
+   ctx.lineTo(width,horizonY+.5);
+   ctx.stroke();
  }
 }
 function isAboveLandscape(az,el){
@@ -1108,7 +1137,7 @@ function draw(){
  const aircraftInk=dayMode?"#083a59":"#9fd9ff";
  drawAtmosphericSky(sky);
  drawSolarHorizonGlow(sun,sky);
- drawHorizon(sky);
+ drawHorizon();
 
  const liveObjects=currentSkyObjects(simTime);
  const byId=new Map(liveObjects.map(o=>[o.id,o]));
@@ -1204,7 +1233,6 @@ function draw(){
  }
 
  drawDistantTerrain(dayMode);
- drawLandscapeForeground();
 
  if(layers.airports){
   for(const raw of airports){
