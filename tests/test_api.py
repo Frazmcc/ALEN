@@ -413,6 +413,68 @@ def test_aircraft_provider_exposes_operator(monkeypatch) -> None:
     assert aircraft[0]["db_flags"] == 1
 
 
+def test_aircraft_route_provider_reuses_shared_cache(monkeypatch) -> None:
+    from alen.aircraft_routes import AircraftRouteProvider
+    from alen.cache import SharedCache
+
+    calls = {"count": 0}
+
+    class Response:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return {
+                "callsign": "SHT16E",
+                "airline_code": "BAW",
+                "_airports": [
+                    {
+                        "name": "London Heathrow Airport",
+                        "iata": "LHR",
+                        "icao": "EGLL",
+                        "location": "London",
+                        "countryiso2": "GB",
+                    },
+                    {
+                        "name": "Glasgow Airport",
+                        "iata": "GLA",
+                        "icao": "EGPF",
+                        "location": "Glasgow",
+                        "countryiso2": "GB",
+                    },
+                ],
+            }
+
+    class Client:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str):
+            calls["count"] += 1
+            return Response()
+
+    monkeypatch.setattr("alen.aircraft_routes.httpx.Client", Client)
+    provider = AircraftRouteProvider(
+        cache=SharedCache(namespace="test-aircraft-route")
+    )
+    first = provider.lookup("SHT16E")
+    second = provider.lookup("SHT16E")
+
+    assert calls["count"] == 1
+    assert first == second
+    assert first is not None
+    assert first["departure"]["iata"] == "LHR"
+    assert first["arrival"]["iata"] == "GLA"
+
+
 def test_aircraft_route_endpoint(monkeypatch) -> None:
     sample = {
         "callsign": "SHT16E",
@@ -448,9 +510,12 @@ def test_satellite_info_endpoint(monkeypatch) -> None:
 
 
 def test_satellite_info_provider_combines_catalog_and_mission_data(monkeypatch) -> None:
+    from alen.cache import SharedCache
     from alen.satellite_info import SatelliteInfoProvider
 
-    provider = SatelliteInfoProvider()
+    provider = SatelliteInfoProvider(
+        cache=SharedCache(namespace="test-satellite-info")
+    )
     monkeypatch.setattr(
         provider,
         "_satcat",
