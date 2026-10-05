@@ -1,4 +1,10 @@
-import { Pressable, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { colors } from '@/theme/colors';
 import {
   SATELLITE_GROUPS,
@@ -60,6 +66,10 @@ export function SkyLayersControl({
   onToggleAircraftGroup,
   aircraftSummary,
 }: Props) {
+  const { width, height } = useWindowDimensions();
+  const panelWidth = Math.min(230, Math.max(190, width - 36));
+  const panelMaxHeight = Math.max(140, height - 180);
+
   return (
     <View
       style={{
@@ -92,16 +102,21 @@ export function SkyLayersControl({
       {open ? (
         <View
           style={{
-            width: 210,
+            width: panelWidth,
             marginTop: 8,
             padding: 12,
             borderRadius: 16,
             backgroundColor: 'rgba(5,12,23,0.97)',
             borderWidth: 1,
             borderColor: colors.border,
-            gap: 8,
           }}
         >
+          <ScrollView
+            style={{ maxHeight: panelMaxHeight }}
+            contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+          >
           {(['Astronomy', 'Display', 'Live'] as const).map((group) => (
             <View key={group} style={{ gap: 6 }}>
               <Text
@@ -176,7 +191,10 @@ export function SkyLayersControl({
                                   key={group.key}
                                   accessibilityRole="switch"
                                   accessibilityState={{ checked: groupEnabled }}
-                                  onPress={() => onToggleSatelliteGroup(group.key)}
+                                  onPress={(event) => {
+                                    event.stopPropagation();
+                                    onToggleSatelliteGroup(group.key);
+                                  }}
                                   style={{
                                     minHeight: 30,
                                     paddingHorizontal: 8,
@@ -240,7 +258,10 @@ export function SkyLayersControl({
                                   key={group.key}
                                   accessibilityRole="switch"
                                   accessibilityState={{ checked: groupEnabled }}
-                                  onPress={() => onToggleAircraftGroup(group.key)}
+                                  onPress={(event) => {
+                                    event.stopPropagation();
+                                    onToggleAircraftGroup(group.key);
+                                  }}
                                   style={{
                                     minHeight: 30,
                                     paddingHorizontal: 8,
@@ -294,6 +315,7 @@ export function SkyLayersControl({
                 })}
             </View>
           ))}
+          </ScrollView>
         </View>
       ) : null}
     </View>
