@@ -1,3 +1,5 @@
+import brightStarData from '@/sky/bright-stars.json';
+
 export type Star = {
   id: string;
   name: string;
@@ -5,25 +7,56 @@ export type Star = {
   dec: number;
   mag: number;
   color: string;
+  designation: string;
+  temperatureK: number | null;
 };
 
-export const BRIGHT_STARS: Star[] = [
-  { id: 'sirius', name: 'Sirius', ra: 101.2871553, dec: -16.7161159, mag: -1.46, color: '#eef6ff' },
-  { id: 'canopus', name: 'Canopus', ra: 95.9879, dec: -52.6957, mag: -0.74, color: '#fff3dc' },
-  { id: 'arcturus', name: 'Arcturus', ra: 213.9153002, dec: 19.1824092, mag: -0.05, color: '#ffd6a0' },
-  { id: 'vega', name: 'Vega', ra: 279.23473479, dec: 38.78368896, mag: 0.03, color: '#dcecff' },
-  { id: 'capella', name: 'Capella', ra: 79.1723279, dec: 45.9979915, mag: 0.08, color: '#fff0c4' },
-  { id: 'rigel', name: 'Rigel', ra: 78.6344671, dec: -8.2016384, mag: 0.13, color: '#d7e8ff' },
-  { id: 'procyon', name: 'Procyon', ra: 114.8254935, dec: 5.2249931, mag: 0.34, color: '#fff5db' },
-  { id: 'betelgeuse', name: 'Betelgeuse', ra: 88.792939, dec: 7.407064, mag: 0.42, color: '#ffad83' },
-  { id: 'altair', name: 'Altair', ra: 297.6958273, dec: 8.8683212, mag: 0.77, color: '#f3f5ff' },
-  { id: 'aldebaran', name: 'Aldebaran', ra: 68.980163, dec: 16.509302, mag: 0.87, color: '#ffb07a' },
-  { id: 'spica', name: 'Spica', ra: 201.298247, dec: -11.161322, mag: 0.98, color: '#dce8ff' },
-  { id: 'antares', name: 'Antares', ra: 247.3519157, dec: -26.4320023, mag: 0.96, color: '#ff9d7a' },
-  { id: 'pollux', name: 'Pollux', ra: 116.328957, dec: 28.026199, mag: 1.14, color: '#ffd7a6' },
-  { id: 'deneb', name: 'Deneb', ra: 310.35797912, dec: 45.28033881, mag: 1.25, color: '#d9e8ff' },
-  { id: 'regulus', name: 'Regulus', ra: 152.092962, dec: 11.967209, mag: 1.35, color: '#eaf1ff' },
-];
+type RawStar = {
+  id: string;
+  name: string;
+  ra: number;
+  dec: number;
+  mag: number;
+  temp?: number | null;
+  designation?: string | null;
+};
+
+function starColor(temperature?: number | null) {
+  const value = Math.max(2500, Math.min(30000, Number(temperature) || 6000));
+
+  if (value < 3500) return '#ffb07a';
+  if (value < 5000) return '#ffd2a1';
+  if (value < 6500) return '#fff2d2';
+  if (value < 9000) return '#eef4ff';
+  return '#cfe1ff';
+}
+
+export const BRIGHT_STARS: Star[] = (brightStarData.stars as RawStar[])
+  .map((star) => ({
+    id: star.id,
+    name: star.name || star.designation || star.id,
+    ra: Number(star.ra),
+    dec: Number(star.dec),
+    mag: Number(star.mag),
+    color: starColor(star.temp),
+    designation: star.designation || star.name || star.id,
+    temperatureK: Number.isFinite(Number(star.temp))
+      ? Number(star.temp)
+      : null,
+  }))
+  .filter(
+    (star) =>
+      Number.isFinite(star.ra) &&
+      Number.isFinite(star.dec) &&
+      Number.isFinite(star.mag),
+  );
+
+// The full 2,887-star catalogue is available for search/object details.
+// Until the sky is moved to a canvas renderer, keep the native-view layer
+// to brighter stars so object count stays appropriate for React Native views.
+export const MOBILE_RENDER_STARS = BRIGHT_STARS.filter(
+  (star) => star.mag <= 4,
+);
 
 export const PLANET_INFO = {
   sun: { name: 'Sun', color: '#ffd76a', glyph: '☉' },
