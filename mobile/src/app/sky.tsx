@@ -43,6 +43,10 @@ import {
 } from '@/live/aircraftGroups';
 import { SkyObjectSheet } from '@/components/SkyObjectSheet';
 import {
+  loadSkyPreferences,
+  saveSkyPreferences,
+} from '@/preferences/skyPreferences';
+import {
   nearestSkySelection,
   resolveSelection,
   selectionKey,
@@ -65,6 +69,7 @@ export default function SkyScreen() {
   const [pitch, setPitch] = useState(28);
   const [fov, setFov] = useState(105);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const [satelliteGroups, setSatelliteGroups] = useState(
     defaultSatelliteGroupState,
   );
@@ -137,6 +142,48 @@ export default function SkyScreen() {
     start: startPhoneAim,
     stop: stopPhoneAim,
   } = useDevicePointing();
+
+  useEffect(() => {
+    let active = true;
+
+    void loadSkyPreferences().then((preferences) => {
+      if (!active) return;
+
+      setSatelliteGroups(preferences.satelliteGroups);
+      setAircraftGroups(preferences.aircraftGroups);
+      setLayers((current) => ({
+        ...current,
+        stars: preferences.stars,
+        constellations: preferences.constellations,
+        planets: preferences.planets,
+        atmosphere: preferences.atmosphere,
+        landscape: preferences.landscape,
+        // Privacy: live network layers always restart disabled.
+        satellites: false,
+        aircraft: false,
+      }));
+      setPreferencesReady(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+
+    void saveSkyPreferences({
+      layers,
+      satelliteGroups,
+      aircraftGroups,
+    });
+  }, [
+    aircraftGroups,
+    layers,
+    preferencesReady,
+    satelliteGroups,
+  ]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
