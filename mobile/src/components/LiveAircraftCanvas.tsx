@@ -23,12 +23,14 @@ import {
   type AircraftTrack,
   type AircraftVisualType,
 } from '@/live/aircraftMotion';
+import { colors } from '@/theme/colors';
 
 type Props = {
   tracks: AircraftTrack[];
   observer: Observer;
   viewport: Viewport;
   visible: boolean;
+  selectedId?: string;
 };
 
 type DrawAircraft = {
@@ -40,6 +42,7 @@ type DrawAircraft = {
   opacity: number;
   color: string;
   visualType: AircraftVisualType;
+  selected: boolean;
 };
 
 function aircraftShape(
@@ -123,6 +126,7 @@ export const LiveAircraftCanvas = memo(function LiveAircraftCanvas({
   observer,
   viewport,
   visible,
+  selectedId,
 }: Props) {
   const [frameNow, setFrameNow] = useState(Date.now());
 
@@ -208,9 +212,10 @@ export const LiveAircraftCanvas = memo(function LiveAircraftCanvas({
         opacity: depth.opacity,
         color: track.color,
         visualType: track.visualType,
+        selected: track.id === selectedId,
       } satisfies DrawAircraft];
     });
-  }, [frameNow, observer, tracks, viewport, visible]);
+  }, [frameNow, observer, selectedId, tracks, viewport, visible]);
 
   if (!visible || !aircraft.length) return null;
 
@@ -224,6 +229,18 @@ export const LiveAircraftCanvas = memo(function LiveAircraftCanvas({
 
           return (
             <Fragment key={item.id}>
+              {item.selected ? (
+                <Circle
+                  key={`selected-${item.id}`}
+                  cx={item.x}
+                  cy={item.y}
+                  r={item.size * 1.8}
+                  color={colors.accent}
+                  opacity={0.95}
+                  style="stroke"
+                  strokeWidth={2}
+                />
+              ) : null}
               <Circle
                 key={`halo-${item.id}`}
                 cx={item.x}

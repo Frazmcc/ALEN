@@ -30,6 +30,13 @@ import { LiveSatelliteCanvas } from '@/components/LiveSatelliteCanvas';
 import { useLiveSatellites } from '@/live/useLiveSatellites';
 import { LiveAircraftCanvas } from '@/components/LiveAircraftCanvas';
 import { useLiveAircraft } from '@/live/useLiveAircraft';
+import { SkyObjectSheet } from '@/components/SkyObjectSheet';
+import {
+  nearestSkySelection,
+  resolveSelection,
+  selectionKey,
+  type SkySelection,
+} from '@/live/liveSelection';
 
 type Size = {
   width: number;
@@ -47,6 +54,7 @@ export default function SkyScreen() {
   const [pitch, setPitch] = useState(28);
   const [fov, setFov] = useState(105);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [selectedObject, setSelectedObject] = useState<SkySelection | null>(null);
   const [layers, setLayers] = useState<SkyLayers>({
     stars: true,
     constellations: true,
@@ -186,6 +194,39 @@ export default function SkyScreen() {
     fov,
   };
 
+  const selectionContext = {
+    nowMs: now,
+    stars,
+    planets,
+    satelliteTracks,
+    aircraftTracks,
+    observer,
+    observerLabel,
+    viewport,
+    starVisibility: palette.stars,
+    layers: {
+      stars: layers.stars,
+      planets: layers.planets,
+      satellites: layers.satellites,
+      aircraft: layers.aircraft,
+    },
+  };
+
+  const resolvedSelection = selectedObject
+    ? resolveSelection(selectedObject, selectionContext)
+    : null;
+  const selectedDetail = resolvedSelection?.detail ?? null;
+
+  const selectedStaticKind =
+    selectedObject?.kind === 'star' || selectedObject?.kind === 'planet'
+      ? selectedObject.kind
+      : undefined;
+  const activeTargetKind =
+    selectedStaticKind ?? (selectedObject ? undefined : targetKind);
+  const activeTargetId =
+    selectedStaticKind ? selectedObject?.id : selectedObject ? undefined : targetId;
+
+
   const horizon = projectAltAz(yaw, 0, viewport);
   const horizonY = clamp(
     horizon?.y ?? size.height * 0.78,
@@ -273,10 +314,65 @@ export default function SkyScreen() {
   }
 
   function toggleLayer(layer: keyof SkyLayers) {
+    const selectedLayer =
+      selectedObject?.kind === 'star'
+        ? 'stars'
+        : selectedObject?.kind === 'planet'
+          ? 'planets'
+          : selectedObject?.kind === 'satellite'
+            ? 'satellites'
+            : selectedObject?.kind === 'aircraft'
+              ? 'aircraft'
+              : null;
+
+    if (layers[layer] && selectedLayer === layer) {
+      setSelectedObject(null);
+    }
+
     setLayers((current) => ({
       ...current,
       [layer]: !current[layer],
     }));
+  }
+
+  function selectObjectAt(x: number, y: number) {
+    const nearest = nearestSkySelection(
+      {
+        ...selectionContext,
+        nowMs: Date.now(),
+      },
+      x,
+      y,
+    );
+
+    if (!nearest) {
+      setSelectedObject(null);
+      return;
+    }
+
+    if (
+      selectedObject &&
+      selectionKey(selectedObject) === selectionKey(nearest)
+    ) {
+      setSelectedObject(null);
+      return;
+    }
+
+    setSelectedObject(nearest);
+  }
+
+  function centreSelectedObject() {
+    if (!selectedObject) return;
+
+    const resolved = resolveSelection(selectedObject, {
+      ...selectionContext,
+      nowMs: Date.now(),
+    });
+    if (!resolved) return;
+
+    if (phoneAimActive) stopPhoneAim();
+    setYaw(resolved.az);
+    setPitch(clamp(resolved.el, 0, 84));
   }
 
   return (
@@ -296,8 +392,8 @@ export default function SkyScreen() {
           showPlanets={layers.planets}
           showAtmosphere={layers.atmosphere}
           showLandscape={layers.landscape}
-          targetKind={targetKind}
-          targetId={targetId}
+          targetKind={activeTargetKind}
+          targetId={activeTargetId}
           horizonY={horizonY}
           skyColors={{
             top: palette.top,
@@ -310,12 +406,39 @@ export default function SkyScreen() {
           tracks={satelliteTracks}
           viewport={viewport}
           visible={layers.satellites}
+          selectedId={
+            selectedObject?.kind === 'satellite'
+              ? selectedObject.id
+              : undefined
+          }
         />
         <LiveAircraftCanvas
           tracks={aircraftTracks}
           observer={observer}
           viewport={viewport}
           visible={layers.aircraft}
+          selectedId={
+            selectedObject?.kind === 'aircraft'
+              ? selectedObject.id
+              : undefined
+          }
+        />
+
+        <Pressable
+          accessible={false}
+          onPress={(event) =>
+            selectObjectAt(
+              event.nativeEvent.locationX,
+              event.nativeEvent.locationY,
+            )
+          }
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+          }}
         />
 
         {layers.stars ? stars
@@ -323,7 +446,7 @@ export default function SkyScreen() {
             (star) =>
               star.el >= 0 &&
               (star.mag <= 0.15 ||
-                (targetKind === 'star' && targetId === star.id)),
+                (activeTargetKind === 'star' && activeTargetId === star.id)),
           )
           .map((star) => {
             const point = projectAltAz(star.az, star.el, viewport);
@@ -543,6 +666,12 @@ export default function SkyScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <SkyObjectSheet
+        detail={selectedDetail}
+        onClose={() => setSelectedObject(null)}
+        onCentre={resolvedSelection ? centreSelectedObject : undefined}
+      />
     </AppScreen>
   );
 }

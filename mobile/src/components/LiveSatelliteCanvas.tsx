@@ -16,17 +16,20 @@ import {
   satelliteDepthCue,
   type SatelliteTrack,
 } from '@/live/satelliteMotion';
+import { colors } from '@/theme/colors';
 
 type Props = {
   tracks: SatelliteTrack[];
   viewport: Viewport;
   visible: boolean;
+  selectedId?: string;
 };
 
 export const LiveSatelliteCanvas = memo(function LiveSatelliteCanvas({
   tracks,
   viewport,
   visible,
+  selectedId,
 }: Props) {
   const [frameNow, setFrameNow] = useState(Date.now());
 
@@ -74,15 +77,30 @@ export const LiveSatelliteCanvas = memo(function LiveSatelliteCanvas({
         ...point,
         color: track.color,
         depth: satelliteDepthCue(sample.rangeKm),
+        selected: track.id === selectedId,
       }];
     });
-  }, [frameNow, tracks, viewport, visible]);
+  }, [frameNow, selectedId, tracks, viewport, visible]);
 
   if (!visible || !tracks.length) return null;
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Canvas style={StyleSheet.absoluteFill}>
+        {points
+          .filter((satellite) => satellite.selected)
+          .map((satellite) => (
+            <Circle
+              key={`selected-${satellite.id}`}
+              cx={satellite.x}
+              cy={satellite.y}
+              r={satellite.depth.halo + 5}
+              color={colors.accent}
+              opacity={0.95}
+              style="stroke"
+              strokeWidth={2}
+            />
+          ))}
         {points.map((satellite) => (
           <Circle
             key={`halo-${satellite.id}`}
