@@ -520,9 +520,9 @@ def test_aircraft_motion_is_continuous_between_network_updates() -> None:
     assert "function blendAngle(current,target,k)" in APP
     assert "seenSeconds=clamp(Number(a.seen)||0,0,45)" in APP
     assert "measuredGs*1.852*seenSeconds/3600" in APP
-    assert "displayGs:prior?.displayGs??measuredGs" in APP
-    assert "displayTrack:prior?.displayTrack??measuredTrack" in APP
-    assert "displayAltM:prior?.displayAltM??measuredAltM" in APP
+    assert "displayGs:snapToFresh?measuredGs:(prior?.displayGs??measuredGs)" in APP
+    assert "displayTrack:snapToFresh?measuredTrack:(prior?.displayTrack??measuredTrack)" in APP
+    assert "displayAltM:snapToFresh?measuredAltM:(prior?.displayAltM??measuredAltM)" in APP
     assert "targetLat:projected.lat,targetLon:projected.lon" in APP
     assert "const displayAdvanced=destinationPoint" in APP
     assert "const targetAdvanced=destinationPoint" in APP
