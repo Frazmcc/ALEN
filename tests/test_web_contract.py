@@ -305,10 +305,11 @@ def test_star_atmospheric_extinction() -> None:
 
 
 def test_aircraft_persistence_across_transient_feed_gaps() -> None:
-    assert "const AIRCRAFT_GRACE_MS=30000" in APP
+    assert "const AIRCRAFT_GRACE_MS=60000" in APP
     assert "aircraftRequestInFlight=false" in APP
     assert "if(!observer||!layers.aircraft||aircraftRequestInFlight)return;" in APP
     assert "setTimeout(()=>controller.abort(),8000)" in APP
+    assert "cacheAge>8" in APP
     assert "lastSeenAt:wallNow" in APP
     assert "if(wallNow-lastSeenAt<=AIRCRAFT_GRACE_MS)next.set(id,prior)" in APP
     assert "retaining recent aircraft" in APP
