@@ -84,14 +84,14 @@
 
     <aside id="satellite-groups" class="satellite-groups" hidden aria-label="Satellite groups">
       <div class="satellite-groups-head">
-        <div><strong>Satellite groups</strong><span>Click each group to cycle labels on → labels off → off → labels off → labels on</span></div>
+        <div><strong>Satellite groups</strong><span>Labels start off. Click each group to cycle off → labels off → labels on.</span></div>
         <button id="satellite-groups-close" type="button" aria-label="Close satellite groups">×</button>
       </div>
       <div class="satellite-group-grid">
-        <button type="button" class="sat-group is-on sat-new" data-satellite-group="new" aria-pressed="true"><span class="sat-mark">✦</span><span>New launches <small>≤30 days</small></span></button>
-        <button type="button" class="sat-group is-on sat-stations" data-satellite-group="stations" aria-pressed="true"><span class="sat-mark">▣</span><span>Space stations</span></button>
-        <button type="button" class="sat-group is-on sat-bright" data-satellite-group="bright" aria-pressed="true"><span class="sat-mark">◆</span><span>Bright / visual</span></button>
-        <button type="button" class="sat-group is-on sat-starlink" data-satellite-group="starlink" aria-pressed="true"><span class="sat-mark">●</span><span>Starlink</span></button>
+        <button type="button" class="sat-group is-on sat-new" data-satellite-group="new" aria-pressed="mixed"><span class="sat-mark">✦</span><span>New launches <small>≤30 days</small></span></button>
+        <button type="button" class="sat-group is-on sat-stations" data-satellite-group="stations" aria-pressed="mixed"><span class="sat-mark">▣</span><span>Space stations</span></button>
+        <button type="button" class="sat-group is-on sat-bright" data-satellite-group="bright" aria-pressed="mixed"><span class="sat-mark">◆</span><span>Bright / visual</span></button>
+        <button type="button" class="sat-group is-on sat-starlink" data-satellite-group="starlink" aria-pressed="mixed"><span class="sat-mark">●</span><span>Starlink</span></button>
         <button type="button" class="sat-group sat-oneweb" data-satellite-group="oneweb" aria-pressed="false"><span class="sat-mark">●</span><span>OneWeb</span></button>
         <button type="button" class="sat-group sat-kuiper" data-satellite-group="kuiper" aria-pressed="false"><span class="sat-mark">●</span><span>Kuiper</span></button>
         <button type="button" class="sat-group sat-navigation" data-satellite-group="navigation" aria-pressed="false"><span class="sat-mark">◇</span><span>Navigation / GNSS</span></button>
@@ -104,7 +104,7 @@
         <button type="button" class="sat-group sat-cubesat" data-satellite-group="cubesat" aria-pressed="false"><span class="sat-mark">□</span><span>CubeSats</span></button>
         <button type="button" class="sat-group sat-debris" data-satellite-group="debris" aria-pressed="false"><span class="sat-mark">×</span><span>Space junk / debris</span></button>
       </div>
-      <p class="satellite-groups-note">New launches override their normal category colour for 30 days. Debris uses a dedicated warning colour.</p>
+      <p class="satellite-groups-note">Satellite labels are hidden by default to keep the sky readable. New launches override their normal category colour for 30 days. Debris uses a dedicated warning colour.</p>
     </aside>
 
     <aside id="display-groups" class="satellite-groups" hidden aria-label="Display groups">
