@@ -2,6 +2,7 @@ from pathlib import Path
 
 HTML = Path("web/index.html").read_text(encoding="utf-8")
 APP = Path("web/app.js").read_text(encoding="utf-8")
+CSS = Path("web/styles.css").read_text(encoding="utf-8")
 
 
 def test_web_identity_and_security_contract() -> None:
@@ -23,6 +24,49 @@ def test_web_identity_and_security_contract() -> None:
         "frame-ancestors 'none'",
     ):
         assert directive in HTML
+
+
+def test_mobile_pinch_zoom_uses_multi_pointer_gesture() -> None:
+    assert 'viewport-fit=cover' in HTML
+    assert 'Pinch or use the mouse wheel to zoom' in HTML
+    assert "const activePointers=new Map()" in APP
+    assert "function pointerPair()" in APP
+    assert "function beginPinch()" in APP
+    assert 'canvas.addEventListener("pointerdown",e=>{' in APP
+    assert 'canvas.addEventListener("pointermove",e=>{' in APP
+    assert 'canvas.addEventListener("pointerup",e=>finishPointer(e,false))' in APP
+    assert 'canvas.addEventListener("pointercancel",e=>finishPointer(e,true))' in APP
+    assert "pinch.startFov*pinch.startDistance/distance" in APP
+    assert "setFov(" in APP
+    assert "touch-action:none" in CSS
+    assert "-webkit-touch-callout:none" in CSS
+
+
+def test_mobile_field_of_view_is_limited_by_screen_shape() -> None:
+    assert "function fovLimits()" in APP
+    assert "const min=18,maxHorizontal=130" in APP
+    assert "const portraitOrNarrow=width<=900||height>width" in APP
+    assert "const maxVertical=(portraitOrNarrow?120:138)*DEG" in APP
+    assert "const verticalLimited=2*Math.atan(Math.tan(maxVertical/2)*aspect)*RAD" in APP
+    assert "return{min,max:clamp(verticalLimited,48,maxHorizontal)}" in APP
+    assert "setFov(fov)" in APP
+    assert 'setFov(fov*(e.deltaY<0?.88:1.12))' in APP
+
+
+def test_mobile_layout_respects_safe_areas_and_small_screens() -> None:
+    for token in (
+        "env(safe-area-inset-top)",
+        "env(safe-area-inset-right)",
+        "env(safe-area-inset-bottom)",
+        "env(safe-area-inset-left)",
+        "height:100dvh",
+        "overscroll-behavior:none",
+        "min-height:44px",
+        "@media(max-height:520px) and (orientation:landscape)",
+    ):
+        assert token in CSS
+    assert "max-height:calc(100dvh - 210px" in CSS
+    assert "max-height:calc(100dvh - 112px" in CSS
 
 
 def test_selection_is_explicitly_toggleable() -> None:
@@ -66,7 +110,8 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.6' in HTML
+    assert './app.js?v=1.6.7' in HTML
+    assert './styles.css?v=0.9.2' in HTML
 
 
 def test_live_location_and_horizon_contract() -> None:
