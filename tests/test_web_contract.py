@@ -367,15 +367,19 @@ def test_atmosphere_is_anchored_to_real_horizon_elevation() -> None:
     assert "function drawAtmosphericSky(sky)" in APP
     assert "skyColourAtElevation(sky,screenElevationAtY(height*fraction))" in APP
     assert "g.addColorStop(.62,layers.atmosphere?sky.mid:sky.top)" not in APP
+    assert "drawHorizon(sky)" not in APP
+    assert "glow.addColorStop(.72" not in APP
 
 
 def test_sunrise_and_sunset_glow_stays_near_solar_horizon() -> None:
     assert "function drawSolarHorizonGlow(sun,sky)" in APP
     assert "const horizonY=screenYForElevation(0)" in APP
     assert "const rise=clamp((sun.el+12)/10,0,1),fall=clamp((12-sun.el)/10,0,1)" in APP
-    assert "const sunX=width*.5+(adiff(sun.az,yaw)/Math.max(fov,1))*width" in APP
-    assert "horizonY-190" in APP
-    assert "horizonY+85" in APP
+    assert "const sunPoint=project(sun.az,0)" in APP
+    assert "ctx.scale(radiusX,radiusY)" in APP
+    assert "ctx.arc(0,0,1,0,Math.PI*2)" in APP
+    assert "horizonY-190" not in APP
+    assert "horizonY+85" not in APP
 
 
 def test_satellite_requests_are_bounded_and_non_overlapping() -> None:
@@ -426,10 +430,16 @@ def test_landscape_terrain_profile_is_higher_resolution_and_viewport_safe() -> N
     assert "const observerEyeElev=groundElev+eyeHeightM" in APP
     assert "const curvature=(distanceKm*distanceKm)/(2*EARTH_KM)*1000" in APP
     assert "const angle=Math.atan2(elev-observerEyeElev-curvature,distanceKm*1000)*RAD" in APP
-    assert "const points=[],step=4,margin=Math.max(80,width*.08)" in APP
-    assert "for(let x=-margin;x<=width+margin;x+=step)" in APP
-    assert "ctx.lineTo(width+margin,horizonY)" in APP
-    assert "ctx.lineTo(-margin,horizonY)" in APP
+    assert "function interpolateTerrainEdge(a,b,x)" in APP
+    assert "function traceTerrainSkyline()" in APP
+    assert "project(az,el)" in APP
+    assert "points[0][0]=0" in APP
+    assert "points[points.length-1][0]=width" in APP
+    assert "ctx.moveTo(0,points[0][1])" in APP
+    assert "ctx.lineTo(width,height)" in APP
+    assert "ctx.lineTo(0,height)" in APP
+    assert "margin=Math.max(80,width*.08)" not in APP
+    assert "drawLandscapeForeground" not in APP
 
 
 def test_satellite_public_tle_fallback() -> None:
