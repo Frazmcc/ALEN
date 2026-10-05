@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.7' in HTML
+    assert './app.js?v=1.6.8' in HTML
     assert './styles.css?v=0.9.2' in HTML
 
 
@@ -804,6 +804,16 @@ def test_satellite_inspector_loads_useful_mission_metadata() -> None:
 
 
 def test_satellite_inspector_supports_real_photos() -> None:
+    assert "function trustedISSTrackerImageUrl(value)" in APP
+    assert 'host==="img-cdn.isstracker.pl"||host==="static.isstracker.pl"' in APP
+    assert "function loadISSTrackerSatellitePhoto(o,image,credit,token)" in APP
+    assert 'API_BASE+"/api/v1/satellite/photo?"+qs' in APP
+    assert 'image.dataset.photoProvider="isstracker"' in APP
+    assert 'const source=trustedExternalUrl(photo.source_url,"isstracker.pl")' in APP
+    assert 'appendInspectorLink(credit,"Source",source,"isstracker.pl")' in APP
+    assert 'if(o.kind==="SATELLITE")' in APP
+    assert 'await loadISSTrackerSatellitePhoto(o,image,credit,token)' in APP
+    assert 'const isstrackerImage=trustedISSTrackerImageUrl(photo?.image_url)' in APP
     assert 'trustedExternalUrl(photo?.image_url,"db-satnogs.freetls.fastly.net")' in APP
     assert 'trustedExternalUrl(photo?.image_url,"upload.wikimedia.org")' in APP
     assert 'const satnogsSource=trustedExternalUrl(photo.source_url,"db.satnogs.org")' in APP

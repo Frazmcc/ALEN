@@ -1371,6 +1371,53 @@ function appendInspectorLink(parent,label,url,allowedHost){
  a.href=safeUrl;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;
  parent.append(sep,a);
 }
+const satellitePhotoCache=new Map();
+function trustedISSTrackerImageUrl(value){
+ try{
+  const url=new URL(String(value||""));
+  if(url.protocol!=="https:")return "";
+  const host=url.hostname.toLowerCase();
+  return host==="img-cdn.isstracker.pl"||host==="static.isstracker.pl"?url.href:"";
+ }catch{return ""}
+}
+function showISSTrackerSatellitePhoto(o,photo,image,credit,token){
+ if(token!==inspectorMediaRequest||selected?.id!==o.id||!photo)return false;
+ const imageUrl=trustedISSTrackerImageUrl(photo.image_url);
+ if(!imageUrl)return false;
+ image.onerror=()=>{
+  if(token!==inspectorMediaRequest||selected?.id!==o.id)return;
+  image.onerror=null;image.dataset.photoProvider="";
+  image.src=objectVisualSvg(o);
+  credit.textContent="ISS Tracker image unavailable · ALEN illustration";
+ };
+ image.dataset.photoProvider="isstracker";
+ image.src=imageUrl;
+ image.alt=`${o.name} satellite photo`;
+ credit.replaceChildren(document.createTextNode(`${photo.credit||"ISS Tracker"} · satellite image`));
+ const source=trustedExternalUrl(photo.source_url,"isstracker.pl");
+ if(source)appendInspectorLink(credit,"Source",source,"isstracker.pl");
+ return true;
+}
+async function loadISSTrackerSatellitePhoto(o,image,credit,token){
+ const norad=Number(o.norad);
+ if(!Number.isFinite(norad))return false;
+ const key=String(norad);
+ const cached=satellitePhotoCache.get(key);
+ if(cached!==undefined)return showISSTrackerSatellitePhoto(o,cached,image,credit,token);
+ credit.textContent="Loading satellite photo…";
+ try{
+  const qs=new URLSearchParams({norad:key,name:o.name||""});
+  const res=await fetch(API_BASE+"/api/v1/satellite/photo?"+qs,{mode:"cors",cache:"force-cache",credentials:"omit"});
+  if(!res.ok)throw new Error("ISS Tracker satellite photo "+res.status);
+  const data=await res.json(),photo=data.photo||null;
+  satellitePhotoCache.set(key,photo);
+  if(showISSTrackerSatellitePhoto(o,photo,image,credit,token))return true;
+  if(token===inspectorMediaRequest&&selected?.id===o.id)credit.textContent="No ISS Tracker image found · checking fallback sources…";
+ }catch(e){
+  if(token===inspectorMediaRequest&&selected?.id===o.id)console.warn("ISS Tracker satellite photo lookup unavailable",e);
+ }
+ return false;
+}
 const aircraftPhotoCache=new Map();
 function trustedPlaneSpottersImageUrl(value){
  try{
@@ -1440,9 +1487,13 @@ async function updateInspectorMedia(o){
  const image=document.querySelector("#inspector-image");
  const credit=document.querySelector("#inspector-image-credit");
  const token=++inspectorMediaRequest,fallback=objectVisualSvg(o);
- image.onerror=null;
+ image.onerror=null;image.dataset.photoProvider="";
  image.src=fallback;image.alt=(o.name||o.kind)+" visual";
  credit.textContent=inspectorCreditText(o);
+ if(o.kind==="SATELLITE"){
+  await loadISSTrackerSatellitePhoto(o,image,credit,token);
+  return;
+ }
  if(o.kind!=="AIRCRAFT")return;
 
  const directUrl=planeSpottersPhotoUrl(o);
@@ -1518,16 +1569,22 @@ async function updateSatelliteInfo(o){
   fact.textContent=info.purpose||"No public mission description was available for this object.";
 
   const photo=info.photo,image=document.querySelector("#inspector-image"),credit=document.querySelector("#inspector-image-credit");
-  const imageUrl=trustedExternalUrl(photo?.image_url,"db-satnogs.freetls.fastly.net")||trustedExternalUrl(photo?.image_url,"upload.wikimedia.org");
-  if(imageUrl){
-   image.src=imageUrl;image.alt=(info.name||o.name)+" photo";
-   credit.replaceChildren(document.createTextNode(`${photo.credit||"Satellite image"} · ${photo.license||"See source for licence"}`));
-   const satnogsSource=trustedExternalUrl(photo.source_url,"db.satnogs.org");
-   const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
-   if(satnogsSource)appendInspectorLink(credit,"Source",satnogsSource,"db.satnogs.org");
-   else if(commonsSource)appendInspectorLink(credit,"Source",commonsSource,"commons.wikimedia.org");
-  }else{
-   credit.textContent="No verified public image found · ALEN illustration";
+  if(image.dataset.photoProvider!=="isstracker"){
+   const isstrackerImage=trustedISSTrackerImageUrl(photo?.image_url);
+   const imageUrl=isstrackerImage||trustedExternalUrl(photo?.image_url,"db-satnogs.freetls.fastly.net")||trustedExternalUrl(photo?.image_url,"upload.wikimedia.org");
+   if(imageUrl){
+    image.dataset.photoProvider=isstrackerImage?"isstracker":"fallback";
+    image.src=imageUrl;image.alt=(info.name||o.name)+" photo";
+    credit.replaceChildren(document.createTextNode(`${photo.credit||"Satellite image"} · ${photo.license||"See source for licence"}`));
+    const isstrackerSource=trustedExternalUrl(photo.source_url,"isstracker.pl");
+    const satnogsSource=trustedExternalUrl(photo.source_url,"db.satnogs.org");
+    const commonsSource=trustedExternalUrl(photo.source_url,"commons.wikimedia.org");
+    if(isstrackerSource)appendInspectorLink(credit,"Source",isstrackerSource,"isstracker.pl");
+    else if(satnogsSource)appendInspectorLink(credit,"Source",satnogsSource,"db.satnogs.org");
+    else if(commonsSource)appendInspectorLink(credit,"Source",commonsSource,"commons.wikimedia.org");
+   }else{
+    credit.textContent="No verified public image found · ALEN illustration";
+   }
   }
  }catch(e){
   if(selected?.id===token){

@@ -189,6 +189,26 @@ def visible_satellites(
     }
 
 
+@app.get("/api/v1/satellite/photo")
+def satellite_photo(
+    norad: int = Query(ge=1, le=999999999),
+    name: str = Query(default="", max_length=120),
+) -> dict[str, object]:
+    photo = _satellite_info.find_isstracker_photo(norad, name)
+    if photo is None:
+        return {"photo": None}
+    return {
+        "photo": {
+            "image_url": photo.image_url,
+            "source_url": photo.source_url,
+            "credit": photo.credit,
+            "license": photo.license_name,
+            "match": photo.match,
+            "provider": "isstracker",
+        }
+    }
+
+
 @app.get("/api/v1/satellite/info")
 def satellite_info(
     norad: int = Query(ge=1, le=999999999),
