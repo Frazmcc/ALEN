@@ -418,6 +418,11 @@ def test_aircraft_photo_inspector_contract() -> None:
     assert 'API_BASE+"/api/v1/aircraft/photo?"+qs' in APP
     assert "Loading aircraft photo…" in APP
     assert "await loadAircraftFallbackChain(o,image,credit,token)" in APP
+    assert "function exactAircraftModelSvg(o)" in APP
+    assert "function loadRegionalServicePhoto(o,image,credit,token)" in APP
+    assert "regional service representative · not the exact airframe" in APP
+    assert "plain single-colour exact-model reference" in APP
+    assert "Exact aircraft photo unavailable · exact-model artwork unavailable" in APP
     assert "https://*.plnspttrs.net" in HTML
     assert 'loading="eager"' in HTML
     assert 'fetchpriority="high"' in HTML
