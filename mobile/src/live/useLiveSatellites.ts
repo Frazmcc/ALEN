@@ -60,7 +60,7 @@ export function useLiveSatellites(
   const refresh = useCallback(async () => {
     if (!enabled) return;
 
-    abortRef.current?.abort();
+    if (abortRef.current) return;
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -182,7 +182,13 @@ export function useLiveSatellites(
     const subscription = AppState.addEventListener(
       'change',
       (nextState: AppStateStatus) => {
-        if (nextState === 'active') void refresh();
+        if (nextState === 'active') {
+          void refresh();
+          return;
+        }
+
+        abortRef.current?.abort();
+        abortRef.current = null;
       },
     );
 
