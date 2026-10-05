@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  createElement,
+  type PropsWithChildren,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import type { Observer } from '@/sky/astronomy';
@@ -34,7 +43,7 @@ async function savePreference(preference: StoredPreference) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(preference));
 }
 
-export function useObserverLocation() {
+function useObserverState() {
   const [observer, setObserver] = useState<Observer>(DEMO_OBSERVER);
   const [source, setSource] = useState<ObserverSource>('demo');
   const [label, setLabel] = useState('Greenwich demo');
@@ -234,4 +243,30 @@ export function useObserverLocation() {
     useManualLocation,
     useDemoLocation,
   };
+}
+
+type ObserverContextValue = ReturnType<typeof useObserverState>;
+
+const ObserverContext = createContext<ObserverContextValue | null>(null);
+
+export function ObserverProvider({ children }: PropsWithChildren) {
+  const value = useObserverState();
+
+  return createElement(
+    ObserverContext.Provider,
+    { value },
+    children,
+  );
+}
+
+export function useObserverLocation() {
+  const value = useContext(ObserverContext);
+
+  if (!value) {
+    throw new Error(
+      'useObserverLocation must be used within ObserverProvider.',
+    );
+  }
+
+  return value;
 }
