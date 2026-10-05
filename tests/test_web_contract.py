@@ -653,7 +653,7 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert "function satelliteMotionRate(current,next,horizonSeconds,isAngle=false)" in APP
     assert "sat.displayAz=prior?.displayAz??targetNow.az" in APP
     assert "sat.displayVec=prior?.displayVec??targetVecNow" in APP
-    assert "sat.targetVec=sample0" in APP
+    assert "sat.targetVec=targetVecNow" in APP
     assert "vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs" in APP
     assert "sat.vectorAccel=vectorModel.accel" in APP
     assert "sat.rangeRateKmMs=" in APP
@@ -716,7 +716,7 @@ def test_satellite_motion_uses_curved_short_horizon_model() -> None:
     assert '"elevation_deg_next2"' in source
     assert '"range_km_next2"' in source
     assert "function satelliteMotionModel(current,next,next2,horizonSeconds,isAngle=false)" in APP
-    assert "sat.vectorRate=vectorModel.rate" in APP
+    assert "vectorModel.rate.x+vectorModel.accel.x*sampleAgeMs" in APP
     assert "sat.vectorAccel=vectorModel.accel" in APP
     assert "sat.rangeAccelKmMs2=" in APP
     assert ".5*accel.x*rawDt*rawDt" in APP
@@ -730,7 +730,7 @@ def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
     assert "function satelliteVectorModel(v0,v1,v2,horizonSeconds)" in APP
     assert "function blendSkyVector(current,target,k)" in APP
     assert "sat.displayVec=prior?.displayVec??targetVecNow" in APP
-    assert "sat.targetVec=sample0" in APP
+    assert "sat.targetVec=targetVecNow" in APP
     assert "s.displayVec=blendSkyVector" in APP
     assert "const display=satelliteVectorToAltAz(s.displayVec)" in APP
     assert "s.displayAz=display.az;s.displayEl=display.el" in APP
