@@ -3,6 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import {
   Canvas,
   Circle,
+  Fill,
+  LinearGradient,
+  vec,
 } from '@shopify/react-native-skia';
 import type { Star } from '@/sky/catalog';
 import type { PlanetPosition } from '@/sky/astronomy';
@@ -25,6 +28,12 @@ type Props = {
   starVisibility: number;
   targetKind?: string;
   targetId?: string;
+  horizonY: number;
+  skyColors: {
+    top: string;
+    middle: string;
+    horizon: string;
+  };
 };
 
 export const SkyObjectCanvas = memo(function SkyObjectCanvas({
@@ -34,6 +43,8 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
   starVisibility,
   targetKind,
   targetId,
+  horizonY,
+  skyColors,
 }: Props) {
   const projectedStars = useMemo(
     () =>
@@ -95,6 +106,19 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Canvas style={StyleSheet.absoluteFill}>
+        <Fill>
+          <LinearGradient
+            start={vec(0, 0)}
+            end={vec(0, Math.max(1, horizonY))}
+            colors={[
+              skyColors.top,
+              skyColors.middle,
+              skyColors.horizon,
+            ]}
+            positions={[0, 0.58, 1]}
+          />
+        </Fill>
+
         {projectedStars.map((star) => (
           <Circle
             key={star.id}
