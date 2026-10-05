@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { colors } from '@/theme/colors';
-import { BRIGHT_STARS } from '@/sky/catalog';
+import { MOBILE_RENDER_STARS } from '@/sky/catalog';
 import {
   clamp,
   currentPlanetPositions,
@@ -84,7 +84,7 @@ export default function SkyScreen() {
 
   const stars = useMemo(
     () =>
-      BRIGHT_STARS.map((star) => ({
+      MOBILE_RENDER_STARS.map((star) => ({
         ...star,
         ...raDecToAltAz(
           star.ra,
