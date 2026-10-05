@@ -81,7 +81,7 @@ def test_live_location_and_horizon_contract() -> None:
     assert "pitch=clamp(drag.pitch+dy/height*fov*.62,minPitch,89)" in APP
     assert "function traceTerrainSkyline()" in APP
     assert "function drawDistantTerrain(dayMode)" in APP
-    assert "function drawLandscapeForeground()" in APP
+    assert "function drawLandscapeForeground()" not in APP
     assert "function screenYForElevation(el,az=yaw)" in APP
     assert "const p=project(az,el)" in APP
     assert "function terrainElevationAt" in APP
@@ -189,17 +189,17 @@ def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert "satellite feed unavailable" in APP
 
 
-def test_landscape_is_split_into_distant_terrain_and_flat_foreground() -> None:
+def test_landscape_is_one_edge_to_edge_terrain_silhouette() -> None:
     assert "function drawDistantTerrain(dayMode)" in APP
-    assert "function drawLandscapeForeground()" in APP
+    assert "function drawLandscapeForeground()" not in APP
     assert "function isAboveLandscape(az,el)" in APP
     assert "drawDistantTerrain(dayMode);" in APP
-    assert "drawLandscapeForeground();" in APP
     assert "isAboveLandscape(o.az,o.el)" in APP
     assert "isAboveLandscape(q.az,q.el)" in APP
     assert "isAboveLandscape(s.az,s.el)" in APP
-    assert 'ctx.fillStyle="rgba(2,5,7,.985)"' in APP
-    assert "ctx.fillRect(0,y,width,height-y+2)" in APP
+    assert "ctx.moveTo(0,points[0][1])" in APP
+    assert "ctx.lineTo(width,height)" in APP
+    assert "ctx.lineTo(0,height)" in APP
     draw_start = APP.index("function draw(){")
     draw_end = APP.index("function allSelectableObjects()", draw_start)
     draw = APP[draw_start:draw_end]
@@ -207,7 +207,6 @@ def test_landscape_is_split_into_distant_terrain_and_flat_foreground() -> None:
     assert draw.index("if(layers.planets)") < draw.index("drawDistantTerrain(dayMode);")
     assert draw.index("if(layers.aircraft)") < draw.index("drawDistantTerrain(dayMode);")
     assert draw.index("if(layers.satellites)") < draw.index("drawDistantTerrain(dayMode);")
-    assert draw.index("drawDistantTerrain(dayMode);") < draw.index("drawLandscapeForeground();")
     assert draw.index("drawLandscapeForeground();") < draw.index("if(layers.airports)")
 
 
