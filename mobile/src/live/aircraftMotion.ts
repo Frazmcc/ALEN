@@ -36,6 +36,7 @@ export type AircraftVisualType =
 
 export type AircraftTrack = {
   id: string;
+  icaoHex: string;
   name: string;
   callsign: string;
   operator: string;
