@@ -28,6 +28,8 @@ type Size = {
   height: number;
 };
 
+type AstronomyLayer = 'stars' | 'constellations' | 'planets';
+
 export default function SkyScreen() {
   const { targetKind, targetId } = useLocalSearchParams<{
     targetKind?: string;
@@ -38,6 +40,12 @@ export default function SkyScreen() {
   const [yaw, setYaw] = useState(180);
   const [pitch, setPitch] = useState(28);
   const [fov, setFov] = useState(105);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [astronomyLayers, setAstronomyLayers] = useState({
+    stars: true,
+    constellations: true,
+    planets: true,
+  });
   const gestureStart = useRef({ yaw: 180, pitch: 28, fov: 105 });
   const pinchStartDistance = useRef<number | null>(null);
   const appliedTarget = useRef<string | null>(null);
@@ -245,6 +253,13 @@ export default function SkyScreen() {
     setSize({ width, height });
   }
 
+  function toggleAstronomyLayer(layer: AstronomyLayer) {
+    setAstronomyLayers((current) => ({
+      ...current,
+      [layer]: !current[layer],
+    }));
+  }
+
   return (
     <AppScreen>
       <View
@@ -257,6 +272,9 @@ export default function SkyScreen() {
           planets={planets}
           viewport={viewport}
           starVisibility={palette.stars}
+          showStars={astronomyLayers.stars}
+          showConstellations={astronomyLayers.constellations}
+          showPlanets={astronomyLayers.planets}
           targetKind={targetKind}
           targetId={targetId}
           horizonY={horizonY}
@@ -267,8 +285,9 @@ export default function SkyScreen() {
           }}
         />
 
-        {stars
-          .filter(
+        {astronomyLayers.stars
+          ? stars
+              .filter(
             (star) =>
               star.el >= 0 &&
               (star.mag <= 0.15 ||
@@ -298,10 +317,12 @@ export default function SkyScreen() {
                 {star.name}
               </Text>
             );
-          })}
+              })
+          : null}
 
-        {planets
-          .filter((planet) => planet.el >= 0)
+        {astronomyLayers.planets
+          ? planets
+              .filter((planet) => planet.el >= 0)
           .map((planet) => {
             const point = projectAltAz(
               planet.az,
@@ -330,7 +351,8 @@ export default function SkyScreen() {
                 {planet.name}
               </Text>
             );
-          })}
+              })
+          : null}
 
         <View
           style={{
@@ -379,6 +401,104 @@ export default function SkyScreen() {
             onUseDemo={useDemoLocation}
           />
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Astronomy layers"
+          accessibilityState={{ expanded: layersOpen }}
+          onPress={() => setLayersOpen((open) => !open)}
+          style={{
+            position: 'absolute',
+            left: 16,
+            top: 82,
+            zIndex: 30,
+            minHeight: 40,
+            minWidth: 126,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            backgroundColor: 'rgba(9,18,33,0.92)',
+            borderWidth: 1,
+            borderColor: layersOpen ? colors.accent : colors.border,
+          }}
+        >
+          <Text style={{ color: colors.text, fontSize: 11, fontWeight: '700' }}>
+            Astronomy {layersOpen ? '▲' : '▼'}
+          </Text>
+        </Pressable>
+
+        {layersOpen ? (
+          <View
+            style={{
+              position: 'absolute',
+              left: 16,
+              top: 128,
+              zIndex: 31,
+              width: 178,
+              padding: 8,
+              gap: 6,
+              borderRadius: 16,
+              backgroundColor: 'rgba(9,18,33,0.96)',
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            {(['stars', 'constellations', 'planets'] as AstronomyLayer[]).map(
+              (layer) => {
+                const enabled = astronomyLayers[layer];
+                const label =
+                  layer === 'stars'
+                    ? 'Stars'
+                    : layer === 'constellations'
+                      ? 'Constellations'
+                      : 'Planets';
+
+                return (
+                  <Pressable
+                    key={layer}
+                    accessibilityRole="switch"
+                    accessibilityLabel={label}
+                    accessibilityState={{ checked: enabled }}
+                    onPress={() => toggleAstronomyLayer(layer)}
+                    style={{
+                      minHeight: 40,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor: enabled
+                        ? 'rgba(47,140,255,0.16)'
+                        : 'rgba(255,255,255,0.03)',
+                      borderWidth: 1,
+                      borderColor: enabled ? colors.accent : colors.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: enabled ? colors.text : colors.muted,
+                        fontSize: 11,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {label}
+                    </Text>
+                    <Text
+                      style={{
+                        color: enabled ? colors.success : colors.muted,
+                        fontSize: 9,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {enabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </Pressable>
+                );
+              },
+            )}
+          </View>
+        ) : null}
 
         {phoneAimError ? (
           <View
