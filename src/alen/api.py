@@ -307,7 +307,7 @@ def aircraft_photo(
 @app.get("/api/v1/aircraft/service-photo")
 def aircraft_service_photo(
     service: str = Query(max_length=32),
-    region: str = Query(max_length=80),
+    region: str = Query(default="", max_length=80),
     aircraft_type: str = Query(default="", max_length=32),
     operator: str = Query(default="", max_length=120),
 ) -> dict[str, object]:
