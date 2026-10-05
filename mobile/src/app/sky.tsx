@@ -1,0 +1,497 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import {
+  PanResponder,
+  Pressable,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
+import { AppScreen } from '@/components/AppScreen';
+import { colors } from '@/theme/colors';
+import { BRIGHT_STARS, MOBILE_RENDER_STARS } from '@/sky/catalog';
+import {
+  clamp,
+  currentPlanetPositions,
+  norm360,
+  raDecToAltAz,
+  skyPalette,
+} from '@/sky/astronomy';
+import { projectAltAz } from '@/sky/projection';
+import { useObserverLocation } from '@/location/useObserverLocation';
+import { useDevicePointing } from '@/orientation/useDevicePointing';
+import { LocationControl } from '@/components/LocationControl';
+
+type Size = {
+  width: number;
+  height: number;
+};
+
+export default function SkyScreen() {
+  const { targetKind, targetId } = useLocalSearchParams<{
+    targetKind?: string;
+    targetId?: string;
+  }>();
+  const [now, setNow] = useState(Date.now());
+  const [size, setSize] = useState<Size>({ width: 0, height: 0 });
+  const [yaw, setYaw] = useState(180);
+  const [pitch, setPitch] = useState(28);
+  const gestureStart = useRef({ yaw: 180, pitch: 28 });
+  const appliedTarget = useRef<string | null>(null);
+  const {
+    observer,
+    source,
+    label: observerLabel,
+    requesting,
+    restoring,
+    error: locationError,
+    useCurrentLocation,
+    useManualLocation,
+    useDemoLocation,
+  } = useObserverLocation();
+  const {
+    active: phoneAimActive,
+    starting: phoneAimStarting,
+    heading: phoneHeading,
+    elevation: phoneElevation,
+    headingAccuracy,
+    usingTrueNorth,
+    error: phoneAimError,
+    start: startPhoneAim,
+    stop: stopPhoneAim,
+  } = useDevicePointing();
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!phoneAimActive) return;
+    if (phoneHeading !== null) setYaw(phoneHeading);
+    if (phoneElevation !== null) {
+      setPitch(clamp(phoneElevation, 0, 84));
+    }
+  }, [phoneAimActive, phoneElevation, phoneHeading]);
+
+  useEffect(() => {
+    if (source !== 'device' && phoneAimActive) {
+      stopPhoneAim();
+    }
+  }, [phoneAimActive, source, stopPhoneAim]);
+
+  const planets = useMemo(
+    () => currentPlanetPositions(now, observer),
+    [now, observer],
+  );
+
+  const sun = planets.find((planet) => planet.id === 'sun');
+  const palette = skyPalette(sun?.el ?? -18);
+
+  const targetStar = useMemo(
+    () =>
+      targetKind === 'star' && targetId
+        ? BRIGHT_STARS.find((star) => star.id === targetId) ?? null
+        : null,
+    [targetId, targetKind],
+  );
+
+  const stars = useMemo(() => {
+    const catalog =
+      targetStar &&
+      !MOBILE_RENDER_STARS.some((star) => star.id === targetStar.id)
+        ? [...MOBILE_RENDER_STARS, targetStar]
+        : MOBILE_RENDER_STARS;
+
+    return catalog.map((star) => ({
+      ...star,
+      ...raDecToAltAz(
+        star.ra,
+        star.dec,
+        now,
+        observer,
+      ),
+    }));
+  }, [now, observer, targetStar]);
+
+  useEffect(() => {
+    if (restoring || phoneAimActive || !targetId || !targetKind) return;
+
+    const key = `${targetKind}:${targetId}`;
+    if (appliedTarget.current === key) return;
+
+    if (targetKind === 'star') {
+      const star = BRIGHT_STARS.find((item) => item.id === targetId);
+      if (!star) {
+        appliedTarget.current = key;
+        return;
+      }
+
+      const horizontal = raDecToAltAz(
+        star.ra,
+        star.dec,
+        now,
+        observer,
+      );
+
+      if (horizontal.el >= 0) {
+        setYaw(horizontal.az);
+        setPitch(clamp(horizontal.el, 0, 84));
+      }
+
+      appliedTarget.current = key;
+      return;
+    }
+
+    if (targetKind === 'planet') {
+      const planet = planets.find((item) => item.id === targetId);
+      if (planet && planet.el >= 0) {
+        setYaw(planet.az);
+        setPitch(clamp(planet.el, 0, 84));
+      }
+      appliedTarget.current = key;
+    }
+  }, [
+    now,
+    observer,
+    phoneAimActive,
+    planets,
+    restoring,
+    targetId,
+    targetKind,
+  ]);
+
+  const viewport = {
+    ...size,
+    yaw,
+    pitch,
+    fov: 105,
+  };
+
+  const horizon = projectAltAz(yaw, 0, viewport);
+  const horizonY = clamp(
+    horizon?.y ?? size.height * 0.78,
+    0,
+    size.height,
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          !phoneAimActive &&
+          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+        onPanResponderGrant: () => {
+          gestureStart.current = { yaw, pitch };
+        },
+        onPanResponderMove: (_, gesture) => {
+          setYaw(
+            norm360(gestureStart.current.yaw - gesture.dx * 0.22),
+          );
+          setPitch(
+            clamp(
+              gestureStart.current.pitch + gesture.dy * 0.12,
+              0,
+              84,
+            ),
+          );
+        },
+      }),
+    [phoneAimActive, pitch, yaw],
+  );
+
+  function onLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    setSize({ width, height });
+  }
+
+  return (
+    <AppScreen>
+      <View
+        onLayout={onLayout}
+        {...panResponder.panHandlers}
+        style={{ flex: 1, overflow: 'hidden', backgroundColor: palette.top }}
+      >
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '33%',
+            bottom: '25%',
+            backgroundColor: palette.middle,
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '62%',
+            bottom: Math.max(0, size.height - horizonY),
+            backgroundColor: palette.horizon,
+          }}
+        />
+
+        {stars
+          .filter((star) => star.el >= 0)
+          .map((star) => {
+            const point = projectAltAz(star.az, star.el, viewport);
+            if (!point || palette.stars <= 0.02) return null;
+
+            const isTarget =
+              targetKind === 'star' && targetId === star.id;
+            const dotSize = isTarget
+              ? 9
+              : clamp(4.5 - star.mag, 1.5, 5.5);
+            const showLabel = isTarget || star.mag <= 0.15;
+
+            return (
+              <View
+                key={star.id}
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: point.x - 28,
+                  top: point.y - 8,
+                  width: 70,
+                  alignItems: 'center',
+                  opacity: clamp(palette.stars, 0, 1),
+                }}
+              >
+                <View
+                  style={{
+                    width: dotSize,
+                    height: dotSize,
+                    borderRadius: dotSize / 2,
+                    backgroundColor: star.color,
+                    borderWidth: isTarget ? 2 : 0,
+                    borderColor: isTarget ? colors.accent : 'transparent',
+                  }}
+                />
+                {showLabel ? (
+                  <Text
+                    style={{
+                      marginTop: 4,
+                      color: '#eef6ff',
+                      fontSize: 10,
+                      textShadowColor: '#000',
+                      textShadowRadius: 3,
+                    }}
+                  >
+                    {star.name}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+
+        {planets
+          .filter((planet) => planet.el >= 0)
+          .map((planet) => {
+            const point = projectAltAz(
+              planet.az,
+              planet.el,
+              viewport,
+            );
+            if (!point) return null;
+
+            const isSun = planet.id === 'sun';
+
+            return (
+              <View
+                key={planet.id}
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: point.x - 42,
+                  top: point.y - 12,
+                  width: 84,
+                  alignItems: 'center',
+                }}
+              >
+                <View
+                  style={{
+                    width: isSun ? 14 : 9,
+                    height: isSun ? 14 : 9,
+                    borderRadius: isSun ? 7 : 4.5,
+                    backgroundColor: planet.color,
+                  }}
+                />
+                <Text
+                  style={{
+                    marginTop: 4,
+                    color: '#ffffff',
+                    fontSize: 11,
+                    fontWeight: '600',
+                    textShadowColor: '#000000',
+                    textShadowRadius: 4,
+                  }}
+                >
+                  {planet.name}
+                </Text>
+              </View>
+            );
+          })}
+
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: horizonY,
+            bottom: 0,
+            backgroundColor: '#03080b',
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: Math.max(0, horizonY - 1),
+            height: 2,
+            backgroundColor: palette.horizon,
+            opacity: 0.7,
+          }}
+        />
+
+        <View
+          style={{
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            top: 16,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: 'rgba(9,18,33,0.86)',
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 16,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+            }}
+          >
+            <Text style={{ color: colors.text, fontWeight: '700' }}>
+              Live Sky · M2
+            </Text>
+            <Text
+              style={{
+                color: colors.muted,
+                fontSize: 11,
+                marginTop: 2,
+              }}
+            >
+              {new Date(now).toLocaleTimeString()}
+            </Text>
+          </View>
+
+          <LocationControl
+            observer={observer}
+            source={source}
+            label={observerLabel}
+            requesting={requesting}
+            restoring={restoring}
+            error={locationError}
+            onUseCurrent={useCurrentLocation}
+            onUseManual={useManualLocation}
+            onUseDemo={useDemoLocation}
+          />
+        </View>
+
+        {phoneAimError ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 18,
+              right: 18,
+              bottom: 78,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 14,
+              backgroundColor: 'rgba(35,18,18,0.94)',
+              borderWidth: 1,
+              borderColor: colors.warning,
+            }}
+          >
+            <Text style={{ color: colors.text, fontSize: 11, lineHeight: 16 }}>
+              {phoneAimError}
+            </Text>
+          </View>
+        ) : null}
+
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 18,
+            bottom: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 14,
+            backgroundColor: 'rgba(9,18,33,0.9)',
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
+          <Text style={{ color: colors.text, fontSize: 11, fontWeight: '700' }}>
+            {Math.round(yaw)}° · {Math.round(pitch)}° elevation
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>
+            {phoneAimActive
+              ? `${usingTrueNorth ? 'True' : 'Magnetic'} north · compass accuracy ${headingAccuracy ?? '—'}`
+              : 'Drag to look around'}
+          </Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            phoneAimActive ? 'Turn off Aim with phone' : 'Turn on Aim with phone'
+          }
+          disabled={phoneAimStarting}
+          onPress={phoneAimActive ? stopPhoneAim : startPhoneAim}
+          style={{
+            position: 'absolute',
+            right: 18,
+            bottom: 18,
+            minHeight: 44,
+            minWidth: 118,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 14,
+            borderRadius: 14,
+            backgroundColor: phoneAimActive
+              ? 'rgba(24,72,52,0.94)'
+              : 'rgba(9,18,33,0.94)',
+            borderWidth: 1,
+            borderColor: phoneAimActive ? colors.success : colors.border,
+            opacity: phoneAimStarting ? 0.7 : 1,
+          }}
+        >
+          <Text style={{ color: colors.text, fontSize: 11, fontWeight: '700' }}>
+            {phoneAimStarting
+              ? 'Starting…'
+              : phoneAimActive
+                ? 'Phone aim ON'
+                : 'Aim with phone'}
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: 9, marginTop: 2 }}>
+            {phoneAimActive ? 'Tap for manual view' : 'Compass + motion'}
+          </Text>
+        </Pressable>
+      </View>
+    </AppScreen>
+  );
+}
