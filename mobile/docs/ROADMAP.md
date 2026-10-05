@@ -27,7 +27,7 @@ Status:
 - [x] Pinch-to-zoom
 - [x] Constellation guide lines and native sky-layer controls
 - [~] Live satellite and aircraft Skia overlays
-- [ ] Native tap selection in the sky
+- [x] Native tap selection in the sky
 - [~] Seamless horizon-anchored atmosphere gradient
 - [ ] Full website terrain fidelity
 - [ ] Smooth background/foreground resume validation on real devices
@@ -50,7 +50,8 @@ Status:
 - [x] Sun, Moon and planet search
 - [x] Live observer-relative altitude/azimuth details
 - [x] Show in Sky handoff
-- [~] Native object detail presentation
+- [x] Native object detail presentation
+- [x] Single-selection/deselect and centre action across stars, planets and live objects
 - [ ] Object images and richer facts
 - [~] Distance/depth cues
 - [ ] Search filters/categories
