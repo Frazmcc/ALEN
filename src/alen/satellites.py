@@ -27,6 +27,8 @@ class SatelliteProvider:
     SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
     CACHE_SECONDS = 1800
     MAX_CACHE_GROUPS = 16
+    POSITION_BUCKET_SECONDS = 1
+    MAX_POSITION_BUCKETS = 12
     ALLOWED_GROUPS = frozenset(
         {
             "last-30-days",
@@ -56,6 +58,11 @@ class SatelliteProvider:
         self._executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="alen-sat")
         self._group_locks = {group: Lock() for group in self.ALLOWED_GROUPS}
         self._fallback_lock = Lock()
+        self._position_lock = Lock()
+        self._position_cache: dict[
+            int,
+            dict[int, tuple[float, float, float] | None],
+        ] = {}
         self.last_diagnostics: dict[str, object] = {}
 
     def visible(
@@ -108,14 +115,26 @@ class SatelliteProvider:
                 for record in fallback_records:
                     merged[record.norad] = (record, {"visual"})
 
-        visible: list[dict[str, object]] = []
+        records = [record for record, _memberships in merged.values()]
+        sample_at, current_world, current_hits, current_misses = self._world_positions(
+            records,
+            now,
+        )
+        sample_age_seconds = max(0.0, (now - sample_at).total_seconds())
+
+        visible_candidates: list[
+            tuple[OrbitRecord, set[str], dict[str, float]]
+        ] = []
         propagated = 0
         propagation_failures = 0
         below_horizon = 0
         for satnum, (record, memberships) in merged.items():
-            position = _topocentric_from_tle(
-                record,
-                now,
+            world_position = current_world.get(satnum)
+            if world_position is None:
+                propagation_failures += 1
+                continue
+            position = _topocentric_from_ecef(
+                world_position,
                 latitude_deg,
                 longitude_deg,
                 altitude_m,
@@ -127,23 +146,35 @@ class SatelliteProvider:
             if position["elevation_deg"] < 0.0:
                 below_horizon += 1
                 continue
-            future_position = _topocentric_from_tle(
-                record,
-                now + timedelta(seconds=2),
+            visible_candidates.append((record, memberships, position))
+
+        visible_records = [record for record, _memberships, _position in visible_candidates]
+        _next_at, next_world, next_hits, next_misses = self._world_positions(
+            visible_records,
+            sample_at + timedelta(seconds=2),
+        )
+        _next2_at, next2_world, next2_hits, next2_misses = self._world_positions(
+            visible_records,
+            sample_at + timedelta(seconds=4),
+        )
+
+        visible: list[dict[str, object]] = []
+        for record, memberships, position in visible_candidates:
+            future_position = _topocentric_from_ecef(
+                next_world.get(record.norad),
                 latitude_deg,
                 longitude_deg,
                 altitude_m,
             ) or position
-            future_position_2 = _topocentric_from_tle(
-                record,
-                now + timedelta(seconds=4),
+            future_position_2 = _topocentric_from_ecef(
+                next2_world.get(record.norad),
                 latitude_deg,
                 longitude_deg,
                 altitude_m,
             ) or future_position
             visible.append(
                 {
-                    "norad": satnum,
+                    "norad": record.norad,
                     "name": record.name,
                     "international_id": record.international_id or "—",
                     "azimuth_deg": round(position["azimuth_deg"], 3),
@@ -161,6 +192,8 @@ class SatelliteProvider:
             )
 
         visible.sort(key=lambda item: float(item["elevation_deg"]), reverse=True)
+        position_hits = current_hits + next_hits + next2_hits
+        position_misses = current_misses + next_misses + next2_misses
         self.last_diagnostics = {
             "requested_groups": requested_groups,
             "loaded_by_group": loaded_by_group,
@@ -171,8 +204,52 @@ class SatelliteProvider:
             "visible": len(visible),
             "fallback_used": fallback_used,
             "generated_at": now.isoformat(),
+            "position_sample_at": sample_at.isoformat(),
+            "position_sample_age_seconds": round(sample_age_seconds, 3),
+            "position_bucket_seconds": self.POSITION_BUCKET_SECONDS,
+            "position_cache_hits": position_hits,
+            "position_cache_misses": position_misses,
         }
         return visible[: max(1, min(int(limit), 500))]
+
+    def _world_positions(
+        self,
+        records: list[OrbitRecord],
+        when: datetime,
+    ) -> tuple[
+        datetime,
+        dict[int, tuple[float, float, float] | None],
+        int,
+        int,
+    ]:
+        bucket_seconds = max(1, int(self.POSITION_BUCKET_SECONDS))
+        timestamp = int(when.timestamp())
+        bucket = timestamp - (timestamp % bucket_seconds)
+        sample_at = datetime.fromtimestamp(bucket, tz=timezone.utc)
+
+        unique = {record.norad: record for record in records}
+        with self._position_lock:
+            bucket_cache = self._position_cache.setdefault(bucket, {})
+            missing = [
+                record
+                for norad, record in unique.items()
+                if norad not in bucket_cache
+            ]
+            for record in missing:
+                bucket_cache[record.norad] = _ecef_from_tle(record, sample_at)
+
+            while len(self._position_cache) > self.MAX_POSITION_BUCKETS:
+                oldest = min(self._position_cache)
+                if oldest == bucket and len(self._position_cache) > 1:
+                    oldest = min(value for value in self._position_cache if value != bucket)
+                self._position_cache.pop(oldest, None)
+
+            result = {
+                norad: bucket_cache.get(norad)
+                for norad in unique
+            }
+
+        return sample_at, result, len(unique) - len(missing), len(missing)
 
     def _load_group(self, group: str) -> tuple[OrbitRecord, ...]:
         if group not in self.ALLOWED_GROUPS:
@@ -525,13 +602,10 @@ class SatelliteProvider:
         return tuple(records)
 
 
-def _topocentric_from_tle(
+def _ecef_from_tle(
     record: OrbitRecord,
     when: datetime,
-    latitude_deg: float,
-    longitude_deg: float,
-    altitude_m: float,
-) -> dict[str, float] | None:
+) -> tuple[float, float, float] | None:
     try:
         satellite = record.satellite
         second = when.second + when.microsecond / 1_000_000
@@ -553,10 +627,23 @@ def _topocentric_from_tle(
     cos_g = math.cos(gmst)
     sin_g = math.sin(gmst)
     x_teme, y_teme, z_teme = teme_position
-    x = cos_g * x_teme + sin_g * y_teme
-    y = -sin_g * x_teme + cos_g * y_teme
-    z = z_teme
+    return (
+        cos_g * x_teme + sin_g * y_teme,
+        -sin_g * x_teme + cos_g * y_teme,
+        z_teme,
+    )
 
+
+def _topocentric_from_ecef(
+    position_ecef: tuple[float, float, float] | None,
+    latitude_deg: float,
+    longitude_deg: float,
+    altitude_m: float,
+) -> dict[str, float] | None:
+    if position_ecef is None:
+        return None
+
+    x, y, z = position_ecef
     ox, oy, oz = _observer_ecef(latitude_deg, longitude_deg, altitude_m)
     dx, dy, dz = x - ox, y - oy, z - oz
 
@@ -585,6 +672,21 @@ def _topocentric_from_tle(
         "elevation_deg": elevation,
         "range_km": range_km,
     }
+
+
+def _topocentric_from_tle(
+    record: OrbitRecord,
+    when: datetime,
+    latitude_deg: float,
+    longitude_deg: float,
+    altitude_m: float,
+) -> dict[str, float] | None:
+    return _topocentric_from_ecef(
+        _ecef_from_tle(record, when),
+        latitude_deg,
+        longitude_deg,
+        altitude_m,
+    )
 
 
 def _observer_ecef(latitude_deg: float, longitude_deg: float, altitude_m: float) -> tuple[float, float, float]:
