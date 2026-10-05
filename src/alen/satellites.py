@@ -39,7 +39,9 @@ class SatelliteProvider:
     CACHE_SECONDS = 1800
     MAX_CACHE_GROUPS = 16
     POSITION_BUCKET_SECONDS = 1
-    MAX_POSITION_BUCKETS = 12
+    MAX_POSITION_BUCKETS = 20
+    MOTION_STEP_SECONDS = 2
+    MOTION_FORECAST_SECONDS = 12
     ALLOWED_GROUPS = frozenset(
         {
             "last-30-days",
@@ -156,47 +158,72 @@ class SatelliteProvider:
             visible_candidates.append((record, memberships, position))
 
         visible_records = [record for record, _memberships, _position in visible_candidates]
-        _next_at, next_world, next_hits, next_misses = self._world_positions(
-            visible_records,
-            sample_at + timedelta(seconds=2),
-        )
-        _next2_at, next2_world, next2_hits, next2_misses = self._world_positions(
-            visible_records,
-            sample_at + timedelta(seconds=4),
-        )
+        future_worlds: list[tuple[int, dict[int, tuple[float, float, float] | None]]] = []
+        position_hits = current_hits
+        position_misses = current_misses
+        for offset_seconds in range(
+            self.MOTION_STEP_SECONDS,
+            self.MOTION_FORECAST_SECONDS + self.MOTION_STEP_SECONDS,
+            self.MOTION_STEP_SECONDS,
+        ):
+            _future_at, future_world, future_hits, future_misses = self._world_positions(
+                visible_records,
+                sample_at + timedelta(seconds=offset_seconds),
+            )
+            future_worlds.append((offset_seconds, future_world))
+            position_hits += future_hits
+            position_misses += future_misses
 
         visible: list[dict[str, object]] = []
         for record, memberships, position in visible_candidates:
-            future_position = _topocentric_from_frame(
-                next_world.get(record.norad),
-                observer_frame,
-            ) or position
-            future_position_2 = _topocentric_from_frame(
-                next2_world.get(record.norad),
-                observer_frame,
-            ) or future_position
+            trajectory = [
+                {
+                    "offset_seconds": 0,
+                    "azimuth_deg": round(position["azimuth_deg"], 3),
+                    "elevation_deg": round(position["elevation_deg"], 3),
+                    "range_km": round(position["range_km"], 1),
+                }
+            ]
+            last_position = position
+            for offset_seconds, future_world in future_worlds:
+                future_position = _topocentric_from_frame(
+                    future_world.get(record.norad),
+                    observer_frame,
+                ) or last_position
+                trajectory.append(
+                    {
+                        "offset_seconds": offset_seconds,
+                        "azimuth_deg": round(future_position["azimuth_deg"], 3),
+                        "elevation_deg": round(future_position["elevation_deg"], 3),
+                        "range_km": round(future_position["range_km"], 1),
+                    }
+                )
+                last_position = future_position
+
+            future_position = trajectory[min(1, len(trajectory) - 1)]
+            future_position_2 = trajectory[min(2, len(trajectory) - 1)]
             visible.append(
                 {
                     "norad": record.norad,
                     "name": record.name,
                     "international_id": record.international_id or "—",
-                    "azimuth_deg": round(position["azimuth_deg"], 3),
-                    "elevation_deg": round(position["elevation_deg"], 3),
-                    "range_km": round(position["range_km"], 1),
-                    "azimuth_deg_next": round(future_position["azimuth_deg"], 3),
-                    "elevation_deg_next": round(future_position["elevation_deg"], 3),
-                    "range_km_next": round(future_position["range_km"], 1),
-                    "azimuth_deg_next2": round(future_position_2["azimuth_deg"], 3),
-                    "elevation_deg_next2": round(future_position_2["elevation_deg"], 3),
-                    "range_km_next2": round(future_position_2["range_km"], 1),
-                    "motion_horizon_seconds": 2,
+                    "azimuth_deg": trajectory[0]["azimuth_deg"],
+                    "elevation_deg": trajectory[0]["elevation_deg"],
+                    "range_km": trajectory[0]["range_km"],
+                    "azimuth_deg_next": future_position["azimuth_deg"],
+                    "elevation_deg_next": future_position["elevation_deg"],
+                    "range_km_next": future_position["range_km"],
+                    "azimuth_deg_next2": future_position_2["azimuth_deg"],
+                    "elevation_deg_next2": future_position_2["elevation_deg"],
+                    "range_km_next2": future_position_2["range_km"],
+                    "motion_horizon_seconds": self.MOTION_STEP_SECONDS,
+                    "motion_forecast_seconds": self.MOTION_FORECAST_SECONDS,
+                    "trajectory": trajectory,
                     "groups": sorted(memberships),
                 }
             )
 
         visible.sort(key=lambda item: float(item["elevation_deg"]), reverse=True)
-        position_hits = current_hits + next_hits + next2_hits
-        position_misses = current_misses + next_misses + next2_misses
         self.last_diagnostics = {
             "requested_groups": requested_groups,
             "loaded_by_group": loaded_by_group,
