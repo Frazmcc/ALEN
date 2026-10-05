@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { DeviceMotion } from 'expo-sensors';
 import { clamp, norm360 } from '@/sky/astronomy';
 
@@ -33,8 +34,39 @@ function cameraElevationFromGravity(
 
   // Expo defines +Z as running through the screen from back to front.
   // ALEN observes through the rear camera direction, so its forward axis is -Z.
+  // Rotating the screen around Z does not change this elevation calculation.
   const upComponent = clamp(-gravity.z / magnitude, -1, 1);
   return Math.asin(upComponent) * RAD_TO_DEG;
+}
+
+function headingOffsetForOrientation(
+  orientation: ScreenOrientation.Orientation,
+) {
+  switch (orientation) {
+    case ScreenOrientation.Orientation.LANDSCAPE_LEFT:
+      return 90;
+    case ScreenOrientation.Orientation.LANDSCAPE_RIGHT:
+      return -90;
+    case ScreenOrientation.Orientation.PORTRAIT_DOWN:
+      return 180;
+    default:
+      return 0;
+  }
+}
+
+function orientationLabel(orientation: ScreenOrientation.Orientation) {
+  switch (orientation) {
+    case ScreenOrientation.Orientation.PORTRAIT_UP:
+      return 'Portrait';
+    case ScreenOrientation.Orientation.PORTRAIT_DOWN:
+      return 'Portrait upside down';
+    case ScreenOrientation.Orientation.LANDSCAPE_LEFT:
+      return 'Landscape left';
+    case ScreenOrientation.Orientation.LANDSCAPE_RIGHT:
+      return 'Landscape right';
+    default:
+      return 'Unknown';
+  }
 }
 
 export function useDevicePointing() {
@@ -43,6 +75,9 @@ export function useDevicePointing() {
   const [elevation, setElevation] = useState<number | null>(null);
   const [headingAccuracy, setHeadingAccuracy] = useState<number | null>(null);
   const [usingTrueNorth, setUsingTrueNorth] = useState(false);
+  const [screenOrientation, setScreenOrientation] = useState(
+    ScreenOrientation.Orientation.UNKNOWN,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const motionSubscription = useRef<ReturnType<
@@ -51,6 +86,10 @@ export function useDevicePointing() {
   const headingSubscription = useRef<Location.LocationSubscription | null>(
     null,
   );
+  const orientationSubscription = useRef<ReturnType<
+    typeof ScreenOrientation.addOrientationChangeListener
+  > | null>(null);
+  const orientationRef = useRef(ScreenOrientation.Orientation.UNKNOWN);
   const smoothedHeading = useRef<number | null>(null);
   const smoothedElevation = useRef<number | null>(null);
   const generation = useRef(0);
@@ -61,6 +100,9 @@ export function useDevicePointing() {
     motionSubscription.current = null;
     headingSubscription.current?.remove();
     headingSubscription.current = null;
+    orientationSubscription.current?.remove();
+    orientationSubscription.current = null;
+    orientationRef.current = ScreenOrientation.Orientation.UNKNOWN;
     smoothedHeading.current = null;
     smoothedElevation.current = null;
     setStatus('idle');
@@ -68,6 +110,7 @@ export function useDevicePointing() {
     setElevation(null);
     setHeadingAccuracy(null);
     setUsingTrueNorth(false);
+    setScreenOrientation(ScreenOrientation.Orientation.UNKNOWN);
     setError(null);
   }, []);
 
@@ -107,7 +150,23 @@ export function useDevicePointing() {
         return;
       }
 
+      const initialOrientation =
+        await ScreenOrientation.getOrientationAsync();
+
       if (generation.current !== startGeneration) return;
+
+      orientationRef.current = initialOrientation;
+      setScreenOrientation(initialOrientation);
+      orientationSubscription.current =
+        ScreenOrientation.addOrientationChangeListener((event) => {
+          const nextOrientation = event.orientationInfo.orientation;
+          orientationRef.current = nextOrientation;
+          setScreenOrientation(nextOrientation);
+
+          // A screen rotation changes the heading reference axis abruptly.
+          // Reset smoothing so ALEN applies the compensated heading immediately.
+          smoothedHeading.current = null;
+        });
 
       DeviceMotion.setUpdateInterval(SENSOR_INTERVAL_MS);
 
@@ -129,11 +188,16 @@ export function useDevicePointing() {
           const trueNorthAvailable =
             Number.isFinite(measurement.trueHeading) &&
             measurement.trueHeading >= 0;
-          const nextHeading = trueNorthAvailable
+          const rawHeading = trueNorthAvailable
             ? measurement.trueHeading
             : measurement.magHeading;
 
-          if (!Number.isFinite(nextHeading)) return;
+          if (!Number.isFinite(rawHeading)) return;
+
+          const nextHeading = norm360(
+            rawHeading +
+              headingOffsetForOrientation(orientationRef.current),
+          );
 
           smoothedHeading.current = smoothAngle(
             smoothedHeading.current,
@@ -154,6 +218,8 @@ export function useDevicePointing() {
         motionSubscription.current = null;
         headingSubscription.current?.remove();
         headingSubscription.current = null;
+        orientationSubscription.current?.remove();
+        orientationSubscription.current = null;
         return;
       }
 
@@ -165,6 +231,8 @@ export function useDevicePointing() {
       motionSubscription.current = null;
       headingSubscription.current?.remove();
       headingSubscription.current = null;
+      orientationSubscription.current?.remove();
+      orientationSubscription.current = null;
       setStatus('error');
       setError(
         'ALEN could not start phone aiming. Manual drag mode is still available.',
@@ -182,6 +250,7 @@ export function useDevicePointing() {
     elevation,
     headingAccuracy,
     usingTrueNorth,
+    screenOrientation: orientationLabel(screenOrientation),
     error,
     start,
     stop,
