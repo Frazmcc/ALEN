@@ -30,7 +30,7 @@ Status:
 - [x] Native tap selection in the sky
 - [~] Seamless horizon-anchored atmosphere gradient
 - [ ] Full website terrain fidelity
-- [ ] Smooth background/foreground resume validation on real devices
+- [~] Background/foreground resume resynchronisation baseline; real-device validation pending
 - [ ] Responsive landscape/tablet layout
 
 ## M2 - Device Position
@@ -70,7 +70,7 @@ Status:
 - [ ] Local settings/cache policy
 - [ ] Network-loss handling
 - [ ] API backoff and cache integration
-- [ ] Resume without elastic banding
+- [~] Resume without elastic banding; lifecycle resync implemented, real-device validation pending
 - [ ] Battery/memory profiling
 - [ ] Long-session sensor stability tests
 
