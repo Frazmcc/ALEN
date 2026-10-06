@@ -33,8 +33,15 @@ type PlanetResult = {
 };
 
 type SearchResult = StarResult | PlanetResult;
+type ObjectCategory = 'all' | 'stars' | 'solar';
 
 const planetIds = Object.keys(PLANET_INFO) as PlanetId[];
+
+const categories: Array<{ key: ObjectCategory; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'stars', label: 'Stars' },
+  { key: 'solar', label: 'Solar System' },
+];
 
 function resultKey(result: SearchResult) {
   return result.kind === 'star'
@@ -50,6 +57,9 @@ function resultName(result: SearchResult) {
 
 export default function ObjectsScreen() {
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<ObjectCategory>('all');
+  const [visibleOnly, setVisibleOnly] = useState(false);
+  const [brightStarsOnly, setBrightStarsOnly] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const { observer, label: observerLabel } = useObserverLocation();
@@ -67,29 +77,80 @@ export default function ObjectsScreen() {
   const results = useMemo<SearchResult[]>(() => {
     const normalized = query.trim().toLowerCase();
 
-    const matchingPlanets = planetIds
-      .filter((id) => {
-        if (!normalized) return true;
-        return PLANET_INFO[id].name.toLowerCase().includes(normalized);
-      })
-      .map<PlanetResult>((id) => ({ kind: 'planet', id }));
+    const planetById = new Map(planets.map((planet) => [planet.id, planet]));
 
-    const matchingStars = BRIGHT_STARS
-      .filter((star) => {
-        if (!normalized) return star.mag <= 2.2;
+    const matchingPlanets =
+      category === 'stars'
+        ? []
+        : planetIds
+            .filter((id) => {
+              const nameMatches =
+                !normalized ||
+                PLANET_INFO[id].name.toLowerCase().includes(normalized);
+              if (!nameMatches) return false;
 
-        return (
-          star.name.toLowerCase().includes(normalized) ||
-          star.designation.toLowerCase().includes(normalized) ||
-          star.id.toLowerCase().includes(normalized)
-        );
-      })
-      .sort((a, b) => a.mag - b.mag)
-      .slice(0, normalized ? 50 : 24)
-      .map<StarResult>((star) => ({ kind: 'star', star }));
+              if (!visibleOnly) return true;
+              return (planetById.get(id)?.el ?? -90) >= 0;
+            })
+            .map<PlanetResult>((id) => ({ kind: 'planet', id }));
+
+    const matchingStars =
+      category === 'solar'
+        ? []
+        : BRIGHT_STARS
+            .filter((star) => {
+              const nameMatches =
+                !normalized ||
+                star.name.toLowerCase().includes(normalized) ||
+                star.designation.toLowerCase().includes(normalized) ||
+                star.id.toLowerCase().includes(normalized);
+
+              if (!nameMatches) return false;
+              if (brightStarsOnly && star.mag > 2.2) return false;
+
+              if (visibleOnly) {
+                const horizontal = raDecToAltAz(
+                  star.ra,
+                  star.dec,
+                  now,
+                  observer,
+                );
+                if (horizontal.el < 0) return false;
+              }
+
+              return true;
+            })
+            .sort((a, b) => a.mag - b.mag)
+            .slice(
+              0,
+              normalized
+                ? 50
+                : brightStarsOnly
+                  ? 40
+                  : category === 'stars'
+                    ? 60
+                    : 24,
+            )
+            .map<StarResult>((star) => ({ kind: 'star', star }));
 
     return [...matchingPlanets, ...matchingStars].slice(0, 60);
-  }, [query]);
+  }, [
+    brightStarsOnly,
+    category,
+    now,
+    observer,
+    planets,
+    query,
+    visibleOnly,
+  ]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const selectedKey = resultKey(selected);
+    if (!results.some((result) => resultKey(result) === selectedKey)) {
+      setSelected(null);
+    }
+  }, [results, selected]);
 
   const selectedDetail = useMemo(() => {
     if (!selected) return null;
@@ -205,6 +266,112 @@ export default function ObjectsScreen() {
               paddingHorizontal: 15,
             }}
           />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{
+              gap: 8,
+              paddingTop: 10,
+              paddingBottom: 2,
+            }}
+          >
+            {categories.map((item) => {
+              const active = category === item.key;
+              return (
+                <Pressable
+                  key={item.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setCategory(item.key)}
+                  style={{
+                    minHeight: 38,
+                    justifyContent: 'center',
+                    paddingHorizontal: 13,
+                    borderRadius: 13,
+                    borderWidth: 1,
+                    borderColor: active ? colors.accent : colors.border,
+                    backgroundColor: active
+                      ? colors.accentSoft
+                      : 'rgba(9,18,33,0.9)',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: active ? colors.text : colors.muted,
+                      fontSize: 11,
+                      fontWeight: active ? '700' : '600',
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: visibleOnly }}
+              onPress={() => setVisibleOnly((value) => !value)}
+              style={{
+                minHeight: 38,
+                justifyContent: 'center',
+                paddingHorizontal: 13,
+                borderRadius: 13,
+                borderWidth: 1,
+                borderColor: visibleOnly ? colors.success : colors.border,
+                backgroundColor: visibleOnly
+                  ? 'rgba(24,72,52,0.72)'
+                  : 'rgba(9,18,33,0.9)',
+              }}
+            >
+              <Text
+                style={{
+                  color: visibleOnly ? colors.text : colors.muted,
+                  fontSize: 11,
+                  fontWeight: '600',
+                }}
+              >
+                Visible now
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: brightStarsOnly }}
+              disabled={category === 'solar'}
+              onPress={() => setBrightStarsOnly((value) => !value)}
+              style={{
+                minHeight: 38,
+                justifyContent: 'center',
+                paddingHorizontal: 13,
+                borderRadius: 13,
+                borderWidth: 1,
+                borderColor:
+                  brightStarsOnly && category !== 'solar'
+                    ? colors.warning
+                    : colors.border,
+                backgroundColor:
+                  brightStarsOnly && category !== 'solar'
+                    ? 'rgba(76,54,18,0.72)'
+                    : 'rgba(9,18,33,0.9)',
+                opacity: category === 'solar' ? 0.45 : 1,
+              }}
+            >
+              <Text
+                style={{
+                  color:
+                    brightStarsOnly && category !== 'solar'
+                      ? colors.text
+                      : colors.muted,
+                  fontSize: 11,
+                  fontWeight: '600',
+                }}
+              >
+                Bright stars
+              </Text>
+            </Pressable>
+          </ScrollView>
         </View>
 
         <ScrollView
@@ -436,7 +603,15 @@ export default function ObjectsScreen() {
               marginBottom: 7,
             }}
           >
-            {query.trim() ? 'SEARCH RESULTS' : 'BRIGHT OBJECTS'}
+            {query.trim()
+              ? 'SEARCH RESULTS'
+              : category === 'stars'
+                ? 'STARS'
+                : category === 'solar'
+                  ? 'SOLAR SYSTEM'
+                  : visibleOnly
+                    ? 'VISIBLE OBJECTS'
+                    : 'FEATURED OBJECTS'}
           </Text>
 
           {results.map((result) => {
@@ -540,7 +715,7 @@ export default function ObjectsScreen() {
                   marginTop: 4,
                 }}
               >
-                Try a common name, Bayer/Flamsteed designation, or catalogue ID.
+                Try a common name, Bayer/Flamsteed designation, catalogue ID, or relax the active filters.
               </Text>
             </View>
           ) : null}
