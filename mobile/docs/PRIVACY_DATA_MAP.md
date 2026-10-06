@@ -41,7 +41,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 - The current mobile build does not load third-party satellite or aircraft imagery. Object-image support remains a future mobile feature and will require this data map to be reviewed before release.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
 - Manual coordinates may be persisted locally because they are explicitly entered as an observer location. They stay local unless the user enables Satellites or Aircraft, in which case the active manual observer coordinate is sent to the ALEN API for that live layer in the same way as a device-derived observer.
-- The More screen can clear the saved observer preference and persisted sky display preferences. This does not revoke operating-system permissions.
+- The More screen can clear the saved observer preference, persisted sky display preferences and AR lens calibration preference. This does not revoke operating-system permissions.
 
 ## Camera behaviour
 
@@ -51,6 +51,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 - Camera frames are not sent to the ALEN API.
 - Camera alignment uses the same on-device astronomy, location, compass and motion calculations as the live sky.
 - Camera AR uses the physical device location rather than a manually selected remote observer location.
+- The selected AR lens calibration profile and field-of-view adjustment are stored locally on-device so the overlay scale is retained between sessions; these values contain no camera frames, sensor readings or location data and are not sent to the ALEN API.
 
 ## Motion/orientation rules
 
