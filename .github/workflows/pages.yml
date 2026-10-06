@@ -14,7 +14,10 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # PR-triggered CodeQL completions also start this workflow and are skipped by
+  # the deploy job. Keep those no-op runs out of the production concurrency
+  # group so they cannot cancel a valid push-to-main deployment.
+  group: pages-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
