@@ -26,7 +26,7 @@ Status:
 - [x] High-performance Skia canvas for star/planet points
 - [x] Pinch-to-zoom
 - [x] Constellation guide lines and native sky-layer controls
-- [~] Live satellite and aircraft Skia overlays
+- [x] Live satellite and aircraft Skia overlays with filtering, selection, depth cues and manual recovery
 - [x] Native tap selection in the sky
 - [~] Seamless horizon-anchored atmosphere gradient
 - [ ] Full website terrain fidelity
@@ -56,8 +56,8 @@ Status:
 - [x] Rich satellite and aircraft facts with proxied imagery
 - [x] Distance/depth cues with range-aware sizing, opacity and far-to-near draw order
 - [x] Search filters/categories
-- [~] Satellites
-- [~] Aircraft
+- [x] Satellites
+- [x] Aircraft
 
 ## M4 - AR
 - [~] Camera sky mode baseline with rear-camera preview

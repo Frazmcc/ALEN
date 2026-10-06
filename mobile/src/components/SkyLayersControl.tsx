@@ -33,11 +33,15 @@ type Props = {
   onToggleOpen: () => void;
   onToggleLayer: (layer: keyof SkyLayers) => void;
   satelliteSummary?: string;
+  satelliteError?: string | null;
+  onRetrySatellites?: () => void;
   satelliteGroups: SatelliteGroupState;
   onToggleSatelliteGroup: (group: SatelliteGroupKey) => void;
   aircraftGroups: AircraftGroupState;
   onToggleAircraftGroup: (group: AircraftGroupKey) => void;
   aircraftSummary?: string;
+  aircraftError?: string | null;
+  onRetryAircraft?: () => void;
 };
 
 const options: Array<{
@@ -60,11 +64,15 @@ export function SkyLayersControl({
   onToggleOpen,
   onToggleLayer,
   satelliteSummary,
+  satelliteError,
+  onRetrySatellites,
   satelliteGroups,
   onToggleSatelliteGroup,
   aircraftGroups,
   onToggleAircraftGroup,
   aircraftSummary,
+  aircraftError,
+  onRetryAircraft,
 }: Props) {
   const { width, height } = useWindowDimensions();
   const panelWidth = Math.min(230, Math.max(190, width - 36));
@@ -177,6 +185,60 @@ export function SkyLayersControl({
                             {satelliteSummary}
                           </Text>
                         ) : null}
+                        {option.key === 'satellites' &&
+                        enabled &&
+                        satelliteError ? (
+                          <View
+                            style={{
+                              marginTop: 6,
+                              padding: 8,
+                              borderRadius: 9,
+                              borderWidth: 1,
+                              borderColor: colors.warning,
+                              backgroundColor: 'rgba(58,36,18,0.55)',
+                            }}
+                          >
+                            <Text
+                              numberOfLines={2}
+                              style={{
+                                color: colors.warning,
+                                fontSize: 9,
+                                lineHeight: 13,
+                              }}
+                            >
+                              {satelliteError}
+                            </Text>
+                            {onRetrySatellites ? (
+                              <Pressable
+                                accessibilityRole="button"
+                                onPress={(event) => {
+                                  event.stopPropagation();
+                                  onRetrySatellites();
+                                }}
+                                style={{
+                                  alignSelf: 'flex-start',
+                                  minHeight: 30,
+                                  justifyContent: 'center',
+                                  paddingHorizontal: 10,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor: colors.warning,
+                                  marginTop: 6,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: colors.text,
+                                    fontSize: 9,
+                                    fontWeight: '700',
+                                  }}
+                                >
+                                  Retry satellites
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : null}
                         {option.key === 'satellites' && enabled ? (
                           <View
                             style={{
@@ -243,6 +305,60 @@ export function SkyLayersControl({
                           >
                             {aircraftSummary}
                           </Text>
+                        ) : null}
+                        {option.key === 'aircraft' &&
+                        enabled &&
+                        aircraftError ? (
+                          <View
+                            style={{
+                              marginTop: 6,
+                              padding: 8,
+                              borderRadius: 9,
+                              borderWidth: 1,
+                              borderColor: colors.warning,
+                              backgroundColor: 'rgba(58,36,18,0.55)',
+                            }}
+                          >
+                            <Text
+                              numberOfLines={2}
+                              style={{
+                                color: colors.warning,
+                                fontSize: 9,
+                                lineHeight: 13,
+                              }}
+                            >
+                              {aircraftError}
+                            </Text>
+                            {onRetryAircraft ? (
+                              <Pressable
+                                accessibilityRole="button"
+                                onPress={(event) => {
+                                  event.stopPropagation();
+                                  onRetryAircraft();
+                                }}
+                                style={{
+                                  alignSelf: 'flex-start',
+                                  minHeight: 30,
+                                  justifyContent: 'center',
+                                  paddingHorizontal: 10,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor: colors.warning,
+                                  marginTop: 6,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: colors.text,
+                                    fontSize: 9,
+                                    fontWeight: '700',
+                                  }}
+                                >
+                                  Retry aircraft
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
                         ) : null}
                         {option.key === 'aircraft' && enabled ? (
                           <View
