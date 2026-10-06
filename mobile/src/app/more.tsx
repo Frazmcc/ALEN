@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import Constants from 'expo-constants';
 import {
+  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -12,6 +13,7 @@ import { LocationControl } from '@/components/LocationControl';
 import { StarField } from '@/components/StarField';
 import { useObserverLocation } from '@/location/useObserverLocation';
 import { colors } from '@/theme/colors';
+import { clearSkyPreferences } from '@/preferences/skyPreferences';
 
 const WEBSITE_URL = 'https://frazmcc.github.io/ALEN';
 const SOURCE_URL = 'https://github.com/Frazmcc/ALEN';
@@ -105,9 +107,48 @@ export default function MoreScreen() {
     useCurrentLocation,
     useManualLocation,
     useDemoLocation,
+    clearSavedObserver,
   } = useObserverLocation();
 
+  const [localDataStatus, setLocalDataStatus] = useState<string | null>(null);
   const version = Constants.expoConfig?.version ?? '0.1.0';
+
+  async function resetSkyPreferences() {
+    const cleared = await clearSkyPreferences();
+    setLocalDataStatus(
+      cleared
+        ? 'Sky display preferences cleared. Default layer settings will apply next time the Sky screen opens.'
+        : 'ALEN could not clear the saved sky display preferences.',
+    );
+  }
+
+  function confirmClearLocalData() {
+    Alert.alert(
+      'Clear ALEN local data?',
+      'This clears the saved observer choice and sky display preferences stored by ALEN on this device. It does not revoke system permissions or delete any server-side data.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear local data',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const [skyCleared, observerCleared] = await Promise.all([
+                clearSkyPreferences(),
+                clearSavedObserver(),
+              ]);
+
+              setLocalDataStatus(
+                skyCleared && observerCleared
+                  ? 'ALEN local data cleared. The observer is now the Greenwich demo and sky settings will use defaults.'
+                  : 'Some local data could not be cleared. The active observer has been reset where possible.',
+              );
+            })();
+          },
+        },
+      ],
+    );
+  }
 
   return (
     <AppScreen>
@@ -213,6 +254,71 @@ export default function MoreScreen() {
               Compass and motion readings used by Aim with phone stay on the
               device and are removed when phone aiming is turned off.
             </Text>
+          </Section>
+
+          <Section title="LOCAL DATA">
+            <InfoRow label="Saved GPS coordinates" value="None" />
+            <InfoRow label="Manual observer" value="Stored on-device when selected" />
+            <InfoRow label="Sky layer preferences" value="Stored on-device" />
+            <InfoRow label="Live aircraft/satellite cache" value="Not persisted on-device" />
+
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void resetSkyPreferences()}
+                style={{
+                  minHeight: 44,
+                  justifyContent: 'center',
+                  paddingHorizontal: 14,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.panelSoft,
+                }}
+              >
+                <Text style={{ color: colors.text, fontSize: 11, fontWeight: '700' }}>
+                  Reset sky preferences
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={confirmClearLocalData}
+                style={{
+                  minHeight: 44,
+                  justifyContent: 'center',
+                  paddingHorizontal: 14,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.warning,
+                  backgroundColor: 'rgba(58,36,18,0.55)',
+                }}
+              >
+                <Text style={{ color: colors.warning, fontSize: 11, fontWeight: '700' }}>
+                  Clear ALEN local data
+                </Text>
+              </Pressable>
+            </View>
+
+            {localDataStatus ? (
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 10,
+                  lineHeight: 16,
+                  marginTop: 10,
+                }}
+              >
+                {localDataStatus}
+              </Text>
+            ) : null}
           </Section>
 
           <Section title="DATA SOURCES">

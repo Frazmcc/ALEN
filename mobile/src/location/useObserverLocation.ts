@@ -11,8 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import type { Observer } from '@/sky/astronomy';
-
-const STORAGE_KEY = 'alen.observer.preference.v1';
+import { OBSERVER_STORAGE_KEY } from '@/storage/keys';
 
 export const DEMO_OBSERVER: Observer = {
   lat: 51.4769,
@@ -40,7 +39,7 @@ function validLongitude(value: number) {
 }
 
 async function savePreference(preference: StoredPreference) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(preference));
+  await AsyncStorage.setItem(OBSERVER_STORAGE_KEY, JSON.stringify(preference));
 }
 
 function useObserverState() {
@@ -127,7 +126,7 @@ function useObserverState() {
 
     async function restore() {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const raw = await AsyncStorage.getItem(OBSERVER_STORAGE_KEY);
         if (!alive || userChangedSelection.current || !raw) return;
 
         const preference = JSON.parse(raw) as StoredPreference;
@@ -232,6 +231,24 @@ function useObserverState() {
     }
   }, []);
 
+  const clearSavedObserver = useCallback(async () => {
+    userChangedSelection.current = true;
+    setObserver(DEMO_OBSERVER);
+    setSource('demo');
+    setLabel('Greenwich demo');
+    setError(null);
+
+    try {
+      await AsyncStorage.removeItem(OBSERVER_STORAGE_KEY);
+      return true;
+    } catch {
+      setError(
+        'ALEN switched to the demo observer, but could not clear the saved observer preference.',
+      );
+      return false;
+    }
+  }, []);
+
   return {
     observer,
     source,
@@ -242,6 +259,7 @@ function useObserverState() {
     useCurrentLocation,
     useManualLocation,
     useDemoLocation,
+    clearSavedObserver,
   };
 }
 

@@ -71,7 +71,7 @@ Status:
 
 ## M5 - Reliability and Offline
 - [~] Local star catalogue
-- [ ] Local settings/cache policy
+- [x] Local settings/cache policy and in-app reset controls
 - [~] Network-loss handling with stale/error states and bounded retry backoff; real-device validation pending
 - [~] Exponential API retry backoff for live satellite/aircraft feeds; broader cache integration pending
 - [~] Resume without elastic banding; lifecycle resync implemented, real-device validation pending
