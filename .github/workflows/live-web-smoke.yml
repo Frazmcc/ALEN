@@ -11,7 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: live-web-smoke
+  # Only successful Pages runs should share the production smoke-test slot.
+  # Skipped/cancelled deployment workflows must not cancel an active probe.
+  group: live-web-smoke-${{ github.event.workflow_run.conclusion }}
   cancel-in-progress: true
 
 jobs:
