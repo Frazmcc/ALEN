@@ -11,7 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import type { Observer } from '@/sky/astronomy';
-import { OBSERVER_OBSERVER_STORAGE_KEY } from '@/storage/keys';
+import { OBSERVER_STORAGE_KEY } from '@/storage/keys';
 
 export const DEMO_OBSERVER: Observer = {
   lat: 51.4769,
