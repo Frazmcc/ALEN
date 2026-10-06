@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { config } from '@/config';
 import type { Observer } from '@/sky/astronomy';
+import { retryDelayMs } from '@/live/retryBackoff';
 import {
   aircraftColor,
   aircraftVisualType,
@@ -21,6 +22,8 @@ import {
 
 const REFRESH_MS = 2500;
 const GRACE_MS = 60_000;
+const RETRY_BASE_MS = 5_000;
+const RETRY_MAX_MS = 30_000;
 const RADIUS_NM = 43.4488;
 
 export type AircraftFeedStatus =
@@ -49,6 +52,8 @@ export function useLiveAircraft(
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const tracksRef = useRef<AircraftTrack[]>([]);
+  const failureCountRef = useRef(0);
+  const retryAfterRef = useRef(0);
 
   useEffect(() => {
     tracksRef.current = tracks;
@@ -56,6 +61,7 @@ export function useLiveAircraft(
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
+    if (Date.now() < retryAfterRef.current) return;
 
     if (abortRef.current) return;
     const controller = new AbortController();
@@ -163,6 +169,8 @@ export function useLiveAircraft(
       tracksRef.current = values;
       setTracks(values);
       setStatus('live');
+      failureCountRef.current = 0;
+      retryAfterRef.current = 0;
     } catch (caught) {
       if (controller.signal.aborted && !timedOut) return;
 
@@ -172,6 +180,14 @@ export function useLiveAircraft(
           ? caught.message
           : 'Aircraft feed unavailable';
 
+      failureCountRef.current += 1;
+      retryAfterRef.current =
+        Date.now() +
+        retryDelayMs(
+          failureCountRef.current,
+          RETRY_BASE_MS,
+          RETRY_MAX_MS,
+        );
       setError(message);
       setStatus(tracksRef.current.length ? 'stale' : 'error');
     } finally {
@@ -192,12 +208,19 @@ export function useLiveAircraft(
       setError(null);
     };
 
+    const resetRetryState = () => {
+      failureCountRef.current = 0;
+      retryAfterRef.current = 0;
+    };
+
     const resumeFresh = () => {
+      resetRetryState();
       clearLiveTracks('loading');
       void refresh();
     };
 
     if (!enabled) {
+      resetRetryState();
       clearLiveTracks('off');
       return;
     }

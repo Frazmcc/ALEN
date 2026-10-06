@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { config } from '@/config';
 import type { Observer } from '@/sky/astronomy';
+import { retryDelayMs } from '@/live/retryBackoff';
 import {
   satelliteColor,
   trajectoryFromRaw,
@@ -19,6 +20,8 @@ import {
 
 const REFRESH_MS = 10_000;
 const MAX_SAMPLE_AGE_MS = 10_000;
+const RETRY_BASE_MS = 15_000;
+const RETRY_MAX_MS = 60_000;
 export type SatelliteFeedStatus =
   | 'off'
   | 'loading'
@@ -46,6 +49,8 @@ export function useLiveSatellites(
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const tracksRef = useRef<SatelliteTrack[]>([]);
+  const failureCountRef = useRef(0);
+  const retryAfterRef = useRef(0);
 
   useEffect(() => {
     tracksRef.current = tracks;
@@ -53,6 +58,7 @@ export function useLiveSatellites(
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
+    if (Date.now() < retryAfterRef.current) return;
 
     if (abortRef.current) return;
     const controller = new AbortController();
@@ -138,6 +144,8 @@ export function useLiveSatellites(
       tracksRef.current = next;
       setTracks(next);
       setStatus('live');
+      failureCountRef.current = 0;
+      retryAfterRef.current = 0;
     } catch (caught) {
       if (controller.signal.aborted && !timedOut) return;
 
@@ -147,6 +155,14 @@ export function useLiveSatellites(
           ? caught.message
           : 'Satellite feed unavailable';
 
+      failureCountRef.current += 1;
+      retryAfterRef.current =
+        Date.now() +
+        retryDelayMs(
+          failureCountRef.current,
+          RETRY_BASE_MS,
+          RETRY_MAX_MS,
+        );
       setError(message);
       setStatus(tracksRef.current.length ? 'stale' : 'error');
     } finally {
@@ -167,12 +183,19 @@ export function useLiveSatellites(
       setError(null);
     };
 
+    const resetRetryState = () => {
+      failureCountRef.current = 0;
+      retryAfterRef.current = 0;
+    };
+
     const resumeFresh = () => {
+      resetRetryState();
       clearLiveTracks('loading');
       void refresh();
     };
 
     if (!enabled || !sources.length) {
+      resetRetryState();
       clearLiveTracks('off');
       return;
     }
