@@ -158,17 +158,26 @@ export function useLiveSatellites(
   }, [enabled, observer.lat, observer.lon, sources]);
 
   useEffect(() => {
-    if (!enabled || !sources.length) {
+    const clearLiveTracks = (nextStatus: SatelliteFeedStatus) => {
       abortRef.current?.abort();
       abortRef.current = null;
       tracksRef.current = [];
       setTracks([]);
-      setStatus('off');
+      setStatus(nextStatus);
       setError(null);
+    };
+
+    const resumeFresh = () => {
+      clearLiveTracks('loading');
+      void refresh();
+    };
+
+    if (!enabled || !sources.length) {
+      clearLiveTracks('off');
       return;
     }
 
-    void refresh();
+    resumeFresh();
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void refresh();
     }, REFRESH_MS);
@@ -177,12 +186,11 @@ export function useLiveSatellites(
       'change',
       (nextState: AppStateStatus) => {
         if (nextState === 'active') {
-          void refresh();
+          resumeFresh();
           return;
         }
 
-        abortRef.current?.abort();
-        abortRef.current = null;
+        clearLiveTracks('loading');
       },
     );
 
