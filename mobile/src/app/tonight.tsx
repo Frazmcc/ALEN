@@ -116,6 +116,9 @@ export default function TonightScreen() {
 
         <ScrollView
           contentContainerStyle={{
+            width: '100%',
+            maxWidth: 1040,
+            alignSelf: 'center',
             paddingHorizontal: 18,
             paddingTop: 18,
             paddingBottom: 28,
