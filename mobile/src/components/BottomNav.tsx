@@ -5,6 +5,7 @@ import { colors } from '@/theme/colors';
 const items = [
   { label: 'Sky', route: '/sky' },
   { label: 'Objects', route: '/objects' },
+  { label: 'AR', route: '/ar' },
   { label: 'Tonight', route: '/tonight' },
   { label: 'More', route: '/more' },
 ] as const;
