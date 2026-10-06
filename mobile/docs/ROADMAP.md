@@ -67,7 +67,7 @@ Status:
 - [x] Camera preview does not capture or persist photos/video
 - [x] AR field-of-view adjustment baseline for device-lens calibration
 - [ ] Real-device camera/sensor alignment validation
-- [ ] Lens-specific calibration profiles
+- [x] Lens-specific calibration profiles with locally persisted FOV tuning
 
 ## M5 - Reliability and Offline
 - [~] Local star catalogue
