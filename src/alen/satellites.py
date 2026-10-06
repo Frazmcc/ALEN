@@ -223,7 +223,12 @@ class SatelliteProvider:
                 }
             )
 
-        visible.sort(key=lambda item: float(item["elevation_deg"]), reverse=True)
+        visible_total = len(visible)
+        selected = _select_visible_satellites(visible, limit)
+        selected.sort(
+            key=lambda item: float(item["elevation_deg"]),
+            reverse=True,
+        )
         self.last_diagnostics = {
             "requested_groups": requested_groups,
             "loaded_by_group": loaded_by_group,
@@ -231,7 +236,10 @@ class SatelliteProvider:
             "propagated": propagated,
             "propagation_failures": propagation_failures,
             "below_horizon": below_horizon,
-            "visible": len(visible),
+            "visible": visible_total,
+            "returned": len(selected),
+            "truncated": len(selected) < visible_total,
+            "selection_policy": "priority-plus-stable-unbiased-sample",
             "fallback_used": fallback_used,
             "generated_at": now.isoformat(),
             "position_sample_at": sample_at.isoformat(),
@@ -240,7 +248,7 @@ class SatelliteProvider:
             "position_cache_hits": position_hits,
             "position_cache_misses": position_misses,
         }
-        return visible[: max(1, min(int(limit), 500))]
+        return selected
 
     def _world_positions(
         self,
@@ -630,6 +638,48 @@ class SatelliteProvider:
                 )
             )
         return tuple(records)
+
+
+_SATELLITE_DISPLAY_PRIORITY_GROUPS = frozenset(
+    {"stations", "visual", "last-30-days"}
+)
+
+
+def _stable_satellite_rank(item: dict[str, object]) -> tuple[int, int]:
+    try:
+        norad = int(item.get("norad", 0))
+    except (TypeError, ValueError):
+        norad = 0
+    return ((norad * 2654435761) & 0xFFFFFFFF, norad)
+
+
+def _select_visible_satellites(
+    visible: list[dict[str, object]],
+    limit: int,
+) -> list[dict[str, object]]:
+    cap = max(1, min(int(limit), 500))
+    if len(visible) <= cap:
+        return list(visible)
+
+    priority: list[dict[str, object]] = []
+    regular: list[dict[str, object]] = []
+    for item in visible:
+        groups = item.get("groups")
+        memberships = (
+            {str(value) for value in groups}
+            if isinstance(groups, list)
+            else set()
+        )
+        if memberships & _SATELLITE_DISPLAY_PRIORITY_GROUPS:
+            priority.append(item)
+        else:
+            regular.append(item)
+
+    priority.sort(key=_stable_satellite_rank)
+    regular.sort(key=_stable_satellite_rank)
+    if len(priority) >= cap:
+        return priority[:cap]
+    return priority + regular[: cap - len(priority)]
 
 
 def _ecef_from_tle(
