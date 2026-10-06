@@ -1037,3 +1037,51 @@ def test_satellite_limit_selection_preserves_priority_groups() -> None:
 
     assert len(selected) == 100
     assert {int(item["norad"]) for item in priority} <= selected_norads
+
+
+def test_satellite_limit_selection_preserves_azimuth_density() -> None:
+    from alen.satellites import _select_visible_satellites
+
+    visible = [
+        {
+            "norad": 40000 + index,
+            "azimuth_deg": 15.0,
+            "elevation_deg": 25.0,
+            "groups": ["starlink"],
+        }
+        for index in range(800)
+    ] + [
+        {
+            "norad": 50000 + index,
+            "azimuth_deg": 195.0,
+            "elevation_deg": 25.0,
+            "groups": ["starlink"],
+        }
+        for index in range(200)
+    ]
+
+    selected = _select_visible_satellites(visible, 100)
+    first_sector = sum(float(item["azimuth_deg"]) < 30.0 for item in selected)
+    opposite_sector = sum(180.0 <= float(item["azimuth_deg"]) < 210.0 for item in selected)
+
+    assert len(selected) == 100
+    assert first_sector == 80
+    assert opposite_sector == 20
+
+
+def test_satellite_distribution_reports_real_sky_coverage() -> None:
+    from alen.satellites import _satellite_distribution
+
+    visible = [
+        {"norad": 1, "azimuth_deg": 5.0, "elevation_deg": 5.0},
+        {"norad": 2, "azimuth_deg": 35.0, "elevation_deg": 20.0},
+        {"norad": 3, "azimuth_deg": 185.0, "elevation_deg": 70.0},
+    ]
+
+    distribution = _satellite_distribution(visible)
+
+    assert distribution["azimuth_30deg_counts"][0] == 1
+    assert distribution["azimuth_30deg_counts"][1] == 1
+    assert distribution["azimuth_30deg_counts"][6] == 1
+    assert sum(distribution["equal_solid_angle_elevation_counts"]) == 3
+    assert distribution["occupied_cells"] == 3
