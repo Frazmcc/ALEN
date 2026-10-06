@@ -8,8 +8,7 @@ import {
   defaultAircraftGroupState,
   type AircraftGroupState,
 } from '@/live/aircraftGroups';
-
-const STORAGE_KEY = 'alen.mobile.skyPreferences.v1';
+import { SKY_PREFERENCES_SKY_PREFERENCES_STORAGE_KEY } from '@/storage/keys';
 
 export type PersistedSkyPreferences = {
   stars: boolean;
@@ -56,7 +55,7 @@ export async function loadSkyPreferences() {
   const defaults = defaultSkyPreferences();
 
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(SKY_PREFERENCES_STORAGE_KEY);
     if (!raw) return defaults;
 
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -100,8 +99,17 @@ export async function saveSkyPreferences(input: {
   };
 
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    await AsyncStorage.setItem(SKY_PREFERENCES_STORAGE_KEY, JSON.stringify(payload));
   } catch {
     // Preference persistence must never break the live sky.
+  }
+}
+
+export async function clearSkyPreferences() {
+  try {
+    await AsyncStorage.removeItem(SKY_PREFERENCES_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
   }
 }
