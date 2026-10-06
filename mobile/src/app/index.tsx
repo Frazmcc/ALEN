@@ -1,10 +1,14 @@
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { StarField } from '@/components/StarField';
 import { colors } from '@/theme/colors';
 
 export default function WelcomeScreen() {
+  const { width, height } = useWindowDimensions();
+  const compactLandscape = width > height && height < 620;
+  const titleSize = width >= 900 ? 54 : 44;
+
   return (
     <AppScreen withNav={false}>
       <View style={{ flex: 1, overflow: 'hidden', backgroundColor: colors.background }}>
@@ -46,7 +50,7 @@ export default function WelcomeScreen() {
           <Text
             style={{
               color: colors.text,
-              fontSize: 44,
+              fontSize: titleSize,
               fontWeight: '300',
               letterSpacing: 12,
               marginLeft: 12,
@@ -65,7 +69,7 @@ export default function WelcomeScreen() {
             Your window to the real sky
           </Text>
 
-          <View style={{ height: 150 }} />
+          <View style={{ height: compactLandscape ? 54 : 150 }} />
 
           <Pressable
             accessibilityRole="button"
