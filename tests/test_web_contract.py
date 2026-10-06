@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.9' in HTML
+    assert './app.js?v=1.6.10' in HTML
     assert './styles.css?v=0.9.2' in HTML
 
 
