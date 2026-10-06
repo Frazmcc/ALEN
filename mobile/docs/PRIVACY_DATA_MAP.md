@@ -15,7 +15,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 | Advertising ID | No | No | No | No | N/A | N/A |
 | Contacts | No | No | No | No | N/A | N/A |
 | Photos/media | No | No | No | No | N/A | N/A |
-| Camera | No | No | No | No | Planned AR feature; not implemented yet | N/A |
+| Camera | Optional | No | No | No | Rear-camera preview for AR Sky alignment | Active AR screen only |
 | Motion/orientation | Optional | No | No | No | Align the live sky while Aim with phone is enabled | Current foreground session only |
 | Crash diagnostics | No | No | No | No | Not configured yet | N/A |
 | Analytics | No | No | No | No | Not configured yet | N/A |
@@ -41,6 +41,15 @@ Update this file whenever a feature changes what data is collected, processed, s
 - The current mobile build does not load third-party satellite or aircraft imagery. Object-image support remains a future mobile feature and will require this data map to be reviewed before release.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
 - Manual coordinates may be persisted locally because they are explicitly entered as an observer location. They stay local unless the user enables Satellites or Aircraft, in which case the active manual observer coordinate is sent to the ALEN API for that live layer in the same way as a device-derived observer.
+
+## Camera behaviour
+
+- Camera permission is requested only from the AR Sky screen.
+- AR Sky uses the rear-camera preview only; the current implementation does not capture, save or upload photos or video.
+- Microphone recording is disabled in the camera configuration.
+- Camera frames are not sent to the ALEN API.
+- Camera alignment uses the same on-device astronomy, location, compass and motion calculations as the live sky.
+- Camera AR uses the physical device location rather than a manually selected remote observer location.
 
 ## Motion/orientation rules
 

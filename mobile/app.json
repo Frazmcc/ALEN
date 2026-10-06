@@ -35,6 +35,13 @@
         {
           "motionPermission": "ALEN uses motion sensors while Aim with phone is enabled to align the live sky with the direction you point your device."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ALEN uses the camera only while AR Sky is open so astronomical overlays can be aligned with the real sky.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "experiments": {

@@ -60,10 +60,14 @@ Status:
 - [~] Aircraft
 
 ## M4 - AR
-- [ ] Camera sky mode
-- [ ] Real-world alignment
+- [~] Camera sky mode baseline with rear-camera preview
+- [~] Real-world star/planet alignment using observer position and device pointing
 - [~] Drift/calibration correction
-- [ ] Native privacy and camera permission flow
+- [x] Camera permission requested only from the AR screen
+- [x] Camera preview does not capture or persist photos/video
+- [x] AR field-of-view adjustment baseline for device-lens calibration
+- [ ] Real-device camera/sensor alignment validation
+- [ ] Lens-specific calibration profiles
 
 ## M5 - Reliability and Offline
 - [~] Local star catalogue
