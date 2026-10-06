@@ -23,6 +23,13 @@ import {
 import { projectAltAz } from '@/sky/projection';
 import { useObserverLocation } from '@/location/useObserverLocation';
 import { useDevicePointing } from '@/orientation/useDevicePointing';
+import {
+  lensProfile,
+  loadArCalibration,
+  nextLensProfile,
+  saveArCalibration,
+  type ArLensProfileId,
+} from '@/preferences/arCalibration';
 
 const AR_STARS = BRIGHT_STARS.filter((star) => star.mag <= 4.5);
 
@@ -35,7 +42,9 @@ export default function ArScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [now, setNow] = useState(Date.now());
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
+  const [lensProfileId, setLensProfileId] = useState<ArLensProfileId>('standard');
   const [fov, setFov] = useState(68);
+  const [calibrationLoaded, setCalibrationLoaded] = useState(false);
 
   const {
     observer,
@@ -69,6 +78,38 @@ export default function ArScreen() {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void loadArCalibration().then((preference) => {
+      if (!mounted) return;
+      setLensProfileId(preference.profileId);
+      setFov(preference.fov);
+      setCalibrationLoaded(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!calibrationLoaded) return;
+
+    void saveArCalibration({
+      profileId: lensProfileId,
+      fov,
+    });
+  }, [calibrationLoaded, fov, lensProfileId]);
+
+  const selectedLensProfile = lensProfile(lensProfileId);
+
+  function cycleLensProfile() {
+    const nextProfile = nextLensProfile(lensProfileId);
+    setLensProfileId(nextProfile.id);
+    setFov(nextProfile.defaultFov);
+  }
 
   const stars = useMemo(
     () =>
@@ -499,57 +540,89 @@ export default function ArScreen() {
                     position: 'absolute',
                     right: 18,
                     bottom: 18,
-                    flexDirection: 'row',
-                    alignItems: 'center',
+                    alignItems: 'flex-end',
                     gap: 6,
-                    padding: 6,
-                    borderRadius: 14,
-                    backgroundColor: 'rgba(2,7,17,0.84)',
-                    borderWidth: 1,
-                    borderColor: colors.border,
                   }}
                 >
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Decrease AR field of view"
-                    onPress={() => setFov((value) => clamp(value - 3, 45, 100))}
+                    accessibilityLabel="Change AR lens calibration profile"
+                    onPress={cycleLensProfile}
                     style={{
-                      width: 36,
-                      height: 36,
-                      alignItems: 'center',
+                      minHeight: 34,
                       justifyContent: 'center',
-                      borderRadius: 10,
-                      backgroundColor: colors.panelSoft,
+                      paddingHorizontal: 12,
+                      borderRadius: 11,
+                      backgroundColor: 'rgba(2,7,17,0.84)',
+                      borderWidth: 1,
+                      borderColor: colors.border,
                     }}
                   >
-                    <Text style={{ color: colors.text, fontSize: 18 }}>−</Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontSize: 9,
+                        fontWeight: '700',
+                      }}
+                    >
+                      Lens · {selectedLensProfile.label}
+                    </Text>
                   </Pressable>
-                  <Text
+
+                  <View
                     style={{
-                      width: 50,
-                      color: colors.text,
-                      fontSize: 10,
-                      textAlign: 'center',
-                      fontWeight: '700',
-                    }}
-                  >
-                    {Math.round(fov)}° FOV
-                  </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Increase AR field of view"
-                    onPress={() => setFov((value) => clamp(value + 3, 45, 100))}
-                    style={{
-                      width: 36,
-                      height: 36,
+                      flexDirection: 'row',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: 10,
-                      backgroundColor: colors.panelSoft,
+                      gap: 6,
+                      padding: 6,
+                      borderRadius: 14,
+                      backgroundColor: 'rgba(2,7,17,0.84)',
+                      borderWidth: 1,
+                      borderColor: colors.border,
                     }}
                   >
-                    <Text style={{ color: colors.text, fontSize: 18 }}>+</Text>
-                  </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Decrease AR field of view"
+                      onPress={() => setFov((value) => clamp(value - 3, 45, 100))}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 10,
+                        backgroundColor: colors.panelSoft,
+                      }}
+                    >
+                      <Text style={{ color: colors.text, fontSize: 18 }}>−</Text>
+                    </Pressable>
+                    <Text
+                      style={{
+                        width: 50,
+                        color: colors.text,
+                        fontSize: 10,
+                        textAlign: 'center',
+                        fontWeight: '700',
+                      }}
+                    >
+                      {Math.round(fov)}° FOV
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Increase AR field of view"
+                      onPress={() => setFov((value) => clamp(value + 3, 45, 100))}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 10,
+                        backgroundColor: colors.panelSoft,
+                      }}
+                    >
+                      <Text style={{ color: colors.text, fontSize: 18 }}>+</Text>
+                    </Pressable>
+                  </View>
                 </View>
 
                 <Pressable
