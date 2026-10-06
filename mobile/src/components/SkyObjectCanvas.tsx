@@ -226,16 +226,47 @@ export const SkyObjectCanvas = memo(function SkyObjectCanvas({
               x={0}
               y={Math.max(0, horizonY)}
               width={Math.max(1, viewport.width)}
-              height={Math.max(0, viewport.height - horizonY)}
-              color="#03080b"
-            />
+              height={Math.max(
+                1,
+                Math.min(
+                  96,
+                  Math.max(1, viewport.height - horizonY),
+                ),
+              )}
+            >
+              <LinearGradient
+                start={vec(0, Math.max(0, horizonY))}
+                end={vec(
+                  0,
+                  Math.min(
+                    viewport.height,
+                    Math.max(0, horizonY) + 96,
+                  ),
+                )}
+                colors={[
+                  skyColors.horizon,
+                  '#081116',
+                  '#03080b',
+                ]}
+                positions={[0, 0.42, 1]}
+              />
+            </Rect>
             <Rect
               x={0}
-              y={Math.max(0, horizonY - 1)}
+              y={Math.min(
+                viewport.height,
+                Math.max(0, horizonY) + 96,
+              )}
               width={Math.max(1, viewport.width)}
-              height={2}
-              color={skyColors.horizon}
-              opacity={0.7}
+              height={Math.max(
+                0,
+                viewport.height -
+                  Math.min(
+                    viewport.height,
+                    Math.max(0, horizonY) + 96,
+                  ),
+              )}
+              color="#03080b"
             />
           </>
         ) : null}
