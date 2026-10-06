@@ -768,7 +768,7 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert '"azimuth_deg_next"' in source
     assert '"azimuth_deg_next2"' in source
 
-    assert "const SATELLITE_GRACE_MS=30000" in APP
+    assert "const SATELLITE_ERROR_GRACE_MS=30000" in APP
     assert "const SATELLITE_POSITION_RESPONSE_MS=420" in APP
     assert "function satelliteTrajectory(raw,horizonSeconds=2)" in APP
     assert "function satelliteTrajectorySample(points,elapsedMs)" in APP
@@ -904,3 +904,13 @@ def test_emergency_aircraft_use_regional_service_representative_before_model() -
     regional = APP.index("if(await loadRegionalServicePhoto(o,image,credit,token))return true")
     model = APP.index("image.onerror=null;image.src=exactAircraftModelSvg(o)", regional)
     assert regional < model
+
+
+def test_satellite_refresh_does_not_create_successful_response_ghosts() -> None:
+    assert 'groups:sources.join(","),limit:"500"' in APP
+    assert "const nextIds=new Set(next.map(s=>s.id))" not in APP
+    assert "SATELLITE_ERROR_GRACE_MS" in APP
+    assert (
+        "satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)"
+        "<=SATELLITE_ERROR_GRACE_MS)"
+    ) in APP
