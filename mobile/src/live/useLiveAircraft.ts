@@ -54,6 +54,7 @@ export function useLiveAircraft(
   const tracksRef = useRef<AircraftTrack[]>([]);
   const failureCountRef = useRef(0);
   const retryAfterRef = useRef(0);
+  const requestScopeRef = useRef<string | null>(null);
 
   useEffect(() => {
     tracksRef.current = tracks;
@@ -226,11 +227,22 @@ export function useLiveAircraft(
 
     if (!enabled) {
       resetRetryState();
+      requestScopeRef.current = null;
       clearLiveTracks('off');
       return;
     }
 
-    resumeFresh();
+    const requestScope = `${observer.lat}|${observer.lon}`;
+    const scopeChanged = requestScopeRef.current !== requestScope;
+    requestScopeRef.current = requestScope;
+
+    if (scopeChanged) {
+      resetRetryState();
+      clearLiveTracks('loading');
+      void refresh(true);
+    } else {
+      resumeFresh();
+    }
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void refresh();
     }, REFRESH_MS);
