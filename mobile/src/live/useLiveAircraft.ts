@@ -183,17 +183,26 @@ export function useLiveAircraft(
   }, [enabled, observer.lat, observer.lon]);
 
   useEffect(() => {
-    if (!enabled) {
+    const clearLiveTracks = (nextStatus: AircraftFeedStatus) => {
       abortRef.current?.abort();
       abortRef.current = null;
       tracksRef.current = [];
       setTracks([]);
-      setStatus('off');
+      setStatus(nextStatus);
       setError(null);
+    };
+
+    const resumeFresh = () => {
+      clearLiveTracks('loading');
+      void refresh();
+    };
+
+    if (!enabled) {
+      clearLiveTracks('off');
       return;
     }
 
-    void refresh();
+    resumeFresh();
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void refresh();
     }, REFRESH_MS);
@@ -202,12 +211,11 @@ export function useLiveAircraft(
       'change',
       (nextState: AppStateStatus) => {
         if (nextState === 'active') {
-          void refresh();
+          resumeFresh();
           return;
         }
 
-        abortRef.current?.abort();
-        abortRef.current = null;
+        clearLiveTracks('loading');
       },
     );
 
