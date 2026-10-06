@@ -53,9 +53,9 @@ Status:
 - [x] Show in Sky handoff
 - [x] Native object detail presentation
 - [x] Single-selection/deselect and centre action across stars, planets and live objects
-- [ ] Object images and richer facts
+- [x] Rich satellite and aircraft facts with proxied imagery
 - [~] Distance/depth cues
-- [ ] Search filters/categories
+- [x] Search filters/categories
 - [~] Satellites
 - [~] Aircraft
 
