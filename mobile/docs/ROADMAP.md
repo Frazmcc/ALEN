@@ -31,7 +31,7 @@ Status:
 - [~] Seamless horizon-anchored atmosphere gradient
 - [ ] Full website terrain fidelity
 - [~] Background/foreground resume resynchronisation baseline; real-device validation pending
-- [ ] Responsive landscape/tablet layout
+- [x] Responsive landscape/tablet layout baseline with navigation rail and bounded content widths
 
 ## M2 - Device Position
 - [x] User-triggered foreground location

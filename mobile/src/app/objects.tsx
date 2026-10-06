@@ -226,7 +226,15 @@ export default function ObjectsScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StarField />
 
-        <View style={{ paddingHorizontal: 18, paddingTop: 18 }}>
+        <View
+          style={{
+            width: '100%',
+            maxWidth: 1040,
+            alignSelf: 'center',
+            paddingHorizontal: 18,
+            paddingTop: 18,
+          }}
+        >
           <Text
             style={{
               color: colors.text,
@@ -377,6 +385,9 @@ export default function ObjectsScreen() {
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
+            width: '100%',
+            maxWidth: 1040,
+            alignSelf: 'center',
             paddingHorizontal: 18,
             paddingTop: 12,
             paddingBottom: 28,
