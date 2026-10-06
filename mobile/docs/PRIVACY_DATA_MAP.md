@@ -41,6 +41,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 - The current mobile build does not load third-party satellite or aircraft imagery. Object-image support remains a future mobile feature and will require this data map to be reviewed before release.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
 - Manual coordinates may be persisted locally because they are explicitly entered as an observer location. They stay local unless the user enables Satellites or Aircraft, in which case the active manual observer coordinate is sent to the ALEN API for that live layer in the same way as a device-derived observer.
+- The More screen can clear the saved observer preference and persisted sky display preferences. This does not revoke operating-system permissions.
 
 ## Camera behaviour
 
