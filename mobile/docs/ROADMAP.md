@@ -28,7 +28,7 @@ Status:
 - [x] Constellation guide lines and native sky-layer controls
 - [x] Live satellite and aircraft Skia overlays with filtering, selection, depth cues and manual recovery
 - [x] Native tap selection in the sky
-- [~] Seamless horizon-anchored atmosphere gradient
+- [x] Seamless horizon-anchored atmosphere gradient with blended ground transition
 - [ ] Full website terrain fidelity
 - [~] Background/foreground resume resynchronisation baseline; real-device validation pending
 - [x] Responsive landscape/tablet layout baseline with navigation rail and bounded content widths
