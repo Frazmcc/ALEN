@@ -774,13 +774,13 @@ export default function SkyScreen() {
                     : 'Off · no location sent'
           }
           satelliteError={satelliteError}
-          onRetrySatellites={() => void refreshSatellites()}
+          onRetrySatellites={() => void refreshSatellites(true)}
           satelliteGroups={satelliteGroups}
           onToggleSatelliteGroup={toggleSatelliteGroup}
           aircraftGroups={aircraftGroups}
           onToggleAircraftGroup={toggleAircraftGroup}
           aircraftError={aircraftError}
-          onRetryAircraft={() => void refreshAircraft()}
+          onRetryAircraft={() => void refreshAircraft(true)}
           aircraftSummary={
             aircraftStatus === 'live'
               ? `${visibleAircraftTracks.length} nearby · labels off`
