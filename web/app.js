@@ -818,7 +818,7 @@ function logicalSatelliteMemberships(sourceGroups){
 }
 const SATELLITE_REFRESH_MS=10000;
 const SATELLITE_MAX_SAMPLE_AGE_MS=10000;
-const SATELLITE_GRACE_MS=30000;
+const SATELLITE_ERROR_GRACE_MS=30000;
 const SATELLITE_POSITION_RESPONSE_MS=420;
 const SATELLITE_MAX_FRAME_DT_MS=250;
 const MAX_SATELLITE_LABELS=18;
@@ -953,7 +953,7 @@ async function refreshSatellites(force=false){
   }
   const qs=new URLSearchParams({
    lat:String(observer.lat),lon:String(observer.lon),altitude_m:String(observer.altM||0),
-   groups:sources.join(","),limit:"320"
+   groups:sources.join(","),limit:"500"
   });
   const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal});
   if(!res.ok)throw new Error("satellites "+res.status);
@@ -986,13 +986,6 @@ async function refreshSatellites(force=false){
    sat.lastFrame=snapToFresh?frameNow:(prior?.lastFrame??frameNow);sat.lastSeenAt=wallNow;
    next.push(sat);
   }
-  const nextIds=new Set(next.map(s=>s.id));
-  if(!snapToFresh){
-   for(const prior of previous.values()){
-    if(nextIds.has(prior.id))continue;
-    if(wallNow-(Number(prior.lastSeenAt)||wallNow)<=SATELLITE_GRACE_MS)next.push(prior);
-   }
-  }
   satellites=next;
   if(snapToFresh){
    satelliteSnapOnRefresh=false;
@@ -1000,7 +993,7 @@ async function refreshSatellites(force=false){
   }
  }catch(e){
   const wallNow=Date.now();
-  satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)<=SATELLITE_GRACE_MS);
+  satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)<=SATELLITE_ERROR_GRACE_MS);
   satelliteDiagnostics=satelliteDiagnostics||{unique_orbits:satellites.length};
   satelliteRequestState=satellites.length?"stale":"error";
   if(e?.name!=="AbortError")console.warn("ALEN satellite feed unavailable; retaining recent satellites",e);
