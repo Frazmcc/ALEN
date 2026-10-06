@@ -461,8 +461,8 @@ function setLiveStatus(){
  if(layers.aircraft)parts.push(`${a} aircraft`);
  if(layers.satellites){
    const loaded=satelliteDiagnostics?.unique_orbits;
-   if(satelliteRequestState==="error")parts.push("satellite feed unavailable");
-   else if(satelliteRequestState==="stale")parts.push(`${s} satellites · feed reconnecting`);
+   if(satelliteRequestState==="error")parts.push(satelliteDiagnostics?.complete===false?"satellite catalogue incomplete":"satellite feed unavailable");
+   else if(satelliteRequestState==="stale")parts.push(`${s} satellites · catalogue reconnecting`);
    else if(satelliteRequestState==="requesting"&&satelliteDiagnostics===null)parts.push("satellites loading…");
    else parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
  }
@@ -964,6 +964,10 @@ async function refreshSatellites(force=false){
    return;
   }
   satelliteDiagnostics=data.diagnostics||null;
+  if(satelliteDiagnostics?.complete===false){
+   const missing=Array.isArray(satelliteDiagnostics?.missing_groups)?satelliteDiagnostics.missing_groups.filter(Boolean):[];
+   throw new Error("satellite catalogue incomplete"+(missing.length?": "+missing.join(", "):""));
+  }
   satelliteRequestState="ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
   const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,SATELLITE_MAX_SAMPLE_AGE_MS);
