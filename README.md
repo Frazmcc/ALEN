@@ -46,6 +46,16 @@ Aircraft imagery is resolved from public aircraft identifiers and displayed in t
 - If no exact-model reference exists, the inspector shows an explicit unavailable state rather than substituting a similar aircraft.
 - Regional representative imagery is identified in the inspector as representative rather than as the exact airframe.
 
+## Satellite sky integrity
+
+Satellite rendering distinguishes a complete live-sky snapshot from a partial upstream catalogue response.
+
+- A requested satellite snapshot is treated as complete only when every requested orbital group has loaded successfully.
+- If a refresh is incomplete, the website keeps the last complete satellite sky instead of replacing it with a misleading partial distribution.
+- When a response exceeds the display limit, sampling preserves the measured density across azimuth and equal-solid-angle elevation cells rather than selecting by catalogue-number order alone.
+- Priority objects such as stations and bright visual satellites are favoured within each sky cell without flattening or artificially spreading the real orbital distribution.
+- Runtime diagnostics expose requested groups, missing groups, completeness and before/after sky-distribution counts for validation.
+
 ## Satellite imagery
 
 Satellite images are resolved independently from orbital-position data.
