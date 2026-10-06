@@ -15,15 +15,56 @@ ALEN is a browser-first immersive live-sky website for exploring the night sky, 
 
 Early development.
 
-## Visual fidelity north star
+## Visual fidelity
 
-ALEN is an observer-first sky simulation. The target experience is the view a human would have while standing outdoors at the selected location, date, time, and eye height, looking in the same direction.
+ALEN is an observer-first sky simulation. The target experience is the view from the selected location, date, time and eye height while looking in the same direction.
 
-- Sky-object angular position, motion, horizon, terrain, atmospheric effects, field of view, and orientation should be derived from the real observer geometry rather than arranged for convenience.
-- Objects that are point-like to the unaided eye, including most satellites, should remain point-like in the main sky view. UI decoration must not make the sky materially less realistic.
-- Distance/depth is a required part of the experience. Where human vision alone cannot recover physical range, ALEN should preserve a subtle visual depth cue and expose the accurate observer-relative distance immediately on selection.
-- Labels and overlays are secondary information layers. They should default to the least intrusive state needed for a natural sky view and must not obscure the underlying geometry.
-- The long-term validation target is camera-overlay alignment: after location, time, camera orientation, lens field of view, and calibration are known, a camera pointed at the real sky from that location should line up with ALEN as closely as the source data and sensor accuracy allow.
+- Sky-object angular position, motion, horizon, terrain, atmospheric effects, field of view and orientation are derived from observer geometry.
+- Objects that are point-like to the unaided eye, including most satellites, remain visually compact in the main sky view.
+- Distance and depth information is preserved where source data allows it and is exposed on object selection.
+- Labels and overlays remain secondary to the sky geometry and can be reduced or disabled.
+- Long-term visual validation is based on camera-overlay alignment using location, time, camera orientation, field of view and calibration.
 
-This is a product-level requirement for future rendering and data-source decisions, not just a satellite-display preference.
+## Horizon and terrain
 
+The landscape renderer separates the local geometric horizon from the distant terrain profile.
+
+- The foreground ground plane is anchored to the local 0° geometric horizon.
+- Distant hills and mountains are derived from sampled terrain elevation by azimuth.
+- Observer eye height and Earth curvature are included in terrain-angle calculations.
+- Terrain remains part of sky-object occlusion, so objects below the local skyline are hidden naturally.
+
+## Aircraft imagery
+
+Aircraft imagery is resolved from public aircraft identifiers and displayed in the inspector.
+
+- Exact-airframe photographs are matched by ICAO hex and registration.
+- PlaneSpotters is the primary live photo source.
+- A photograph of a different registration is not used as the selected aircraft merely because it is the same type.
+- Police, air-ambulance/HEMS and coastguard/SAR aircraft can use a clearly labelled regional service representative image when an exact-airframe photo is unavailable.
+- Other aircraft fall back to a neutral, single-colour reference for the exact ICAO model where that model is supported.
+- If no exact-model reference exists, the inspector shows an explicit unavailable state rather than substituting a similar aircraft.
+- Regional representative imagery is identified in the inspector as representative rather than as the exact airframe.
+
+## Satellite imagery
+
+Satellite images are resolved independently from orbital-position data.
+
+- ISS Tracker is the primary satellite-image source and is resolved by NORAD catalogue number.
+- SatNOGS is the next image source when an ISS Tracker image is unavailable.
+- Wikimedia Commons is used as a further fallback.
+- If no verified public image is available, ALEN keeps its local satellite illustration.
+- CelesTrak remains an orbital/catalogue data source rather than a photo source.
+
+## Data and image sources
+
+Current public sources include:
+
+- CelesTrak for satellite orbital/catalogue data.
+- SatNOGS for satellite metadata and fallback imagery.
+- ISS Tracker for primary satellite imagery.
+- PlaneSpotters for aircraft imagery.
+- Wikimedia Commons for selected fallback imagery.
+- ADS-B data for live aircraft position and movement.
+
+Source availability can vary. ALEN keeps local visual fallbacks so object selection remains usable when an external image source has no matching asset or is temporarily unavailable.
