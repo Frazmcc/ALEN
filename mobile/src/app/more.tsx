@@ -14,6 +14,7 @@ import { StarField } from '@/components/StarField';
 import { useObserverLocation } from '@/location/useObserverLocation';
 import { colors } from '@/theme/colors';
 import { clearSkyPreferences } from '@/preferences/skyPreferences';
+import { clearArCalibration } from '@/preferences/arCalibration';
 
 const WEBSITE_URL = 'https://frazmcc.github.io/ALEN';
 const SOURCE_URL = 'https://github.com/Frazmcc/ALEN';
@@ -125,7 +126,7 @@ export default function MoreScreen() {
   function confirmClearLocalData() {
     Alert.alert(
       'Clear ALEN local data?',
-      'This clears the saved observer choice and sky display preferences stored by ALEN on this device. It does not revoke system permissions or delete any server-side data.',
+      'This clears the saved observer choice, sky display preferences and AR lens calibration stored by ALEN on this device. It does not revoke system permissions or delete any server-side data.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -133,14 +134,15 @@ export default function MoreScreen() {
           style: 'destructive',
           onPress: () => {
             void (async () => {
-              const [skyCleared, observerCleared] = await Promise.all([
+              const [skyCleared, arCleared, observerCleared] = await Promise.all([
                 clearSkyPreferences(),
+                clearArCalibration(),
                 clearSavedObserver(),
               ]);
 
               setLocalDataStatus(
-                skyCleared && observerCleared
-                  ? 'ALEN local data cleared. The observer is now the Greenwich demo and sky settings will use defaults.'
+                skyCleared && arCleared && observerCleared
+                  ? 'ALEN local data cleared. The observer is now the Greenwich demo, sky settings will use defaults and AR lens calibration has been reset.'
                   : 'Some local data could not be cleared. The active observer has been reset where possible.',
               );
             })();
@@ -260,6 +262,7 @@ export default function MoreScreen() {
             <InfoRow label="Saved GPS coordinates" value="None" />
             <InfoRow label="Manual observer" value="Stored on-device when selected" />
             <InfoRow label="Sky layer preferences" value="Stored on-device" />
+            <InfoRow label="AR lens calibration" value="Stored on-device" />
             <InfoRow label="Live aircraft/satellite cache" value="Not persisted on-device" />
 
             <View
