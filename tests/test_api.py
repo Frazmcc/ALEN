@@ -989,3 +989,51 @@ def test_regional_service_lookup_requires_supported_service_and_region() -> None
     assert provider.find_regional_service("commercial", "Scotland", "B38M", "") is None
     assert provider.find_regional_service("police", "", "EC35", "") is None
     assert provider.find_regional_service("commercial", "", "B38M", "Example Airline") is None
+
+
+def test_satellite_limit_selection_is_not_elevation_biased() -> None:
+    from alen.satellites import _select_visible_satellites
+
+    visible = [
+        {
+            "norad": 10000 + index,
+            "elevation_deg": float(index % 90),
+            "groups": ["starlink"],
+        }
+        for index in range(1000)
+    ]
+
+    selected = _select_visible_satellites(visible, 100)
+    elevations = [float(item["elevation_deg"]) for item in selected]
+
+    assert len(selected) == 100
+    assert min(elevations) < 20
+    assert max(elevations) > 70
+    assert sum(elevations) / len(elevations) < 60
+
+
+def test_satellite_limit_selection_preserves_priority_groups() -> None:
+    from alen.satellites import _select_visible_satellites
+
+    priority = [
+        {
+            "norad": 20000 + index,
+            "elevation_deg": float(index),
+            "groups": ["stations"] if index % 2 == 0 else ["visual"],
+        }
+        for index in range(12)
+    ]
+    regular = [
+        {
+            "norad": 30000 + index,
+            "elevation_deg": float(index % 90),
+            "groups": ["starlink"],
+        }
+        for index in range(500)
+    ]
+
+    selected = _select_visible_satellites(priority + regular, 100)
+    selected_norads = {int(item["norad"]) for item in selected}
+
+    assert len(selected) == 100
+    assert {int(item["norad"]) for item in priority} <= selected_norads
