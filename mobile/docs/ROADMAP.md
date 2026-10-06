@@ -54,7 +54,7 @@ Status:
 - [x] Native object detail presentation
 - [x] Single-selection/deselect and centre action across stars, planets and live objects
 - [x] Rich satellite and aircraft facts with proxied imagery
-- [~] Distance/depth cues
+- [x] Distance/depth cues with range-aware sizing, opacity and far-to-near draw order
 - [x] Search filters/categories
 - [~] Satellites
 - [~] Aircraft
