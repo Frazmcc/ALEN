@@ -109,6 +109,8 @@ export default function SkyScreen() {
   const {
     tracks: satelliteTracks,
     status: satelliteStatus,
+    error: satelliteError,
+    refresh: refreshSatellites,
   } = useLiveSatellites(
     observer,
     layers.satellites,
@@ -124,6 +126,8 @@ export default function SkyScreen() {
   const {
     tracks: aircraftTracks,
     status: aircraftStatus,
+    error: aircraftError,
+    refresh: refreshAircraft,
   } = useLiveAircraft(observer, layers.aircraft);
   const visibleAircraftTracks = useMemo(
     () =>
@@ -769,10 +773,14 @@ export default function SkyScreen() {
                     ? 'Feed unavailable'
                     : 'Off · no location sent'
           }
+          satelliteError={satelliteError}
+          onRetrySatellites={() => void refreshSatellites()}
           satelliteGroups={satelliteGroups}
           onToggleSatelliteGroup={toggleSatelliteGroup}
           aircraftGroups={aircraftGroups}
           onToggleAircraftGroup={toggleAircraftGroup}
+          aircraftError={aircraftError}
+          onRetryAircraft={() => void refreshAircraft()}
           aircraftSummary={
             aircraftStatus === 'live'
               ? `${visibleAircraftTracks.length} nearby · labels off`
