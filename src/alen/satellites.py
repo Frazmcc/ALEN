@@ -229,9 +229,17 @@ class SatelliteProvider:
             key=lambda item: float(item["elevation_deg"]),
             reverse=True,
         )
+        missing_groups = [
+            group
+            for group in requested_groups
+            if loaded_by_group.get(group, 0) <= 0
+        ]
+        complete = not missing_groups and not fallback_used
         self.last_diagnostics = {
             "requested_groups": requested_groups,
             "loaded_by_group": loaded_by_group,
+            "missing_groups": missing_groups,
+            "complete": complete,
             "unique_orbits": len(merged),
             "propagated": propagated,
             "propagation_failures": propagation_failures,
@@ -239,7 +247,9 @@ class SatelliteProvider:
             "visible": visible_total,
             "returned": len(selected),
             "truncated": len(selected) < visible_total,
-            "selection_policy": "priority-plus-stable-unbiased-sample",
+            "selection_policy": "density-preserving-sky-stratified-priority-sample",
+            "sky_distribution": _satellite_distribution(visible),
+            "returned_sky_distribution": _satellite_distribution(selected),
             "fallback_used": fallback_used,
             "generated_at": now.isoformat(),
             "position_sample_at": sample_at.isoformat(),
@@ -653,33 +663,113 @@ def _stable_satellite_rank(item: dict[str, object]) -> tuple[int, int]:
     return ((norad * 2654435761) & 0xFFFFFFFF, norad)
 
 
+def _satellite_is_display_priority(item: dict[str, object]) -> bool:
+    groups = item.get("groups")
+    memberships = (
+        {str(value) for value in groups}
+        if isinstance(groups, list)
+        else set()
+    )
+    return bool(memberships & _SATELLITE_DISPLAY_PRIORITY_GROUPS)
+
+
+def _satellite_sky_cell(item: dict[str, object]) -> tuple[int, int]:
+    try:
+        azimuth = float(item.get("azimuth_deg", 0.0)) % 360.0
+    except (TypeError, ValueError):
+        azimuth = 0.0
+    try:
+        elevation = max(0.0, min(90.0, float(item.get("elevation_deg", 0.0))))
+    except (TypeError, ValueError):
+        elevation = 0.0
+
+    # Twelve azimuth sectors plus four equal-solid-angle elevation bands.
+    # sin(elevation) is proportional to hemisphere area, so these bands avoid
+    # over-weighting the narrow zenith region.
+    azimuth_bin = min(11, int(azimuth // 30.0))
+    elevation_bin = min(
+        3,
+        int(math.sin(math.radians(elevation)) * 4.0),
+    )
+    return azimuth_bin, elevation_bin
+
+
+def _density_preserving_satellite_sample(
+    items: list[dict[str, object]],
+    cap: int,
+) -> list[dict[str, object]]:
+    if len(items) <= cap:
+        return list(items)
+
+    cells: dict[tuple[int, int], list[dict[str, object]]] = {}
+    for item in items:
+        cells.setdefault(_satellite_sky_cell(item), []).append(item)
+
+    total = len(items)
+    quotas: dict[tuple[int, int], int] = {}
+    fractions: list[tuple[float, tuple[int, int]]] = []
+    allocated = 0
+    for key in sorted(cells):
+        ideal = len(cells[key]) * cap / total
+        quota = min(len(cells[key]), int(math.floor(ideal)))
+        quotas[key] = quota
+        allocated += quota
+        fractions.append((ideal - quota, key))
+
+    remaining = cap - allocated
+    for _fraction, key in sorted(
+        fractions,
+        key=lambda entry: (-entry[0], entry[1]),
+    ):
+        if remaining <= 0:
+            break
+        if quotas[key] < len(cells[key]):
+            quotas[key] += 1
+            remaining -= 1
+
+    if remaining > 0:
+        for key in sorted(cells):
+            while remaining > 0 and quotas[key] < len(cells[key]):
+                quotas[key] += 1
+                remaining -= 1
+            if remaining <= 0:
+                break
+
+    selected: list[dict[str, object]] = []
+    for key in sorted(cells):
+        ordered = sorted(
+            cells[key],
+            key=lambda item: (
+                0 if _satellite_is_display_priority(item) else 1,
+                _stable_satellite_rank(item),
+            ),
+        )
+        selected.extend(ordered[: quotas[key]])
+    return selected
+
+
+def _satellite_distribution(items: list[dict[str, object]]) -> dict[str, object]:
+    azimuth_counts = [0] * 12
+    elevation_counts = [0] * 4
+    occupied_cells: set[tuple[int, int]] = set()
+    for item in items:
+        azimuth_bin, elevation_bin = _satellite_sky_cell(item)
+        azimuth_counts[azimuth_bin] += 1
+        elevation_counts[elevation_bin] += 1
+        occupied_cells.add((azimuth_bin, elevation_bin))
+    return {
+        "azimuth_30deg_counts": azimuth_counts,
+        "equal_solid_angle_elevation_counts": elevation_counts,
+        "occupied_cells": len(occupied_cells),
+    }
+
+
 def _select_visible_satellites(
     visible: list[dict[str, object]],
     limit: int,
 ) -> list[dict[str, object]]:
     cap = max(1, min(int(limit), 500))
-    if len(visible) <= cap:
-        return list(visible)
-
-    priority: list[dict[str, object]] = []
-    regular: list[dict[str, object]] = []
-    for item in visible:
-        groups = item.get("groups")
-        memberships = (
-            {str(value) for value in groups}
-            if isinstance(groups, list)
-            else set()
-        )
-        if memberships & _SATELLITE_DISPLAY_PRIORITY_GROUPS:
-            priority.append(item)
-        else:
-            regular.append(item)
-
-    priority.sort(key=_stable_satellite_rank)
-    regular.sort(key=_stable_satellite_rank)
-    if len(priority) >= cap:
-        return priority[:cap]
-    return priority + regular[: cap - len(priority)]
+    return _density_preserving_satellite_sample(visible, cap)
 
 
 def _ecef_from_tle(

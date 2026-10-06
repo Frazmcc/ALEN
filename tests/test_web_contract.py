@@ -914,3 +914,20 @@ def test_satellite_refresh_does_not_create_successful_response_ghosts() -> None:
         "satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)"
         "<=SATELLITE_ERROR_GRACE_MS)"
     ) in APP
+
+
+def test_satellite_catalogue_integrity_guardrails() -> None:
+    source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
+    assert '"missing_groups": missing_groups' in source
+    assert '"complete": complete' in source
+    assert '"selection_policy": "density-preserving-sky-stratified-priority-sample"' in source
+    assert '"sky_distribution": _satellite_distribution(visible)' in source
+    assert '"returned_sky_distribution": _satellite_distribution(selected)' in source
+    assert "def _satellite_sky_cell" in source
+    assert "def _density_preserving_satellite_sample" in source
+    assert "sin(elevation) is proportional to hemisphere area" in source
+
+    assert "if(satelliteDiagnostics?.complete===false)" in APP
+    assert "satellite catalogue incomplete" in APP
+    assert "satellite catalogue incomplete" in APP
+    assert "catalogue reconnecting" in APP
