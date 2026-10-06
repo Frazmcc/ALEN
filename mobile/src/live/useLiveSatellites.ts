@@ -51,14 +51,19 @@ export function useLiveSatellites(
   const tracksRef = useRef<SatelliteTrack[]>([]);
   const failureCountRef = useRef(0);
   const retryAfterRef = useRef(0);
+  const requestScopeRef = useRef<string | null>(null);
 
   useEffect(() => {
     tracksRef.current = tracks;
   }, [tracks]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
     if (!enabled) return;
-    if (Date.now() < retryAfterRef.current) return;
+    if (!force && Date.now() < retryAfterRef.current) return;
+    if (force) {
+      failureCountRef.current = 0;
+      retryAfterRef.current = 0;
+    }
 
     if (abortRef.current) return;
     const controller = new AbortController();
@@ -190,17 +195,29 @@ export function useLiveSatellites(
 
     const resumeFresh = () => {
       resetRetryState();
-      clearLiveTracks('loading');
-      void refresh();
+      setError(null);
+      setStatus(tracksRef.current.length ? 'stale' : 'loading');
+      void refresh(true);
     };
 
     if (!enabled || !sources.length) {
       resetRetryState();
+      requestScopeRef.current = null;
       clearLiveTracks('off');
       return;
     }
 
-    resumeFresh();
+    const requestScope = `${observer.lat}|${observer.lon}|${sources.join(',')}`;
+    const scopeChanged = requestScopeRef.current !== requestScope;
+    requestScopeRef.current = requestScope;
+
+    if (scopeChanged) {
+      resetRetryState();
+      clearLiveTracks('loading');
+      void refresh(true);
+    } else {
+      resumeFresh();
+    }
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void refresh();
     }, REFRESH_MS);
@@ -213,7 +230,9 @@ export function useLiveSatellites(
           return;
         }
 
-        clearLiveTracks('loading');
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setStatus(tracksRef.current.length ? 'stale' : 'loading');
       },
     );
 

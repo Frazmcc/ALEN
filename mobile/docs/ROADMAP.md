@@ -73,8 +73,8 @@ Status:
 - [~] Local star catalogue
 - [x] Local settings/cache policy and in-app reset controls
 - [~] Network-loss handling with stale/error states and bounded retry backoff; real-device validation pending
-- [~] Exponential API retry backoff for live satellite/aircraft feeds; broader cache integration pending
-- [~] Resume without elastic banding; lifecycle resync implemented, real-device validation pending
+- [x] Exponential API retry backoff with manual retry bypass and observer-scoped in-memory stale live-data cache
+- [~] Resume without elastic banding; lifecycle resync retains same-observer stale live tracks while refreshing, real-device validation pending
 - [ ] Battery/memory profiling
 - [ ] Long-session sensor stability tests
 
