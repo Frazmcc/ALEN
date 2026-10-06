@@ -195,11 +195,16 @@ export function sampleTrajectory(
     };
   }
 
-  const targetMs = Math.max(0, Number(elapsedMs) || 0);
+  const lastTimeMs = points[points.length - 1].timeMs;
+  const targetMs = clamp(
+    Math.max(0, Number(elapsedMs) || 0),
+    0,
+    lastTimeMs,
+  );
   let a = points[0];
   let b = points[1];
 
-  if (targetMs >= points[points.length - 1].timeMs) {
+  if (targetMs >= lastTimeMs) {
     a = points[points.length - 2];
     b = points[points.length - 1];
   } else {
@@ -216,7 +221,7 @@ export function sampleTrajectory(
   const fraction = clamp(
     (targetMs - a.timeMs) / span,
     0,
-    targetMs > b.timeMs ? 10 : 1,
+    1,
   );
   const vector = slerp(a.vec, b.vec, fraction);
   const horizontal = vectorToAltAz(vector);
