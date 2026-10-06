@@ -16,6 +16,9 @@ ALEN Mobile keeps persistent on-device data intentionally small.
   - landscape
   - satellite subgroup choices
   - aircraft subgroup choices
+- AR calibration preference:
+  - selected lens calibration profile
+  - adjusted field of view
 
 ## Not persisted on-device
 
@@ -33,6 +36,6 @@ ALEN Mobile keeps persistent on-device data intentionally small.
 The More screen exposes two local reset actions:
 
 - Reset sky preferences removes persisted display/layer choices.
-- Clear ALEN local data removes the saved observer preference and sky preferences, and immediately returns the active observer to the Greenwich demo.
+- Clear ALEN local data removes the saved observer preference, sky preferences and AR calibration preference, and immediately returns the active observer to the Greenwich demo.
 
 Clearing ALEN local data does not revoke Android/iOS permissions. System permissions remain controlled by the operating system.
