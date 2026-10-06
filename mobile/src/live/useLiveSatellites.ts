@@ -51,6 +51,7 @@ export function useLiveSatellites(
   const tracksRef = useRef<SatelliteTrack[]>([]);
   const failureCountRef = useRef(0);
   const retryAfterRef = useRef(0);
+  const requestScopeRef = useRef<string | null>(null);
 
   useEffect(() => {
     tracksRef.current = tracks;
@@ -201,11 +202,22 @@ export function useLiveSatellites(
 
     if (!enabled || !sources.length) {
       resetRetryState();
+      requestScopeRef.current = null;
       clearLiveTracks('off');
       return;
     }
 
-    resumeFresh();
+    const requestScope = `${observer.lat}|${observer.lon}|${sources.join(',')}`;
+    const scopeChanged = requestScopeRef.current !== requestScope;
+    requestScopeRef.current = requestScope;
+
+    if (scopeChanged) {
+      resetRetryState();
+      clearLiveTracks('loading');
+      void refresh(true);
+    } else {
+      resumeFresh();
+    }
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void refresh();
     }, REFRESH_MS);
