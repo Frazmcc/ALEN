@@ -8,7 +8,7 @@ import {
   defaultAircraftGroupState,
   type AircraftGroupState,
 } from '@/live/aircraftGroups';
-import { SKY_PREFERENCES_SKY_PREFERENCES_STORAGE_KEY } from '@/storage/keys';
+import { SKY_PREFERENCES_STORAGE_KEY } from '@/storage/keys';
 
 export type PersistedSkyPreferences = {
   stars: boolean;
