@@ -38,7 +38,7 @@ Update this file whenever a feature changes what data is collected, processed, s
 - The aircraft backend shares upstream snapshots by an approximately 1° geographic cell and may retain those shared snapshots for up to 60 seconds; exact observer coordinates are used for per-request distance filtering.
 - The mobile app does not send observer coordinates directly to CelesTrak, adsb.lol or another live-data provider.
 - When the user selects a satellite or aircraft, its public identifier may be sent to the ALEN API to retrieve public object metadata, route information and imagery; these detail lookups do not include observer coordinates.
-- Satellite, exact-aircraft and regional emergency-service images are loaded through ALEN proxy endpoints so the mobile app does not contact the upstream image host directly.
+- The current mobile build does not load third-party satellite or aircraft imagery. Object-image support remains a future mobile feature and will require this data map to be reviewed before release.
 - GPS coordinates themselves are not persisted. If the user selects current location, ALEN stores only the preference to use current location again.
 - Manual coordinates may be persisted locally because they are explicitly entered as an observer location. They stay local unless the user enables Satellites or Aircraft, in which case the active manual observer coordinate is sent to the ALEN API for that live layer in the same way as a device-derived observer.
 
