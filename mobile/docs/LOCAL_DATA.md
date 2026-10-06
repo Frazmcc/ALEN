@@ -25,8 +25,8 @@ ALEN Mobile keeps persistent on-device data intentionally small.
 - Current GPS coordinates.
 - Motion, compass or calibration sensor samples.
 - Camera frames.
-- Live aircraft positions.
-- Live satellite positions.
+- Live aircraft positions (same-observer stale tracks may remain in memory during a foreground reconnect, but are never written to persistent storage).
+- Live satellite positions (same-observer stale tracks may remain in memory during a foreground reconnect, but are never written to persistent storage).
 - Live route/object metadata responses.
 - Account data.
 - Advertising identifiers.
