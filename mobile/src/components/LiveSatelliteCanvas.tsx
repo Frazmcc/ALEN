@@ -76,10 +76,11 @@ export const LiveSatelliteCanvas = memo(function LiveSatelliteCanvas({
         id: track.id,
         ...point,
         color: track.color,
+        rangeKm: sample.rangeKm,
         depth: satelliteDepthCue(sample.rangeKm),
         selected: track.id === selectedId,
       }];
-    });
+    }).sort((a, b) => b.rangeKm - a.rangeKm);
   }, [frameNow, selectedId, tracks, viewport, visible]);
 
   if (!visible || !tracks.length) return null;
@@ -87,20 +88,6 @@ export const LiveSatelliteCanvas = memo(function LiveSatelliteCanvas({
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Canvas style={StyleSheet.absoluteFill}>
-        {points
-          .filter((satellite) => satellite.selected)
-          .map((satellite) => (
-            <Circle
-              key={`selected-${satellite.id}`}
-              cx={satellite.x}
-              cy={satellite.y}
-              r={satellite.depth.halo + 5}
-              color={colors.accent}
-              opacity={0.95}
-              style="stroke"
-              strokeWidth={2}
-            />
-          ))}
         {points.map((satellite) => (
           <Circle
             key={`halo-${satellite.id}`}
@@ -121,6 +108,20 @@ export const LiveSatelliteCanvas = memo(function LiveSatelliteCanvas({
             opacity={satellite.depth.opacity}
           />
         ))}
+        {points
+          .filter((satellite) => satellite.selected)
+          .map((satellite) => (
+            <Circle
+              key={`selected-${satellite.id}`}
+              cx={satellite.x}
+              cy={satellite.y}
+              r={satellite.depth.halo + 5}
+              color={colors.accent}
+              opacity={0.95}
+              style="stroke"
+              strokeWidth={2}
+            />
+          ))}
       </Canvas>
     </View>
   );
