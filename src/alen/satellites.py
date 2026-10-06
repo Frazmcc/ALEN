@@ -665,11 +665,11 @@ def _select_visible_satellites(
     regular: list[dict[str, object]] = []
     for item in visible:
         groups = item.get("groups")
-        memberships = {
-            str(value)
-            for value in groups
+        memberships = (
+            {str(value) for value in groups}
             if isinstance(groups, list)
-        }
+            else set()
+        )
         if memberships & _SATELLITE_DISPLAY_PRIORITY_GROUPS:
             priority.append(item)
         else:
