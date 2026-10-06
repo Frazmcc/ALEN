@@ -40,6 +40,7 @@ type DrawAircraft = {
   angle: number;
   size: number;
   opacity: number;
+  rangeKm: number;
   color: string;
   visualType: AircraftVisualType;
   selected: boolean;
@@ -210,11 +211,12 @@ export const LiveAircraftCanvas = memo(function LiveAircraftCanvas({
         angle,
         size: depth.size,
         opacity: depth.opacity,
+        rangeKm: horizontal.slantRangeKm,
         color: track.color,
         visualType: track.visualType,
         selected: track.id === selectedId,
       } satisfies DrawAircraft];
-    });
+    }).sort((a, b) => b.rangeKm - a.rangeKm);
   }, [frameNow, observer, selectedId, tracks, viewport, visible]);
 
   if (!visible || !aircraft.length) return null;
