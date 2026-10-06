@@ -3,6 +3,7 @@ import { clamp, norm360, type Observer } from '@/sky/astronomy';
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const EARTH_KM = 6371.0088;
+const MAX_AIRCRAFT_PREDICTION_MS = 12_000;
 
 export type RawAircraft = {
   hex?: string;
@@ -285,7 +286,11 @@ export function predictAircraft(
   track: AircraftTrack,
   nowMs: number,
 ): PredictedAircraft {
-  const elapsedMs = Math.max(0, nowMs - track.receivedAtMs);
+  const elapsedMs = clamp(
+    Math.max(0, nowMs - track.receivedAtMs),
+    0,
+    MAX_AIRCRAFT_PREDICTION_MS,
+  );
   const motionK = 1 - Math.exp(-elapsedMs / 1800);
   const altitudeK = 1 - Math.exp(-elapsedMs / 2200);
   const positionK = 1 - Math.exp(-elapsedMs / 4200);
