@@ -101,9 +101,10 @@ def _window_retry(window_seconds: int, now: float) -> int:
 def check_rate_limit(
     request: Request,
     *,
-    cache: SharedCache = shared_cache,
+    cache: SharedCache | None = None,
     now: float | None = None,
 ) -> RateDecision:
+    selected_cache = cache or shared_cache
     if not _enabled() or request.method.upper() != "GET":
         return RateDecision(True)
     path = request.url.path
@@ -120,7 +121,7 @@ def check_rate_limit(
         ("global-minute", 60, _scaled(policy.global_per_minute), f"global:{path}:60"),
     )
     for scope, window_seconds, limit, key in checks:
-        count = cache.increment_window(key, ttl_seconds=window_seconds + 2)
+        count = selected_cache.increment_window(key, ttl_seconds=window_seconds + 2)
         if count > limit:
             return RateDecision(
                 False,
@@ -160,12 +161,17 @@ def capacity(
     limit: int,
     *,
     ttl_seconds: int = 30,
-    cache: SharedCache = shared_cache,
+    cache: SharedCache | None = None,
 ) -> Iterator[None]:
-    slot = cache.acquire_slot(name, limit=max(1, int(limit)), ttl_seconds=ttl_seconds)
+    selected_cache = cache or shared_cache
+    slot = selected_cache.acquire_slot(
+        name,
+        limit=max(1, int(limit)),
+        ttl_seconds=ttl_seconds,
+    )
     if slot is None:
         raise CapacityExceeded(name)
     try:
         yield
     finally:
-        cache.release_slot(name, slot)
+        selected_cache.release_slot(name, slot)
