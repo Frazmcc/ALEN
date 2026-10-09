@@ -56,6 +56,21 @@ Satellite rendering distinguishes a complete live-sky snapshot from a partial up
 - Priority objects such as stations and bright visual satellites are favoured within each sky cell without flattening or artificially spreading the real orbital distribution.
 - Runtime diagnostics expose requested groups, missing groups, completeness and before/after sky-distribution counts for validation.
 
+## API traffic resilience
+
+The public API applies layered overload protection before expensive live-data work begins.
+
+- Per-client burst and per-minute request limits apply to every `/api/v1/` endpoint, with tighter limits for image and metadata proxy routes.
+- Service-wide request ceilings provide a second guard against distributed application-layer floods.
+- Limits are shared through Redis/Valkey when configured and fall back to bounded in-process counters if the distributed cache is unavailable.
+- Expensive satellite propagation, live aircraft work, metadata lookups and image proxying use bounded concurrency slots so queued traffic cannot occupy every worker.
+- Overloaded requests fail fast with HTTP `429 Too Many Requests`, `Retry-After` and `Cache-Control: no-store`.
+- Cloudflare/forwarded client addresses are used for request identity, and rate-limit events include the Cloudflare request identifier when present.
+- Wide-radius aircraft requests remain geographically quantised so small coordinate changes cannot create an unlimited stream of unique ADS-B upstream requests.
+- Existing stale-cache and request-coalescing behaviour remains active so normal traffic spikes reuse recent data rather than stampeding upstream providers.
+
+Rate limiting is enabled by default. Deployments can tune all limits together with the `ALEN_RATE_LIMIT_MULTIPLIER` environment variable or disable the application limiter with `ALEN_RATE_LIMITS_ENABLED=false` when an equivalent trusted edge policy is in place.
+
 ## Satellite imagery
 
 Satellite images are resolved independently from orbital-position data.
