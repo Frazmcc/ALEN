@@ -121,7 +121,12 @@ def check_rate_limit(
         ("global-minute", 60, _scaled(policy.global_per_minute), f"global:{path}:60"),
     )
     for scope, window_seconds, limit, key in checks:
-        count = selected_cache.increment_window(key, ttl_seconds=window_seconds + 2)
+        bucket = int(timestamp // window_seconds)
+        window_key = f"{key}:{bucket}"
+        count = selected_cache.increment_window(
+            window_key,
+            ttl_seconds=window_seconds + 2,
+        )
         if count > limit:
             return RateDecision(
                 False,
