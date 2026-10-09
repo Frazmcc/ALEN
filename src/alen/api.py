@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 import logging
 import math
 from time import time as unix_time
+from typing import Iterator
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -18,12 +20,26 @@ from .airports import AirportProvider
 from .cache import shared_cache
 from .satellites import SatelliteProvider
 from .satellite_info import SatelliteInfoProvider
+from .traffic import (
+    CapacityExceeded,
+    capacity,
+    check_rate_limit,
+    limited_response,
+)
 
 app = FastAPI(
     title="ALEN API",
     version=__version__,
     description="Backend services for Astronomical Live Environment & Navigation.",
 )
+
+@app.middleware("http")
+async def traffic_guard(request: Request, call_next):
+    decision = check_rate_limit(request)
+    if not decision.allowed:
+        return limited_response(request, decision)
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +66,27 @@ _logger = logging.getLogger("alen.satellites")
 SATELLITE_OBSERVER_CACHE_SECONDS = 8
 SATELLITE_OBSERVER_CELL_DEGREES = 0.005
 SATELLITE_OBSERVER_ALTITUDE_BUCKET_M = 100
+
+
+@contextmanager
+def _api_capacity(
+    name: str,
+    limit: int,
+    *,
+    ttl_seconds: int = 30,
+) -> Iterator[None]:
+    try:
+        with capacity(name, limit, ttl_seconds=ttl_seconds):
+            yield
+    except CapacityExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="ALEN API is temporarily at capacity",
+            headers={
+                "Retry-After": str(exc.retry_after),
+                "Cache-Control": "no-store",
+            },
+        ) from exc
 
 
 def _satellite_observer_cell(value: float, minimum: float, maximum: float) -> float:
@@ -157,13 +194,14 @@ def visible_satellites(
     if cached is not None:
         return cached
 
-    satellites = _satellites.visible(
-        lat,
-        lon,
-        altitude_m,
-        requested,
-        limit=limit,
-    )
+    with _api_capacity("satellite-propagation", 8, ttl_seconds=20):
+        satellites = _satellites.visible(
+            lat,
+            lon,
+            altitude_m,
+            requested,
+            limit=limit,
+        )
     diagnostics = dict(_satellites.last_diagnostics)
     diagnostics["observer_cache"] = "miss"
     diagnostics["observer_cache_age_seconds"] = 0.0
@@ -194,7 +232,8 @@ def satellite_photo(
     norad: int = Query(ge=1, le=999999999),
     name: str = Query(default="", max_length=120),
 ) -> dict[str, object]:
-    photo = _satellite_info.find_isstracker_photo(norad, name)
+    with _api_capacity("satellite-metadata", 8, ttl_seconds=30):
+        photo = _satellite_info.find_isstracker_photo(norad, name)
     if photo is None:
         return {"photo": None}
     return {
@@ -214,7 +253,8 @@ def satellite_info(
     norad: int = Query(ge=1, le=999999999),
     name: str = Query(default="", max_length=120),
 ) -> dict[str, object]:
-    info = _satellite_info.lookup(norad, name)
+    with _api_capacity("satellite-metadata", 8, ttl_seconds=30):
+        info = _satellite_info.lookup(norad, name)
     if info is None:
         return {"satellite": None}
 
@@ -235,13 +275,15 @@ def satellite_photo_image(
     norad: int = Query(ge=1, le=999999999),
     name: str = Query(default="", max_length=120),
 ) -> Response:
-    info = _satellite_info.lookup(norad, name)
+    with _api_capacity("image-proxy", 4, ttl_seconds=30):
+        info = _satellite_info.lookup(norad, name)
     if info is None:
         raise HTTPException(status_code=404, detail="Satellite not found")
     photo = info.get("photo")
     if not isinstance(photo, dict):
         raise HTTPException(status_code=404, detail="Satellite photo not found")
-    image = _satellite_info.image_bytes(photo)
+    with _api_capacity("image-proxy", 4, ttl_seconds=30):
+        image = _satellite_info.image_bytes(photo)
     if image is None:
         raise HTTPException(status_code=502, detail="Satellite photo source unavailable")
     body, media_type = image
@@ -262,12 +304,13 @@ def nearby_aircraft(
     radius_nm: float = Query(default=43.4488, ge=1.0, le=250.0),
     limit: int = Query(default=450, ge=1, le=500),
 ) -> dict[str, object]:
-    aircraft = _aircraft.nearby(
-        lat,
-        lon,
-        radius_nm=radius_nm,
-        limit=limit,
-    )
+    with _api_capacity("aircraft-live", 16, ttl_seconds=15):
+        aircraft = _aircraft.nearby(
+            lat,
+            lon,
+            radius_nm=radius_nm,
+            limit=limit,
+        )
     return {
         "aircraft": aircraft,
         "diagnostics": _aircraft.last_diagnostics,
@@ -280,7 +323,10 @@ def aircraft_photo(
     aircraft_type: str = Query(default="", max_length=64),
     icao_hex: str = Query(default="", max_length=12),
 ) -> dict[str, object]:
-    photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
+    if not registration.strip() and not icao_hex.strip():
+        return {"photo": None}
+    with _api_capacity("aircraft-metadata", 8, ttl_seconds=30):
+        photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
     if photo is None:
         return {"photo": None}
     image_query = "?" + urlencode(
@@ -311,12 +357,13 @@ def aircraft_service_photo(
     aircraft_type: str = Query(default="", max_length=32),
     operator: str = Query(default="", max_length=120),
 ) -> dict[str, object]:
-    photo = _aircraft_photos.find_regional_service(
-        service,
-        region,
-        aircraft_type,
-        operator,
-    )
+    with _api_capacity("aircraft-metadata", 8, ttl_seconds=30):
+        photo = _aircraft_photos.find_regional_service(
+            service,
+            region,
+            aircraft_type,
+            operator,
+        )
     if photo is None:
         return {"photo": None}
     image_query = "?" + urlencode(
@@ -350,15 +397,16 @@ def aircraft_service_photo_image(
     aircraft_type: str = Query(default="", max_length=32),
     operator: str = Query(default="", max_length=120),
 ) -> Response:
-    photo = _aircraft_photos.find_regional_service(
-        service,
-        region,
-        aircraft_type,
-        operator,
-    )
-    if photo is None:
-        raise HTTPException(status_code=404, detail="Regional service photo not found")
-    image = _aircraft_photos.image_bytes(photo)
+    with _api_capacity("image-proxy", 4, ttl_seconds=30):
+        photo = _aircraft_photos.find_regional_service(
+            service,
+            region,
+            aircraft_type,
+            operator,
+        )
+        if photo is None:
+            raise HTTPException(status_code=404, detail="Regional service photo not found")
+        image = _aircraft_photos.image_bytes(photo)
     if image is None:
         raise HTTPException(status_code=502, detail="Regional service photo source unavailable")
     body, media_type = image
@@ -378,10 +426,13 @@ def aircraft_photo_image(
     aircraft_type: str = Query(default="", max_length=64),
     icao_hex: str = Query(default="", max_length=12),
 ) -> Response:
-    photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
-    if photo is None:
+    if not registration.strip() and not icao_hex.strip():
         raise HTTPException(status_code=404, detail="Aircraft photo not found")
-    image = _aircraft_photos.image_bytes(photo)
+    with _api_capacity("image-proxy", 4, ttl_seconds=30):
+        photo = _aircraft_photos.find(registration, aircraft_type, icao_hex)
+        if photo is None:
+            raise HTTPException(status_code=404, detail="Aircraft photo not found")
+        image = _aircraft_photos.image_bytes(photo)
     if image is None:
         raise HTTPException(status_code=502, detail="Aircraft photo source unavailable")
     body, media_type = image
@@ -396,4 +447,5 @@ def aircraft_photo_image(
 def aircraft_route(
     callsign: str = Query(default="", max_length=32),
 ) -> dict[str, object]:
-    return {"route": _aircraft_routes.lookup(callsign)}
+    with _api_capacity("aircraft-metadata", 8, ttl_seconds=20):
+        return {"route": _aircraft_routes.lookup(callsign)}
