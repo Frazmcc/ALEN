@@ -43,6 +43,8 @@ class SharedCache:
         self._local: OrderedDict[str, _LocalEntry] = OrderedDict()
         self._local_bytes = 0
         self._local_locks: dict[str, tuple[str, float]] = {}
+        self._local_counters: OrderedDict[str, tuple[int, float]] = OrderedDict()
+        self._local_counter_limit = 4096
         self._guard = threading.Lock()
         self._redis = None
 
@@ -128,6 +130,62 @@ class SharedCache:
             )
             self._local_bytes += len(payload)
             self._prune_local()
+
+    def increment_window(self, key: str, *, ttl_seconds: int) -> int:
+        namespaced = self._key(f"counter:{key}")
+        ttl = max(1, int(ttl_seconds))
+
+        if self._redis is not None:
+            try:
+                script = (
+                    "local value = redis.call('INCR', KEYS[1]); "
+                    "if value == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; "
+                    "return value"
+                )
+                return int(self._redis.eval(script, 1, namespaced, ttl))
+            except Exception:
+                pass
+
+        now = time.monotonic()
+        with self._guard:
+            expired = [
+                name
+                for name, (_count, expires_at) in self._local_counters.items()
+                if expires_at <= now
+            ]
+            for name in expired:
+                self._local_counters.pop(name, None)
+
+            current = self._local_counters.get(namespaced)
+            if current is None:
+                value = 1
+                expires_at = now + ttl
+            else:
+                value = current[0] + 1
+                expires_at = current[1]
+            self._local_counters[namespaced] = (value, expires_at)
+            self._local_counters.move_to_end(namespaced)
+            while len(self._local_counters) > self._local_counter_limit:
+                self._local_counters.popitem(last=False)
+            return value
+
+    def acquire_slot(
+        self,
+        name: str,
+        *,
+        limit: int,
+        ttl_seconds: int = 30,
+    ) -> tuple[int, str] | None:
+        for slot in range(max(1, int(limit))):
+            key = f"slot:{name}:{slot}"
+            token = self.acquire_lock(key, ttl_seconds=ttl_seconds)
+            if token is not None:
+                return slot, token
+        return None
+
+    def release_slot(self, name: str, slot: tuple[int, str]) -> None:
+        index, token = slot
+        self.release_lock(f"slot:{name}:{index}", token)
 
     def acquire_lock(self, key: str, *, ttl_seconds: int = 8) -> str | None:
         token = uuid.uuid4().hex

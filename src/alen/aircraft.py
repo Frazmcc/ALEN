@@ -15,6 +15,9 @@ class AircraftProvider:
     # snapshot for every ALEN user in that cell.
     CELL_DEGREES = 1.0
     CELL_PADDING_NM = 50
+    LARGE_RADIUS_CELL_DEGREES = 0.25
+    LARGE_RADIUS_PADDING_NM = 15
+    MAX_RADIUS_CELL_DEGREES = 0.05
     RADIUS_BUCKET_NM = 25
     CACHE_FRESH_SECONDS = 2.0
     CACHE_STALE_SECONDS = 60.0
@@ -40,14 +43,27 @@ class AircraftProvider:
             ),
         )
         if radius_bucket + self.CELL_PADDING_NM <= 250:
-            cell_lat, cell_lon = self._cell_center(latitude_deg, longitude_deg)
-            upstream_radius_nm = radius_bucket + self.CELL_PADDING_NM
+            cell_degrees = self.CELL_DEGREES
+            padding_nm = self.CELL_PADDING_NM
+        elif radius_bucket + self.LARGE_RADIUS_PADDING_NM <= 250:
+            # Wide radars still share a coarse geographic snapshot. The smaller
+            # cell keeps the extra coverage required around the cell centre
+            # inside ADSB.lol's 250 NM provider limit.
+            cell_degrees = self.LARGE_RADIUS_CELL_DEGREES
+            padding_nm = self.LARGE_RADIUS_PADDING_NM
         else:
-            # Large-radius API callers need the full provider radius, so there
-            # is no spare radius for geographic-cell padding.
-            cell_lat = round(latitude_deg, 4)
-            cell_lon = round(longitude_deg, 4)
-            upstream_radius_nm = radius_bucket
+            # At the provider's absolute maximum there is no room for padding,
+            # but quantising the observer still prevents tiny coordinate changes
+            # from creating an unbounded set of upstream cache keys.
+            cell_degrees = self.MAX_RADIUS_CELL_DEGREES
+            padding_nm = 0
+
+        cell_lat, cell_lon = self._cell_center_for_size(
+            latitude_deg,
+            longitude_deg,
+            cell_degrees,
+        )
+        upstream_radius_nm = min(250, radius_bucket + padding_nm)
         cache_key = (
             f"aircraft:{cell_lat:+06.2f}:{cell_lon:+07.2f}:r{upstream_radius_nm}"
         )
@@ -159,6 +175,7 @@ class AircraftProvider:
             "cache_age_seconds": round(cache_age_seconds, 3),
             "shared_cache": self._cache.distributed,
             "cell": [cell_lat, cell_lon],
+            "cell_degrees": cell_degrees,
             "upstream_radius_nm": upstream_radius_nm,
             "returned": len(found),
         }
@@ -220,7 +237,14 @@ class AircraftProvider:
 
     @classmethod
     def _cell_center(cls, latitude_deg: float, longitude_deg: float) -> tuple[float, float]:
-        size = cls.CELL_DEGREES
+        return cls._cell_center_for_size(latitude_deg, longitude_deg, cls.CELL_DEGREES)
+
+    @staticmethod
+    def _cell_center_for_size(
+        latitude_deg: float,
+        longitude_deg: float,
+        size: float,
+    ) -> tuple[float, float]:
         lat_index = math.floor((latitude_deg + 90.0) / size)
         lon_index = math.floor((longitude_deg + 180.0) / size)
         lat = -90.0 + (lat_index + 0.5) * size
