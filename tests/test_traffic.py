@@ -6,7 +6,6 @@ from alen.aircraft import AircraftProvider
 from alen.cache import SharedCache
 from alen.traffic import (
     RATE_POLICIES,
-    RateDecision,
     RatePolicy,
     capacity,
     check_rate_limit,
