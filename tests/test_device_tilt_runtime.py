@@ -26,7 +26,8 @@ function skyViewMessage(){}
 """ + source + """
 function check(x,msg){if(!x)throw Error(msg)}
 check(deviceTiltElevation({beta:90})===0,"upright baseline");
-check(deviceTiltElevation({beta:60})===30,"portrait forward inclination");
+check(deviceTiltElevation({beta:120})===30,"tilting camera up raises sky elevation");
+check(deviceTiltElevation({beta:60})===-30,"tilting camera down lowers sky elevation");
 check(deviceTiltElevation({beta:NaN})===null,"reject missing sensor");
 check(deviceTiltElevation({beta:5})===null,"reject flat device");
 screen.orientation.angle=90;
