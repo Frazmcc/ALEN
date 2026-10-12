@@ -1132,6 +1132,7 @@ async function refreshSatellites(force=false){
   }
   satelliteRequestState="ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
+  let rejectedSatelliteTrajectories=0;
   // The server's absolute sample instant includes cache age; comparing it with
    // receipt wall time also includes network transit and processing delay.
    const sampleEpochMs=Date.parse(String(satelliteDiagnostics?.position_sample_at||""));
@@ -1148,7 +1149,7 @@ async function refreshSatellites(force=false){
    const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    const id="sat:"+norad,prior=previous.get(id),horizon=Number(raw.motion_horizon_seconds)||2;
    const trajectory=satelliteTrajectory(raw,horizon);
-   if(!satelliteTrajectoryPlausible(raw,trajectory))continue;
+   if(!satelliteTrajectoryPlausible(raw,trajectory)){rejectedSatelliteTrajectories++;continue;}
    const targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs);
    if(!targetNow)continue;
 
@@ -1162,6 +1163,10 @@ async function refreshSatellites(force=false){
    next.push(sat);
   }
   satellites=mergeSatelliteContinuity(previous,next,wallNow,frameNow);
+  if(feedStatus){
+   const rejected=(Number(satelliteDiagnostics?.physically_implausible)||0)+rejectedSatelliteTrajectories;
+   if(rejected)feedStatus.textContent+=" · rejected "+rejected+" implausible orbital predictions.";
+  }
   if(snapToFresh){
    satelliteSnapOnRefresh=false;
    satelliteResumePending=false;
