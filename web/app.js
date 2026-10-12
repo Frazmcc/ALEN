@@ -859,9 +859,11 @@ function logicalSatelliteMemberships(sourceGroups){
  for(const [key,group] of satelliteGroupEntries())if(group.sources.some(source=>sourceSet.has(source)))memberships.push(key);
  return memberships;
 }
-const SATELLITE_REFRESH_MS=10000;
+const SATELLITE_REFRESH_MS=5000;
 const SATELLITE_MAX_SAMPLE_AGE_MS=10000;
-const SATELLITE_ERROR_GRACE_MS=30000;
+const SATELLITE_ERROR_GRACE_MS=45000;
+const SATELLITE_MISSING_GRACE_MS=30000;
+const SATELLITE_FADE_MS=1600;
 const SATELLITE_POSITION_RESPONSE_MS=420;
 const SATELLITE_MAX_FRAME_DT_MS=250;
 const MAX_SATELLITE_LABELS=18;
@@ -918,6 +920,32 @@ function satelliteTrajectorySample(points,elapsedMs){
   const span=Math.max(1,b.timeMs-a.timeMs),t=clamp((tMs-a.timeMs)/span,0,1);
  const vec=satelliteSlerp(a.vec,b.vec,t),altaz=satelliteVectorToAltAz(vec);
  return{vec,az:altaz.az,el:altaz.el,rangeKm:Math.max(0,a.rangeKm+(b.rangeKm-a.rangeKm)*t)};
+}
+function satelliteVisibility(s,wallNow=Date.now()){
+ // New arrivals fade in, while temporarily omitted catalogue members persist.
+ // This removes blinking when a bounded API response changes its ranking.
+ const age=Math.max(0,wallNow-(s.firstSeenAt||wallNow));
+ const arrival=clamp(age/SATELLITE_FADE_MS,0,1);
+ const absent=s.missingSince?Math.max(0,wallNow-s.missingSince):0;
+ const leaving=s.missingSince?clamp((SATELLITE_MISSING_GRACE_MS-absent)/SATELLITE_FADE_MS,0,1):1;
+ return arrival*leaving;
+}
+function mergeSatelliteContinuity(previous,next,wallNow,frameNow){
+ const ids=new Set(next.map(s=>s.id));
+ for(const sat of next){
+  const prior=previous.get(sat.id);
+  sat.firstSeenAt=prior?.firstSeenAt||wallNow;
+  sat.missingSince=0;
+ }
+ for(const prior of previous.values()){
+  if(ids.has(prior.id))continue;
+  if(!prior.missingSince)prior.missingSince=wallNow;
+  if(wallNow-prior.missingSince>SATELLITE_MISSING_GRACE_MS)continue;
+  // Retain the old real trajectory only; never invent a new orbital path.
+  prior.lastFrame=frameNow;
+  next.push(prior);
+ }
+ return next;
 }
 function satelliteRangeText(rangeKm){
  const km=Number(rangeKm);
@@ -1045,7 +1073,7 @@ async function refreshSatellites(force=false){
    const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    const id="sat:"+norad,prior=previous.get(id),horizon=Number(raw.motion_horizon_seconds)||2;
    const trajectory=satelliteTrajectory(raw,horizon),targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs);
-   if(!targetNow||targetNow.el<0)continue;
+   if(!targetNow)continue;
 
    const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+norad),az:snapToFresh?targetNow.az:(prior?.displayAz??targetNow.az),el:snapToFresh?targetNow.el:(prior?.displayEl??targetNow.el),
     rangeKm:snapToFresh?targetNow.rangeKm:(prior?.displayRangeKm??targetNow.rangeKm),detail:"SGP4 · shared world-position trajectory",group,groupLabel:style.label,color:style.color,glyph:style.glyph,
@@ -1056,7 +1084,7 @@ async function refreshSatellites(force=false){
    sat.lastFrame=snapToFresh?frameNow:(prior?.lastFrame??frameNow);sat.lastSeenAt=wallNow;
    next.push(sat);
   }
-  satellites=next;
+  satellites=mergeSatelliteContinuity(previous,next,wallNow,frameNow);
   if(snapToFresh){
    satelliteSnapOnRefresh=false;
    satelliteResumePending=false;
@@ -1319,11 +1347,13 @@ function draw(){
    if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
    const active=selected?.id===s.id;
    ctx.save();ctx.translate(p[0],p[1]);
+   const visibility=satelliteVisibility(s);
+   ctx.globalAlpha=visibility;
    const depth=drawSatellitePoint(s,active,dayMode);
    ctx.restore();
-   if(active){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
+   if(active&&visibility>.05){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
    const satGroup=SATELLITE_GROUPS[s.group],labelsEnabled=layerLabelsOn("satellites")&&satGroup?.labels;
-   if((active||(labelsEnabled&&s.el>18))&&(active||satelliteLabelCount<MAX_SATELLITE_LABELS)){
+   if(visibility>.7&&(active||(labelsEnabled&&s.el>18))&&(active||satelliteLabelCount<MAX_SATELLITE_LABELS)){
     const label=satelliteLabelText(s);ctx.font=active?"700 10px ui-monospace":"700 9px ui-monospace";
     const textW=ctx.measureText(label).width,boxW=textW+10,boxH=15;
     const x=clamp(p[0]+depth.halo+6,5,Math.max(5,width-boxW-5)),y=clamp(p[1]-boxH-5,5,Math.max(5,height-boxH-5));
