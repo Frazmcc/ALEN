@@ -13,7 +13,7 @@ def test_sky_view_controls_and_local_storage_contract() -> None:
     assert "alen.sky-view.v1" in APP
     assert "restoreSavedSkyView();" in APP
     assert "localStorage.removeItem(SKY_VIEW_STORAGE_KEY)" in APP
-    assert "not camera lens calibration" in HTML
+    assert "do not calibrate a physical camera lens" in HTML
 
 
 def test_saved_view_rejects_invalid_data_and_restores_valid_angles() -> None:
