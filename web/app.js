@@ -1053,7 +1053,7 @@ async function refreshSatellites(force=false){
   if(force)satelliteRefreshQueued=true;
   return;
  }
- if(!force&&Date.now()-satellitesUpdated<8000)return;
+ if(!force&&Date.now()-satellitesUpdated<SATELLITE_REFRESH_MS-200)return;
  satellitesUpdated=Date.now();
  satelliteRequestInFlight=true;
  satelliteRequestState="requesting";
