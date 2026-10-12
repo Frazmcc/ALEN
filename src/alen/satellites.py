@@ -292,7 +292,7 @@ class SatelliteProvider:
             "visible": visible_total,
             "returned": len(selected),
             "truncated": len(selected) < visible_total,
-            "selection_policy": "stable-priority-orbit-hash-sample",
+            "selection_policy": "stable-balanced-priority-orbit-hash-sample",
             "sky_distribution": _satellite_distribution(visible),
             "returned_sky_distribution": _satellite_distribution(selected),
             "fallback_used": fallback_used,
@@ -715,7 +715,7 @@ def _physically_plausible_orbit_position(
     if position_ecef is None or not all(math.isfinite(x) for x in position_ecef):
         return False
     radius_km = math.sqrt(sum(x * x for x in position_ecef))
-    if not 6350.0 <= radius_km <= 500_000.0:
+    if not 6350.0 <= radius_km <= 2_000_000.0:
         return False
     is_starlink = "starlink" in memberships or record.name.upper().startswith("STARLINK")
     if is_starlink:
@@ -771,22 +771,27 @@ def _stable_satellite_sample(
     items: list[dict[str, object]],
     cap: int,
 ) -> list[dict[str, object]]:
-    """Select stable NORAD IDs regardless of their momentary sky-bin position.
+    """Stable selection with guaranteed representation across enabled groups.
 
-    Prioritise important object groups, then use a deterministic hashed NORAD
-    order. Azimuth/elevation cells remain diagnostics, not selection gates:
-    crossing an arbitrary bin boundary must not eject otherwise valid objects.
-    This is a bounded catalogue sample, not an optical visibility filter.
+    Preserve NORAD identity when objects cross sky sectors, but do not allow
+    large high-priority groups to exclude every other category. Reserve up to
+    one fifth of available slots for nonpriority objects when necessary.
     """
     if len(items) <= cap:
         return list(items)
-    return sorted(
-        items,
-        key=lambda item: (
-            0 if _satellite_is_display_priority(item) else 1,
-            _stable_satellite_rank(item),
-        ),
-    )[:cap]
+    priority: list[dict[str, object]] = []
+    regular: list[dict[str, object]] = []
+    for item in items:
+        (priority if _satellite_is_display_priority(item) else regular).append(item)
+    rank = _stable_satellite_rank
+    priority.sort(key=rank)
+    regular.sort(key=rank)
+    regular_reserved = min(len(regular), max(1, cap // 5)) if priority else 0
+    priority_take = min(len(priority), cap - regular_reserved)
+    regular_take = min(len(regular), cap - priority_take)
+    if priority_take + regular_take < cap:
+        priority_take = min(len(priority), cap - regular_take)
+    return priority[:priority_take] + regular[:regular_take]
 
 
 def _satellite_distribution(items: list[dict[str, object]]) -> dict[str, object]:
@@ -809,7 +814,7 @@ def _select_visible_satellites(
     visible: list[dict[str, object]],
     limit: int,
 ) -> list[dict[str, object]]:
-    cap = max(1, min(int(limit), 500))
+    cap = max(1, min(int(limit), 2500))
     return _stable_satellite_sample(visible, cap)
 
 
