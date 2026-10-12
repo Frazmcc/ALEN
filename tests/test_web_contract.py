@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.13' in HTML
+    assert './app.js?v=1.6.14' in HTML
     assert './styles.css?v=0.9.3' in HTML
 
 
@@ -911,7 +911,7 @@ def test_emergency_aircraft_use_regional_service_representative_before_model() -
 
 
 def test_satellite_refresh_does_not_create_successful_response_ghosts() -> None:
-    assert 'groups:sources.join(","),limit:"500"' in APP
+    assert 'groups:sources.join(","),limit:String(SATELLITE_REQUEST_LIMIT)' in APP
     assert "const nextIds=new Set(next.map(s=>s.id))" not in APP
     assert "SATELLITE_ERROR_GRACE_MS" in APP
     assert "for(const prior of previous.values())" not in APP
@@ -926,14 +926,14 @@ def test_satellite_catalogue_integrity_guardrails() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
     assert '"missing_groups": missing_groups' in source
     assert '"complete": complete' in source
-    assert '"selection_policy": "stable-priority-orbit-hash-sample"' in source
+    assert '"selection_policy": "stable-balanced-priority-orbit-hash-sample"' in source
     assert '"sky_distribution": _satellite_distribution(visible)' in source
     assert '"returned_sky_distribution": _satellite_distribution(selected)' in source
     assert "def _satellite_sky_cell" in source
     assert "def _stable_satellite_sample" in source
     assert "sin(elevation) is proportional to hemisphere area" in source
 
-    assert "if(satelliteDiagnostics?.complete===false)" in APP
+    assert "const partialCatalogue=satelliteDiagnostics?.complete===false;" in APP
     assert "satellite catalogue incomplete" in APP
     assert "satellite catalogue incomplete" in APP
     assert "catalogue reconnecting" in APP

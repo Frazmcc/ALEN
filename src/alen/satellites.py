@@ -292,7 +292,7 @@ class SatelliteProvider:
             "visible": visible_total,
             "returned": len(selected),
             "truncated": len(selected) < visible_total,
-            "selection_policy": "stable-priority-orbit-hash-sample",
+            "selection_policy": "stable-balanced-priority-orbit-hash-sample",
             "sky_distribution": _satellite_distribution(visible),
             "returned_sky_distribution": _satellite_distribution(selected),
             "fallback_used": fallback_used,
@@ -715,7 +715,7 @@ def _physically_plausible_orbit_position(
     if position_ecef is None or not all(math.isfinite(x) for x in position_ecef):
         return False
     radius_km = math.sqrt(sum(x * x for x in position_ecef))
-    if not 6350.0 <= radius_km <= 500_000.0:
+    if not 6350.0 <= radius_km <= 2_000_000.0:
         return False
     is_starlink = "starlink" in memberships or record.name.upper().startswith("STARLINK")
     if is_starlink:
@@ -771,22 +771,71 @@ def _stable_satellite_sample(
     items: list[dict[str, object]],
     cap: int,
 ) -> list[dict[str, object]]:
-    """Select stable NORAD IDs regardless of their momentary sky-bin position.
+    """Stable, group-aware sampling of satellites above the geometric horizon.
 
-    Prioritise important object groups, then use a deterministic hashed NORAD
-    order. Azimuth/elevation cells remain diagnostics, not selection gates:
-    crossing an arbitrary bin boundary must not eject otherwise valid objects.
-    This is a bounded catalogue sample, not an optical visibility filter.
+    The cap protects API size, but all enabled source groups get a guaranteed
+    minimum representation before priority objects consume remaining slots.
+    The selected NORAD set is insensitive to motion across azimuth bins.
     """
     if len(items) <= cap:
         return list(items)
-    return sorted(
-        items,
-        key=lambda item: (
-            0 if _satellite_is_display_priority(item) else 1,
-            _stable_satellite_rank(item),
-        ),
-    )[:cap]
+
+    rank = _stable_satellite_rank
+    priority = sorted(
+        (item for item in items if _satellite_is_display_priority(item)), key=rank
+    )
+    regular = sorted(
+        (item for item in items if not _satellite_is_display_priority(item)), key=rank
+    )
+    group_items: dict[str, list[dict[str, object]]] = {}
+    for item in items:
+        groups = item.get("groups")
+        if isinstance(groups, list):
+            for group in groups:
+                group_items.setdefault(str(group), []).append(item)
+
+    selected: list[dict[str, object]] = []
+    identities: set[tuple[int, int]] = set()
+
+    def append_unique(item: dict[str, object]) -> None:
+        identifier = rank(item)
+        if identifier not in identities and len(selected) < cap:
+            selected.append(item)
+            identities.add(identifier)
+
+    # Keep small science, GNSS, weather, etc. groups represented even if the
+    # current Starlink population is far larger. Limit reservations to ~1/3.
+    per_group_min = max(1, min(20, cap // max(1, len(group_items) * 3)))
+    for group in sorted(group_items):
+        added = 0
+        for item in sorted(group_items[group], key=rank):
+            if rank(item) in identities:
+                continue
+            append_unique(item)
+            added += 1
+            if added >= per_group_min or len(selected) == cap:
+                break
+
+    # Reserve 20% for nonpriority groups when the capped sample is crowded.
+    regular_quota = min(len(regular), max(1, cap // 5)) if priority else cap
+    regular_selected = sum(
+        1 for item in selected if not _satellite_is_display_priority(item)
+    )
+    for item in regular:
+        if regular_selected >= regular_quota:
+            break
+        if rank(item) not in identities:
+            append_unique(item)
+            regular_selected += 1
+    for item in priority:
+        append_unique(item)
+        if len(selected) >= cap:
+            break
+    for item in regular:
+        append_unique(item)
+        if len(selected) >= cap:
+            break
+    return selected
 
 
 def _satellite_distribution(items: list[dict[str, object]]) -> dict[str, object]:
@@ -809,7 +858,7 @@ def _select_visible_satellites(
     visible: list[dict[str, object]],
     limit: int,
 ) -> list[dict[str, object]]:
-    cap = max(1, min(int(limit), 500))
+    cap = max(1, min(int(limit), 2500))
     return _stable_satellite_sample(visible, cap)
 
 

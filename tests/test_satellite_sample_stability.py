@@ -84,3 +84,42 @@ if(satelliteLabelsEnabled({group:"bright",memberships:["bright"]}))
 """
     result=subprocess.run(["node","-e",script],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr
+
+
+def test_bounded_sample_covers_every_available_satellite_group():
+    from alen.satellites import _select_visible_satellites
+    visible = [
+        {"norad": 40000+i, "azimuth_deg": i % 360, "elevation_deg": 25,
+         "groups": ["visual" if i % 2 else "last-30-days"]}
+        for i in range(2000)
+    ] + [
+        {"norad": 50000+i, "azimuth_deg": i % 360, "elevation_deg": 40,
+         "groups": ["starlink"]}
+        for i in range(2500)
+    ] + [
+        {"norad": 70000+i, "azimuth_deg": i % 360, "elevation_deg": 20,
+         "groups": ["science"]}
+        for i in range(5)
+    ] + [
+        {"norad": 80000+i, "azimuth_deg": i % 360, "elevation_deg": 30,
+         "groups": ["gnss"]}
+        for i in range(5)
+    ]
+    chosen = _select_visible_satellites(visible, 2000)
+    present = {g for item in chosen for g in item["groups"]}
+    assert len(chosen) == 2000
+    assert present == {"visual", "last-30-days", "starlink", "science", "gnss"}
+    assert len([x for x in chosen if "science" in x["groups"]]) == 5
+    assert len([x for x in chosen if "gnss" in x["groups"]]) == 5
+    assert len({x["norad"] for x in chosen}) == 2000
+
+
+def test_no_cap_is_applied_below_requested_ceiling():
+    from alen.satellites import _select_visible_satellites
+    objects = [
+        {"norad": 120000+i, "azimuth_deg": i % 360, "elevation_deg": 40,
+         "groups": ["starlink"]}
+        for i in range(1350)
+    ]
+    assert len(_select_visible_satellites(objects, 2000)) == 1350
+    assert len(_select_visible_satellites(objects, 500)) == 500

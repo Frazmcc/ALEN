@@ -55,3 +55,26 @@ if(satelliteTrajectoryPlausible({name:"STARLINK-34368"},[{rangeKm:491000}]))
 """
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr
+
+
+def test_distant_non_starlink_object_not_rejected_by_blanket_limit():
+    orbit=OrbitRecord("DISTANT SCIENCE CRAFT",100862,"2026-225H",Satrec.twoline2rv(LINE1,LINE2))
+    # Outer-Earth spacecraft should not be rejected just because their
+    # orbital position is farther than 500,000 km from Earth's centre.
+    assert _physically_plausible_orbit_position(orbit,{"science"},(1_500_000.0,0.0,0.0),WHEN)
+    assert not _physically_plausible_orbit_position(orbit,{"science"},(2_500_000.0,0.0,0.0),WHEN)
+
+
+def test_browser_non_starlink_range_limit_allows_distant_science_craft():
+    app=Path("web/app.js").read_text(encoding="utf-8")
+    start=app.index("function satelliteTrajectoryPlausible(")
+    end=app.index("function satelliteTrajectorySample(",start)
+    js=app[start:end]+"""
+const science={name:"DISTANT PROBE",groups:["science"]};
+if(!satelliteTrajectoryPlausible(science,[{rangeKm:1490000},{rangeKm:1500000}]))
+ throw Error("science probe was silently rejected");
+if(satelliteTrajectoryPlausible({name:"STARLINK-40075",groups:["starlink"]},[{rangeKm:1490000}]))
+ throw Error("Starlink erroneously passed the physical sanity gate");
+"""
+    proc=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
+    assert proc.returncode == 0,proc.stderr

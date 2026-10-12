@@ -495,6 +495,7 @@ function setLiveStatus(){
    const loaded=satelliteDiagnostics?.unique_orbits;
    if(satelliteRequestState==="error")parts.push(satelliteDiagnostics?.complete===false?"satellite catalogue incomplete":"satellite feed unavailable");
    else if(satelliteRequestState==="stale")parts.push(`${s} satellites · catalogue reconnecting`);
+   else if(satelliteRequestState==="partial")parts.push(`${s} satellites · partial catalogue`);
    else if(satelliteRequestState==="requesting"&&satelliteDiagnostics===null)parts.push("satellites loading…");
    else parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
  }
@@ -929,6 +930,7 @@ function satelliteTrajectory(raw,horizonSeconds=2){
   return Number.isFinite(az)&&Number.isFinite(el)&&Number.isFinite(rangeKm)?{timeMs,az,el,rangeKm,vec:satelliteSkyVector(az,el)}:null;
  }).filter(Boolean).sort((a,b)=>a.timeMs-b.timeMs);
 }
+const SATELLITE_REQUEST_LIMIT=2000;
 function satelliteTrajectoryPlausible(raw,trajectory){
  if(!trajectory.length)return false;
  const memberships=Array.isArray(raw.groups)?raw.groups:[];
@@ -936,7 +938,7 @@ function satelliteTrajectoryPlausible(raw,trajectory){
  // Operational Starlink objects are low-orbit satellites. Even a generous
  // 10,000 km observer slant limit rejects the impossible ranges in the video
  // without filtering normal LEO passes. The API also validates true ECEF radii.
- const maxRange=isStarlink?10000:500000;
+ const maxRange=isStarlink?10000:2000000;
  return trajectory.every(point=>Number.isFinite(point.rangeKm)&&point.rangeKm>0&&point.rangeKm<=maxRange);
 }
 function satelliteTrajectorySample(points,elapsedMs){
@@ -1108,7 +1110,7 @@ async function refreshSatellites(force=false){
   }
   const qs=new URLSearchParams({
    lat:String(observer.lat),lon:String(observer.lon),altitude_m:String(observer.altM||0),
-   groups:sources.join(","),limit:"500"
+   groups:sources.join(","),limit:String(SATELLITE_REQUEST_LIMIT)
   });
   const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal});
   if(!res.ok)throw new Error("satellites "+res.status);
@@ -1123,14 +1125,21 @@ async function refreshSatellites(force=false){
   if(feedStatus){
    const total=Number(satelliteDiagnostics?.visible)||0,returned=Number(satelliteDiagnostics?.returned)||0;
    feedStatus.textContent="Orbit sample: "+returned+" of "+total+" above geometric horizon"+
-    (satelliteDiagnostics?.truncated?" · bounded to 500 objects":"")+
+    (satelliteDiagnostics?.truncated?" · showing a bounded subset (max "+SATELLITE_REQUEST_LIMIT+")":"")+
     " · no sunlight/optical visibility filtering. Dense labels can overlap; zoom in to separate.";
   }
-  if(satelliteDiagnostics?.complete===false){
-   const missing=Array.isArray(satelliteDiagnostics?.missing_groups)?satelliteDiagnostics.missing_groups.filter(Boolean):[];
-   throw new Error("satellite catalogue incomplete"+(missing.length?": "+missing.join(", "):""));
+  const incompleteGroups=Array.isArray(satelliteDiagnostics?.missing_groups)?
+   satelliteDiagnostics.missing_groups.filter(Boolean):[];
+  const partialCatalogue=satelliteDiagnostics?.complete===false;
+  // One unavailable group must not suppress valid positions from every other
+  // group. Retain the usable data and explicitly disclose reduced coverage.
+  if(partialCatalogue&&feedStatus){
+   feedStatus.textContent+=" · partial catalogue"+
+    (incompleteGroups.length?" (unavailable: "+incompleteGroups.join(", ")+")":" (fallback data)");
   }
-  satelliteRequestState="ok";
+  if(partialCatalogue&&!(Array.isArray(data.satellites)&&data.satellites.length))
+   throw new Error("satellite catalogue incomplete");
+  satelliteRequestState=partialCatalogue?"partial":"ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
   let rejectedSatelliteTrajectories=0;
   // The server's absolute sample instant includes cache age; comparing it with

@@ -179,7 +179,7 @@ def visible_satellites(
     lon: float = Query(ge=-180.0, le=180.0),
     altitude_m: float = Query(default=0.0, ge=-500.0, le=20000.0),
     groups: str = Query(default="last-30-days,stations,visual"),
-    limit: int = Query(default=260, ge=1, le=500),
+    limit: int = Query(default=260, ge=1, le=2500),
 ) -> dict[str, object]:
     requested = [value.strip() for value in groups.split(",") if value.strip()]
     requested = requested[:12]
