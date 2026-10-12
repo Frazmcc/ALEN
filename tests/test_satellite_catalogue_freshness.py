@@ -1,6 +1,6 @@
 """Regression tests for satellite catalogue freshness and trusted source fallback."""
-from datetime import datetime, timezone, timedelta
-import json
+from datetime import datetime, timezone
+from time import time
 
 from sgp4.api import Satrec
 from alen.satellites import OrbitRecord, SatelliteProvider
@@ -45,7 +45,7 @@ def test_fresh_alternative_wins_over_old_third_party_mirror(monkeypatch):
 def test_stale_cached_elements_cannot_be_reused_on_fetch_failure(monkeypatch):
     provider=SatelliteProvider()
     stale=(record("26242.23989767"),)
-    provider._cache["starlink"]=(0,stale)
+    provider._cache["starlink"]=(time(),stale)
     monkeypatch.setattr(provider,"_fetch_group",lambda group: ())
     # Both the short-lived cache and the stale-if-error fallback reject old data.
     assert provider._load_group("starlink")==()
