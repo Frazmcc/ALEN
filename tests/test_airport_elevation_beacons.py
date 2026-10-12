@@ -44,3 +44,10 @@ if(unknown.airportPositionKnown||unknown.visibility!=="elevation unavailable")th
 """
     result = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
+
+
+def test_deployed_html_uses_new_airport_renderer_asset_version():
+    html = Path("web/index.html").read_text(encoding="utf-8")
+    assert '<script src="./app.js?v=1.6.11"></script>' in html
+    assert '<script src="./app.js?v=1.6.10"></script>' not in html
+    assert 'markerEl=visible?actualEl:horizonEl' in APP
