@@ -26,14 +26,15 @@ function skyViewMessage(){}
 """ + source + """
 function check(x,msg){if(!x)throw Error(msg)}
 check(deviceTiltElevation({beta:90})===0,"upright baseline");
-check(deviceTiltElevation({beta:60})===30,"portrait forward inclination");
+check(deviceTiltElevation({beta:120})===30,"tilting camera up raises sky elevation");
+check(deviceTiltElevation({beta:60})===-30,"tilting camera down lowers sky elevation");
 check(deviceTiltElevation({beta:NaN})===null,"reject missing sensor");
 check(deviceTiltElevation({beta:5})===null,"reject flat device");
 screen.orientation.angle=90;
 check(deviceTiltElevation({beta:90})===null,"reject landscape");
 screen.orientation.angle=0;
 check(!calibrateDeviceTilt(),"calibration requires a sample");
-lastDeviceBeta=60;
+lastDeviceBeta=120;
 check(calibrateDeviceTilt()&&tiltOffsetDeg===5,"align to current elevation");
 """
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
