@@ -21,7 +21,7 @@ function horizonRatio(){
  return .5+Math.tan(minPitch*Math.PI/180)/Math.tan(verticalFovRad()/2)*.5;
 }
 let ratio=horizonRatio();
-if(Math.abs(ratio-.9)>1e-8)throw Error("desktop sky framing should be 90%");
+if(Math.abs(ratio-Math.min(.9,(height-(barHeight+10)-12)/height))>1e-8)throw Error("desktop framing must respect bottom controls");
 barHeight=125;
 ratio=horizonRatio();
 if(ratio*height>height-(barHeight+10)-11)throw Error("horizon overlaps layer bar");
