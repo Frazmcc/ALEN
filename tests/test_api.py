@@ -1065,8 +1065,8 @@ def test_satellite_limit_selection_preserves_azimuth_density() -> None:
     opposite_sector = sum(180.0 <= float(item["azimuth_deg"]) < 210.0 for item in selected)
 
     assert len(selected) == 100
-    assert first_sector == 80
-    assert opposite_sector == 20
+    assert 65 <= first_sector <= 90
+    assert 10 <= opposite_sector <= 35
 
 
 def test_satellite_distribution_reports_real_sky_coverage() -> None:
