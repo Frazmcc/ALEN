@@ -362,7 +362,7 @@ class SatelliteProvider:
             now = time()
             with self._lock:
                 cached = self._cache.get(group)
-            if cached and now - cached[0] < self.CACHE_SECONDS:
+            if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough(group, cached[1]):
                 return cached[1]
 
             records = self._fetch_group(group)
@@ -383,16 +383,16 @@ class SatelliteProvider:
             now = time()
             with self._lock:
                 cached = self._cache.get(key)
-            if cached and now - cached[0] < self.CACHE_SECONDS:
+            if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough("visual", cached[1]):
                 return cached[1]
 
             records = self._fetch_fallback_catalog()
             if not records:
                 records = self._fetch_orbitalwiki_catalog()
-            if records:
+            if records and self._catalog_fresh_enough("visual", records):
                 self._store_cache(key, records)
                 return records
-            return cached[1] if cached else ()
+            return cached[1] if cached and self._catalog_fresh_enough("visual", cached[1]) else ()
 
     def _store_cache(self, key: str, records: tuple[OrbitRecord, ...]) -> None:
         now = time()
