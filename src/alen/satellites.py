@@ -352,7 +352,7 @@ class SatelliteProvider:
         now = time()
         with self._lock:
             cached = self._cache.get(group)
-        if cached and now - cached[0] < self.CACHE_SECONDS:
+        if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough(group, cached[1]):
             return cached[1]
 
         # Coalesce simultaneous refreshes for the same large catalog. Without
@@ -369,14 +369,14 @@ class SatelliteProvider:
             if records:
                 self._store_cache(group, records)
                 return records
-            return cached[1] if cached else ()
+            return cached[1] if cached and self._catalog_fresh_enough(group, cached[1]) else ()
 
     def _load_fallback_catalog(self) -> tuple[OrbitRecord, ...]:
         key = "__public_fallback__"
         now = time()
         with self._lock:
             cached = self._cache.get(key)
-        if cached and now - cached[0] < self.CACHE_SECONDS:
+        if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough(group, cached[1]):
             return cached[1]
 
         with self._fallback_lock:
