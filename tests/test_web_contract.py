@@ -606,7 +606,7 @@ def test_multistate_layer_label_controls() -> None:
     assert 'if(layerLabelsOn("stars")' in APP
     assert 'if(layerLabelsOn("planets"))' in APP
     assert 'if(layerLabelsOn("airports")||active)' in APP
-    assert 'layerLabelsOn("satellites")||satGroup?.labels' in APP
+    assert 'const labelsEnabled=satelliteLabelsEnabled(s)' in APP
 
 
 def test_aircraft_groups_and_label_modes() -> None:
