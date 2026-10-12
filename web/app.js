@@ -323,7 +323,7 @@ function updateMinPitch(){
  // Only the viewing pitch changes: terrain elevations and sky coordinates
  // remain topocentric and are projected together without screen offsets.
  const skyBottom=Math.max(height*.5,height-horizonBottomGap()-12);
- const horizonY=Math.min(height*.9,skyBottom);
+ const horizonY=skyBottom;
  const normalized=clamp(2*horizonY/Math.max(1,height)-1,0,.98);
  minPitch=Math.atan(normalized*Math.tan(verticalFovRad()/2))*RAD;
 }
