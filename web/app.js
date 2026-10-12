@@ -57,7 +57,7 @@ let terrainProfile=null,terrainObserverElevation=0,terrainLoadToken=0;
 const terrainTileCache=new Map();
 const layers={stars:true,constellations:true,planets:true,atmosphere:true,landscape:true,airports:true,aircraft:true,satellites:true};
 const MULTISTATE_LAYERS=new Set(["stars","planets","airports","aircraft","satellites"]);
-const layerPhases={stars:0,planets:0,airports:0,aircraft:0,satellites:0};
+const layerPhases={stars:0,planets:0,airports:0,aircraft:0,satellites:1};
 const AIRCRAFT_GROUPS={
  commercial:{label:"Commercial",enabled:true,labels:true,phase:0},
  military:{label:"Military",enabled:true,labels:true,phase:0},
@@ -888,11 +888,10 @@ function logicalSatelliteMemberships(sourceGroups){
 const SATELLITE_REFRESH_MS=5000;
 const SATELLITE_MAX_SAMPLE_AGE_MS=10000;
 const SATELLITE_ERROR_GRACE_MS=45000;
-const SATELLITE_MISSING_GRACE_MS=30000;
 const SATELLITE_FADE_MS=1600;
 const SATELLITE_POSITION_RESPONSE_MS=420;
 const SATELLITE_MAX_FRAME_DT_MS=250;
-const MAX_SATELLITE_LABELS=18;
+
 function satelliteSkyVector(az,el){
  const azr=az*DEG,elr=el*DEG,c=Math.cos(elr);
  return{x:c*Math.sin(azr),y:c*Math.cos(azr),z:Math.sin(elr)};
@@ -948,30 +947,37 @@ function satelliteTrajectorySample(points,elapsedMs){
  return{vec,az:altaz.az,el:altaz.el,rangeKm:Math.max(0,a.rangeKm+(b.rangeKm-a.rangeKm)*t)};
 }
 function satelliteVisibility(s,wallNow=Date.now()){
- // New arrivals fade in, while temporarily omitted catalogue members persist.
- // This removes blinking when a bounded API response changes its ranking.
  const age=Math.max(0,wallNow-(s.firstSeenAt||wallNow));
- const arrival=clamp(age/SATELLITE_FADE_MS,0,1);
- const absent=s.missingSince?Math.max(0,wallNow-s.missingSince):0;
- const leaving=s.missingSince?clamp((SATELLITE_MISSING_GRACE_MS-absent)/SATELLITE_FADE_MS,0,1):1;
- return arrival*leaving;
+ return clamp(age/SATELLITE_FADE_MS,0,1);
 }
 function mergeSatelliteContinuity(previous,next,wallNow,frameNow){
- const ids=new Set(next.map(s=>s.id));
  for(const sat of next){
   const prior=previous.get(sat.id);
   sat.firstSeenAt=prior?.firstSeenAt||wallNow;
   sat.missingSince=0;
  }
- for(const prior of previous.values()){
-  if(ids.has(prior.id))continue;
-  if(!prior.missingSince)prior.missingSince=wallNow;
-  if(wallNow-prior.missingSince>SATELLITE_MISSING_GRACE_MS)continue;
-  // Retain the old real trajectory only; never invent a new orbital path.
-  prior.lastFrame=frameNow;
-  next.push(prior);
- }
+ // Only network failures retain old orbits, explicitly labelled as stale.
+ // An authoritative successful response must not leave frozen ghosts behind.
  return next;
+}
+function chooseSatelliteLabelPosition(px,py,w,h,used,screenWidth,screenHeight){
+ const candidates=[[9,-h-5],[9,7],[-w-9,-h-5],[-w-9,7],[9,-h-24],[-w-9,-h-24],[9,25],[-w-9,25],[-w/2,-h-30],[-w/2,30]];
+ let best=null,bestCost=Infinity;
+ for(const [dx,dy] of candidates){
+  const x=clamp(px+dx,5,Math.max(5,screenWidth-w-5));
+  const y=clamp(py+dy,5,Math.max(5,screenHeight-h-5));
+  const box={x,y,w,h};let cost=0;
+  for(const prev of used){
+   const overlapX=Math.max(0,Math.min(x+w,prev.x+prev.w)-Math.max(x,prev.x));
+   const overlapY=Math.max(0,Math.min(y+h,prev.y+prev.h)-Math.max(y,prev.y));
+   cost+=overlapX*overlapY;
+  }
+  if(cost===0){used.push(box);return box}
+  if(cost<bestCost){bestCost=cost;best=box}
+ }
+ // Explicit 'labels on' never silently drops satellites.
+ used.push(best);
+ return best;
 }
 function satelliteRangeText(rangeKm){
  const km=Number(rangeKm);
@@ -1077,6 +1083,13 @@ async function refreshSatellites(force=false){
    return;
   }
   satelliteDiagnostics=data.diagnostics||null;
+  const feedStatus=document.querySelector("#satellite-feed-health");
+  if(feedStatus){
+   const total=Number(satelliteDiagnostics?.visible)||0,returned=Number(satelliteDiagnostics?.returned)||0;
+   feedStatus.textContent="Orbit sample: "+returned+" of "+total+" above geometric horizon"+
+    (satelliteDiagnostics?.truncated?" · bounded to 500 objects":"")+
+    " · no sunlight/optical visibility filtering. Dense labels can overlap; zoom in to separate.";
+  }
   if(satelliteDiagnostics?.complete===false){
    const missing=Array.isArray(satelliteDiagnostics?.missing_groups)?satelliteDiagnostics.missing_groups.filter(Boolean):[];
    throw new Error("satellite catalogue incomplete"+(missing.length?": "+missing.join(", "):""));
@@ -1367,31 +1380,30 @@ function draw(){
   }
  }
  if(layers.satellites){
-  const satelliteLabelBoxes=[];let satelliteLabelCount=0;
-  const orderedSatellites=[...satellites].sort((a,b)=>(selected?.id===b.id)-(selected?.id===a.id)||b.el-a.el);
+  const satelliteLabelBoxes=[];
+  const orderedSatellites=[...satellites].sort((a,b)=>(selected?.id===a.id)-(selected?.id===b.id)||String(a.id).localeCompare(String(b.id)));
   for(const s of orderedSatellites){
-   if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
+   if(s.el<0||!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);if(!p)continue;
    const active=selected?.id===s.id;
    ctx.save();ctx.translate(p[0],p[1]);
    const visibility=satelliteVisibility(s);
    const depth=drawSatellitePoint(s,active,dayMode,visibility);
    ctx.restore();
    if(active&&visibility>.05){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
-   const satGroup=SATELLITE_GROUPS[s.group],labelsEnabled=layerLabelsOn("satellites")&&satGroup?.labels;
-   if(visibility>.7&&(active||(labelsEnabled&&s.el>18))&&(active||satelliteLabelCount<MAX_SATELLITE_LABELS)){
+   const satGroup=SATELLITE_GROUPS[s.group];
+   // Either Display Groups "labels on" or this specific satellite group
+   // enables labels. Neither silently imposes an elevation or count cap.
+   const labelsEnabled=layerLabelsOn("satellites")||satGroup?.labels;
+   if(visibility>.5&&(active||labelsEnabled)){
     const label=satelliteLabelText(s);ctx.font=active?"700 10px ui-monospace":"700 9px ui-monospace";
-    const textW=ctx.measureText(label).width,boxW=textW+10,boxH=15;
-    const x=clamp(p[0]+depth.halo+6,5,Math.max(5,width-boxW-5)),y=clamp(p[1]-boxH-5,5,Math.max(5,height-boxH-5));
-    const box={x,y,w:boxW,h:boxH};
-    if(active||!labelBoxOverlaps(box,satelliteLabelBoxes)){
-     satelliteLabelBoxes.push(box);satelliteLabelCount+=1;
-     ctx.strokeStyle=active?s.color:(dayMode?"rgba(8,40,63,.42)":"rgba(123,229,255,.35)");
-     ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p[0]+Math.max(depth.radius,2),p[1]-Math.max(depth.radius,2));ctx.lineTo(x,y+boxH*.55);ctx.stroke();
-     ctx.fillStyle=dayMode?"rgba(245,250,253,.9)":"rgba(2,8,14,.86)";
-     ctx.beginPath();ctx.roundRect(x,y,boxW,boxH,3);ctx.fill();
-     ctx.strokeStyle=active?s.color:(dayMode?"rgba(8,40,63,.3)":"rgba(123,229,255,.24)");ctx.stroke();
-     ctx.fillStyle=active?s.color:objectText;ctx.fillText(label,x+5,y+10.5);
-    }
+    const boxW=ctx.measureText(label).width+10,boxH=15;
+    const box=chooseSatelliteLabelPosition(p[0],p[1],boxW,boxH,satelliteLabelBoxes,width,height);
+    ctx.strokeStyle=active?s.color:(dayMode?"rgba(8,40,63,.42)":"rgba(123,229,255,.35)");
+    ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p[0]+Math.max(depth.radius,2),p[1]-Math.max(depth.radius,2));ctx.lineTo(box.x,box.y+boxH*.55);ctx.stroke();
+    ctx.fillStyle=dayMode?"rgba(245,250,253,.9)":"rgba(2,8,14,.86)";
+    ctx.beginPath();ctx.roundRect(box.x,box.y,boxW,boxH,3);ctx.fill();
+    ctx.strokeStyle=active?s.color:(dayMode?"rgba(8,40,63,.3)":"rgba(123,229,255,.24)");ctx.stroke();
+    ctx.fillStyle=active?s.color:objectText;ctx.fillText(label,box.x+5,box.y+10.5);
    }
   }
  }
