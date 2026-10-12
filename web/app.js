@@ -18,6 +18,33 @@ const API_BASE="https://alen-api-lquw.onrender.com";
 const AIRCRAFT_RADIUS_MILES=50,AIRCRAFT_RADIUS_KM=80.4672,AIRCRAFT_RADIUS_NM=43.4488;
 const AIRPORT_RADIUS_MILES=50,AIRPORT_RADIUS_KM=80.4672;
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,pinch=null,selected=null;
+const SKY_VIEW_STORAGE_KEY="alen.sky-view.v1";
+function readSavedSkyView(){
+ try{
+  const parsed=JSON.parse(localStorage.getItem(SKY_VIEW_STORAGE_KEY)||"null");
+  if(!parsed||parsed.version!==1||![parsed.yaw,parsed.pitch,parsed.fov].every(Number.isFinite))return null;
+  if(parsed.yaw<0||parsed.yaw>=360||parsed.pitch<0||parsed.pitch>90||parsed.fov<18||parsed.fov>130)return null;
+  return parsed;
+ }catch{return null}
+}
+function restoreSavedSkyView(){
+ const saved=readSavedSkyView();
+ if(!saved)return false;
+ setFov(saved.fov);
+ yaw=norm360(saved.yaw);
+ pitch=clamp(saved.pitch,minPitch,89);
+ return true;
+}
+function saveSkyView(){
+ try{
+  localStorage.setItem(SKY_VIEW_STORAGE_KEY,JSON.stringify({version:1,yaw:norm360(yaw),pitch,fov}));
+  return true;
+ }catch{return false}
+}
+function clearSavedSkyView(){
+ try{localStorage.removeItem(SKY_VIEW_STORAGE_KEY);return true}catch{return false}
+}
+
 const activePointers=new Map();
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
@@ -483,6 +510,7 @@ function onLocation(pos){
  if(first){
    yaw=observer.lat>=0?180:0;
    pitch=minPitch;
+   restoreSavedSkyView();
    refreshAircraft(true);
    restartSatellitePolling(true);
    refreshTerrainProfile();
@@ -1887,6 +1915,18 @@ canvas.addEventListener("wheel",e=>{
  setFov(fov*(e.deltaY<0?.88:1.12));
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
+const skyViewCalibrationStatus=document.querySelector("#sky-view-calibration-status");
+function skyViewMessage(message){if(skyViewCalibrationStatus)skyViewCalibrationStatus.textContent=message}
+document.querySelector("#sky-view-save").addEventListener("click",()=>{
+ skyViewMessage(saveSkyView()?"Sky view saved on this device.":"Unable to save; browser storage may be disabled.");
+});
+document.querySelector("#sky-view-restore").addEventListener("click",()=>{
+ skyViewMessage(restoreSavedSkyView()?"Saved sky direction and zoom restored.":"No valid saved sky view on this device.");
+});
+document.querySelector("#sky-view-clear").addEventListener("click",()=>{
+ skyViewMessage(clearSavedSkyView()?"Saved sky view cleared.":"Unable to clear saved sky view.");
+});
+
 canvas.addEventListener("keydown",e=>{
  if(!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key))return;
  e.preventDefault();
