@@ -771,27 +771,71 @@ def _stable_satellite_sample(
     items: list[dict[str, object]],
     cap: int,
 ) -> list[dict[str, object]]:
-    """Stable selection with guaranteed representation across enabled groups.
+    """Stable, group-aware sampling of satellites above the geometric horizon.
 
-    Preserve NORAD identity when objects cross sky sectors, but do not allow
-    large high-priority groups to exclude every other category. Reserve up to
-    one fifth of available slots for nonpriority objects when necessary.
+    The cap protects API size, but all enabled source groups get a guaranteed
+    minimum representation before priority objects consume remaining slots.
+    The selected NORAD set is insensitive to motion across azimuth bins.
     """
     if len(items) <= cap:
         return list(items)
-    priority: list[dict[str, object]] = []
-    regular: list[dict[str, object]] = []
-    for item in items:
-        (priority if _satellite_is_display_priority(item) else regular).append(item)
+
     rank = _stable_satellite_rank
-    priority.sort(key=rank)
-    regular.sort(key=rank)
-    regular_reserved = min(len(regular), max(1, cap // 5)) if priority else 0
-    priority_take = min(len(priority), cap - regular_reserved)
-    regular_take = min(len(regular), cap - priority_take)
-    if priority_take + regular_take < cap:
-        priority_take = min(len(priority), cap - regular_take)
-    return priority[:priority_take] + regular[:regular_take]
+    priority = sorted(
+        (item for item in items if _satellite_is_display_priority(item)), key=rank
+    )
+    regular = sorted(
+        (item for item in items if not _satellite_is_display_priority(item)), key=rank
+    )
+    group_items: dict[str, list[dict[str, object]]] = {}
+    for item in items:
+        groups = item.get("groups")
+        if isinstance(groups, list):
+            for group in groups:
+                group_items.setdefault(str(group), []).append(item)
+
+    selected: list[dict[str, object]] = []
+    identities: set[tuple[int, int]] = set()
+
+    def append_unique(item: dict[str, object]) -> None:
+        identifier = rank(item)
+        if identifier not in identities and len(selected) < cap:
+            selected.append(item)
+            identities.add(identifier)
+
+    # Keep small science, GNSS, weather, etc. groups represented even if the
+    # current Starlink population is far larger. Limit reservations to ~1/3.
+    per_group_min = max(1, min(20, cap // max(1, len(group_items) * 3)))
+    for group in sorted(group_items):
+        added = 0
+        for item in sorted(group_items[group], key=rank):
+            if rank(item) in identities:
+                continue
+            append_unique(item)
+            added += 1
+            if added >= per_group_min or len(selected) == cap:
+                break
+
+    # Reserve 20% for nonpriority groups when the capped sample is crowded.
+    regular_quota = min(len(regular), max(1, cap // 5)) if priority else cap
+    regular_selected = sum(
+        1 for item in selected if not _satellite_is_display_priority(item)
+    )
+    for item in regular:
+        if regular_selected >= regular_quota:
+            break
+        if rank(item) not in identities:
+            append_unique(item)
+            regular_selected += 1
+    for item in priority:
+        append_unique(item)
+        if len(selected) >= cap:
+            break
+    for item in regular:
+        append_unique(item)
+        if len(selected) >= cap:
+            break
+    return selected
 
 
 def _satellite_distribution(items: list[dict[str, object]]) -> dict[str, object]:
