@@ -30,7 +30,7 @@ const button={
  textContent:"",setAttribute(){},
  addEventListener(type,fn){this.click=fn;}
 };
-const document={querySelector:id=>id==="#sky-compass-toggle"?button:status};
+const document={querySelector:id=>id==="#sky-compass-toggle"||id==="#sky-tilt-calibrate"?button:status};
 const window={addEventListener(){},removeEventListener(){}};
 function skyViewMessage(){}
 """
