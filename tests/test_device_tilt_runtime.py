@@ -34,7 +34,7 @@ screen.orientation.angle=90;
 check(deviceTiltElevation({beta:90})===null,"reject landscape");
 screen.orientation.angle=0;
 check(!calibrateDeviceTilt(),"calibration requires a sample");
-lastDeviceBeta=60;
+lastDeviceBeta=120;
 check(calibrateDeviceTilt()&&tiltOffsetDeg===5,"align to current elevation");
 """
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
