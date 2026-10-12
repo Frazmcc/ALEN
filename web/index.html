@@ -124,6 +124,20 @@
         <button id="sky-view-restore" type="button" class="sat-group" title="Restore the saved view on this device">Restore sky view</button>
         <button id="sky-view-clear" type="button" class="sat-group" title="Delete this device's saved view">Clear saved view</button>
       </div>
+      <section id="sky-alignment-panel" aria-label="Daylight astronomical alignment test">
+        <h3>Daylight alignment check</h3>
+        <p>Compare ALEN's current viewing direction with a predicted Sun or Moon position, or a surveyed landmark bearing. This is not a camera calibration.</p>
+        <label for="sky-alignment-target">Reference target</label>
+        <select id="sky-alignment-target"><option value="sun">Sun (calculated)</option><option value="moon">Moon (calculated)</option><option value="landmark">Landmark (known bearing)</option></select>
+        <div id="sky-alignment-landmark-fields" hidden>
+          <label for="sky-alignment-az">Landmark true bearing (0–359.9°)</label>
+          <input id="sky-alignment-az" type="number" min="0" max="359.9" step="0.1" value="180">
+          <label for="sky-alignment-el">Landmark elevation (−90–90°)</label>
+          <input id="sky-alignment-el" type="number" min="-90" max="90" step="0.1" value="0">
+        </div>
+        <output id="sky-alignment-readout" aria-live="off">Awaiting observer location.</output>
+        <p>Align the phone independently with the target before treating differences as errors. Never sight the Sun directly through a camera or optical finder.</p>
+      </section>
       <p id="sky-view-calibration-status" class="satellite-groups-note" role="status" aria-live="polite">Compass and tilt are approximate. Hold the phone upright in portrait and use Calibrate tilt to align elevation. Saved views do not calibrate a physical camera lens.</p>
     </aside>
 
