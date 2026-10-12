@@ -8,6 +8,7 @@ HTML=Path("web/index.html").read_text(encoding="utf-8")
 
 def test_tilt_control_contract():
     assert 'id="sky-tilt-calibrate"' in HTML
+    assert 'id="sky-tilt-reverse"' in HTML
     assert 'function calibrateDeviceTilt()' in APP
     assert 'function deviceTiltElevation(event)' in APP
     assert 'if(tiltOffsetDeg!==null)' in APP
@@ -21,13 +22,17 @@ def test_tilt_mapping_requires_calibration_and_upright_portrait():
     source=APP[start:end]
     js="""const screen={orientation:{angle:0}};
 let pitch=35,minPitch=0;
-const document={querySelector(){return {addEventListener(){}}}};
+const document={querySelector(){return {addEventListener(){},setAttribute(){},textContent:""}}};
 function skyViewMessage(){}
 """ + source + """
 function check(x,msg){if(!x)throw Error(msg)}
 check(deviceTiltElevation({beta:90})===0,"upright baseline");
 check(deviceTiltElevation({beta:120})===30,"tilting camera up raises sky elevation");
 check(deviceTiltElevation({beta:60})===-30,"tilting camera down lowers sky elevation");
+check(applyTiltDirection(30)===30,"normal mapping");
+reverseDeviceTilt=true;
+check(applyTiltDirection(30)===-30,"reverse mapping");
+reverseDeviceTilt=false;
 check(deviceTiltElevation({beta:NaN})===null,"reject missing sensor");
 check(deviceTiltElevation({beta:5})===null,"reject flat device");
 screen.orientation.angle=90;
@@ -36,6 +41,8 @@ screen.orientation.angle=0;
 check(!calibrateDeviceTilt(),"calibration requires a sample");
 lastDeviceBeta=120;
 check(calibrateDeviceTilt()&&tiltOffsetDeg===5,"align to current elevation");
+reverseDeviceTilt=true;
+check(calibrateDeviceTilt()&&tiltOffsetDeg===65,"reverse tilt anchoring");
 """
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr
