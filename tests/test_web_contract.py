@@ -842,7 +842,7 @@ def test_satellite_visuals_are_point_like_with_depth_and_declutter() -> None:
     assert "function satelliteLabelText(s)" in APP
     assert "satelliteRangeText(s?.rangeKm)" in APP
     assert 'labelsEnabled=layerLabelsOn("satellites")&&satGroup?.labels' in APP
-    assert "if((active||(labelsEnabled&&s.el>18))" in APP
+    assert "if(visibility>.7&&(active||(labelsEnabled&&s.el>18))" in APP
     assert "ctx.roundRect(x,y,boxW,boxH,3)" in APP
     assert '["Line-of-sight distance",satelliteRangeText(o.rangeKm)]' in APP
     assert '["Depth cue","Nearer satellites appear slightly brighter and larger"]' in APP
