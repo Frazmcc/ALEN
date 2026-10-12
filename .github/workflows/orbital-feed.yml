@@ -1,0 +1,52 @@
+name: Refresh independent orbital elements
+
+on:
+  schedule:
+    - cron: '19 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/orbital-feed.yml
+      - scripts/sync_orbital_feed.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: orbital-feed-publish
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install feed HTTP client
+        run: python -m pip install httpx==0.28.1
+      - name: Fetch and validate authoritative OMM datasets
+        run: python scripts/sync_orbital_feed.py
+      - name: Publish snapshots on separate orbit-feed branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          git -C "$dir" init -b orbit-feed
+          git -C "$dir" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          if git -C "$dir" fetch --depth=1 origin refs/heads/orbit-feed; then
+            git -C "$dir" checkout -B orbit-feed FETCH_HEAD
+          fi
+          cp -v /tmp/alen-orbit-feed/*.json "$dir/"
+          git -C "$dir" add '*.json'
+          if git -C "$dir" diff --staged --quiet; then
+            echo "No validated source changes"
+            exit 0
+          fi
+          git -C "$dir" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Refresh validated orbital elements"
+          git -C "$dir" push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/orbit-feed
