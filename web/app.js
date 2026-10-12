@@ -2124,11 +2124,62 @@ function renderSearch(){
 searchInput.addEventListener("input",renderSearch);
 searchInput.addEventListener("keydown",e=>{if(e.key==="Escape"){searchInput.value="";searchResults.hidden=true}});
 
+// Diagnostic only: differences are meaningful as alignment errors only after the
+// user independently sights a known target and has a calibrated device heading.
+const alignmentTarget=document.querySelector("#sky-alignment-target");
+const alignmentLandmarkFields=document.querySelector("#sky-alignment-landmark-fields");
+const alignmentAz=document.querySelector("#sky-alignment-az");
+const alignmentEl=document.querySelector("#sky-alignment-el");
+const alignmentReadout=document.querySelector("#sky-alignment-readout");
+let lastAlignmentUpdate=0;
+alignmentTarget.addEventListener("change",()=>{
+ alignmentLandmarkFields.hidden=alignmentTarget.value!=="landmark";
+ lastAlignmentUpdate=0;
+});
+function angularSeparationDeg(aAz,aEl,bAz,bEl){
+ const ae=aEl*DEG,be=bEl*DEG,dAz=(aAz-bAz)*DEG;
+ const dot=Math.sin(ae)*Math.sin(be)+Math.cos(ae)*Math.cos(be)*Math.cos(dAz);
+ return Math.acos(clamp(dot,-1,1))*RAD;
+}
+function alignmentReference(ms){
+ if(alignmentTarget.value==="sun")return currentSunAltAz(ms);
+ if(alignmentTarget.value==="moon"){
+  const moon=solarSystemRaDec(ms).moon;
+  return moon?raDecToAltAz(moon.ra,moon.dec,ms):null;
+ }
+ const az=Number(alignmentAz.value),el=Number(alignmentEl.value);
+ if(!alignmentAz.value||!alignmentEl.value||!Number.isFinite(az)||!Number.isFinite(el)||az<0||az>=360||el< -90||el>90)return null;
+ return{az,el};
+}
+function updateAlignmentReadout(ms,now){
+ if(now-lastAlignmentUpdate<350)return;
+ lastAlignmentUpdate=now;
+ if(!observer){
+  alignmentReadout.textContent="Waiting for GPS location. Enable location permission.";
+  return;
+ }
+ const target=alignmentReference(ms);
+ if(!target){
+  alignmentReadout.textContent="Select a valid landmark bearing and elevation or wait for the astronomical reference.";
+  return;
+ }
+ const dAz=((target.az-yaw+540)%360)-180;
+ const dEl=target.el-pitch;
+ const separation=angularSeparationDeg(yaw,pitch,target.az,target.el);
+ const name=alignmentTarget.selectedOptions[0].textContent;
+ alignmentReadout.textContent=
+  "View: "+yaw.toFixed(1)+"° true bearing, "+pitch.toFixed(1)+"° elevation. "+
+  name+": "+target.az.toFixed(1)+"° bearing, "+target.el.toFixed(1)+"° elevation. "+
+  "Reference minus view: "+dAz.toFixed(1)+"° horizontal, "+dEl.toFixed(1)+"° vertical; "+
+  separation.toFixed(1)+"° angular separation. "+
+  (alignmentTarget.value!=="landmark"&&target.el<0?"Reference is below the astronomical horizon. ":"")+
+  (compassFollowing?"Following approximate device heading.":"Follow compass off; showing manual view direction.");
+}
 function tick(now){
  const dt=Math.min(100,Math.max(0,now-lastFrame));lastFrame=now;
  simTime=Date.now();
  clock.textContent=new Date(simTime).toLocaleString([], {year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
- stepAircraft(now);stepSatellites(now);draw();requestAnimationFrame(tick);
+ stepAircraft(now);stepSatellites(now);updateAlignmentReadout(simTime,now);draw();requestAnimationFrame(tick);
 }
 function pauseLiveDataForHiddenPage(){
  stopSatellitePolling();
