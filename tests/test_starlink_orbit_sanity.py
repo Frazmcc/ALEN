@@ -4,6 +4,8 @@ The capture showed labelled Starlink objects at ~28,000 km, ~491,000 km,
 and several million kilometres; those are invalid Starlink positions.
 """
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import subprocess
 
 from sgp4.api import Satrec
 from alen.satellites import OrbitRecord, _physically_plausible_orbit_position
@@ -33,3 +35,23 @@ def test_invalid_position_numbers_are_not_rendered():
     orbit=OrbitRecord("OTHER SATELLITE",100862,"2026-225H",Satrec.twoline2rv(LINE1,LINE2))
     for coords in ((float("nan"),2.0,3.0),(float("inf"),2.0,3.0),None):
         assert not _physically_plausible_orbit_position(orbit,{"visual"},coords,WHEN)
+
+
+def test_browser_rejects_implausible_starlink_trajectories():
+    app=Path("web/app.js").read_text(encoding="utf-8")
+    start=app.index("function satelliteTrajectoryPlausible(")
+    end=app.index("function satelliteTrajectorySample(",start)
+    js=app[start:end]+"""
+const good=[{rangeKm:580},{rangeKm:610}];
+const bad=[{rangeKm:580},{rangeKm:2233000}];
+if(!satelliteTrajectoryPlausible({name:"STARLINK-30001",groups:["starlink"]},good))
+ throw Error("ordinary Starlink pass filtered");
+if(satelliteTrajectoryPlausible({name:"STARLINK-30001",groups:["new"]},bad))
+ throw Error("bad Starlink orbit reached renderer");
+if(!satelliteTrajectoryPlausible({name:"FREGAT R/B",groups:["visual"]},[{rangeKm:21000}]))
+ throw Error("legitimate high-orbit stage filtered");
+if(satelliteTrajectoryPlausible({name:"STARLINK-34368"},[{rangeKm:491000}]))
+ throw Error("recorded bad distance accepted");
+"""
+    result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
+    assert result.returncode==0,result.stderr
