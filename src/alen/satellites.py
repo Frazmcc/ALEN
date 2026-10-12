@@ -376,7 +376,7 @@ class SatelliteProvider:
         now = time()
         with self._lock:
             cached = self._cache.get(key)
-        if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough(group, cached[1]):
+        if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough("visual", cached[1]):
             return cached[1]
 
         with self._fallback_lock:
