@@ -21,7 +21,6 @@ def test_tilt_mapping_requires_calibration_and_upright_portrait():
     source=APP[start:end]
     js="""const screen={orientation:{angle:0}};
 let pitch=35,minPitch=0;
-const tiltCalibrationButton={addEventListener(){}};
 const document={querySelector(){return tiltCalibrationButton}};
 function skyViewMessage(){}
 """ + source + """
