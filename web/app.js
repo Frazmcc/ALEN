@@ -1917,6 +1917,21 @@ canvas.addEventListener("wheel",e=>{
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 let compassFollowing=false;
 let lastDeviceBeta=null,tiltOffsetDeg=null;
+let reverseDeviceTilt=false;
+const reverseTiltButton=document.querySelector("#sky-tilt-reverse");
+function applyTiltDirection(raw){return reverseDeviceTilt?-raw:raw}
+reverseTiltButton.addEventListener("click",()=>{
+ reverseDeviceTilt=!reverseDeviceTilt;
+ reverseTiltButton.setAttribute("aria-pressed",String(reverseDeviceTilt));
+ reverseTiltButton.textContent=reverseDeviceTilt?"Reverse tilt: on":"Reverse tilt: off";
+ // Re-anchor at the current view so toggling does not cause a jump.
+ if(lastDeviceBeta!==null){
+  const raw=deviceTiltElevation({beta:lastDeviceBeta});
+  if(raw!==null)tiltOffsetDeg=pitch-applyTiltDirection(raw);
+ }
+ skyViewMessage(reverseDeviceTilt?"Reversed vertical response for this session.":"Normal vertical response restored.");
+});
+
 const tiltCalibrationButton=document.querySelector("#sky-tilt-calibrate");
 function deviceTiltElevation(event){
  const angle=Number(screen.orientation?.angle)||0;
@@ -1931,7 +1946,7 @@ function calibrateDeviceTilt(){
  if(lastDeviceBeta===null)return false;
  const raw=deviceTiltElevation({beta:lastDeviceBeta});
  if(raw===null)return false;
- tiltOffsetDeg=pitch-raw;
+ tiltOffsetDeg=pitch-applyTiltDirection(raw);
  return true;
 }
 tiltCalibrationButton.addEventListener("click",()=>{
@@ -1966,7 +1981,7 @@ function onCompassOrientation(event){
  if(rawTilt!==null){
   lastDeviceBeta=event.beta;
   if(tiltOffsetDeg!==null){
-   const targetPitch=clamp(rawTilt+tiltOffsetDeg,minPitch,89);
+   const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg,minPitch,89);
    pitch+=clamp(targetPitch-pitch,-6,6)*.3;
   }
  }
