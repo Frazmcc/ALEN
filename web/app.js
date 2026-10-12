@@ -871,7 +871,8 @@ function satelliteTrajectorySample(points,elapsedMs){
  }else{
   for(let i=1;i<points.length;i++)if(tMs<=points[i].timeMs){a=points[i-1];b=points[i];break}
  }
- const span=Math.max(1,b.timeMs-a.timeMs),t=clamp((tMs-a.timeMs)/span,0,tMs>b.timeMs?10:1);
+ // Do not invent satellite motion after the last propagated SGP4 sample.
+  const span=Math.max(1,b.timeMs-a.timeMs),t=clamp((tMs-a.timeMs)/span,0,1);
  const vec=satelliteSlerp(a.vec,b.vec,t),altaz=satelliteVectorToAltAz(vec);
  return{vec,az:altaz.az,el:altaz.el,rangeKm:Math.max(0,a.rangeKm+(b.rangeKm-a.rangeKm)*t)};
 }
@@ -970,7 +971,14 @@ async function refreshSatellites(force=false){
   }
   satelliteRequestState="ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
-  const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,SATELLITE_MAX_SAMPLE_AGE_MS);
+  // The server's absolute sample instant includes cache age; comparing it with
+   // receipt wall time also includes network transit and processing delay.
+   const sampleEpochMs=Date.parse(String(satelliteDiagnostics?.position_sample_at||""));
+   const sampleAgeMs=Number.isFinite(sampleEpochMs)
+    ?Math.max(0,wallNow-sampleEpochMs)
+    :Math.max(0,(Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000);
+   const forecastMs=Math.max(0,Number(data.satellites?.[0]?.motion_forecast_seconds)||12)*1000;
+   if(sampleAgeMs>forecastMs+SATELLITE_MAX_SAMPLE_AGE_MS)throw new Error("stale satellite prediction");
   const snapToFresh=satelliteSnapOnRefresh;
   for(const raw of (Array.isArray(data.satellites)?data.satellites:[])){
    const norad=String(raw.norad||"").trim();
