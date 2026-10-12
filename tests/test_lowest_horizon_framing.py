@@ -5,17 +5,30 @@ import subprocess
 APP=Path("web/app.js").read_text(encoding="utf-8")
 
 
-def test_lowest_manual_view_horizon_is_at_82_percent_of_canvas():
+def test_lowest_manual_view_horizon_fits_above_bottom_controls():
     beginning=APP.index("function updateMinPitch(){")
     end=APP.index("function fovLimits()",beginning)
     code=APP[beginning:end]
     js=(
-        "const RAD=180/Math.PI;let minPitch=0;let vfov=75*Math.PI/180;"
-        "const verticalFovRad=()=>vfov;"
+        "const RAD=180/Math.PI;const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));"
+        "let minPitch=0,width=1000,height=700,barHeight=58;"
+        "const verticalFovRad=()=>75*Math.PI/180;"
+        "const horizonBottomGap=()=>barHeight+10;"
         +code+
-        "updateMinPitch();"
-        "const screenY=.5+Math.tan(minPitch*Math.PI/180)/Math.tan(vfov/2)*.5;"
-        "if(Math.abs(screenY-.82)>1e-8)throw Error('incorrect horizon framing');"
+        """
+function horizonRatio(){
+ updateMinPitch();
+ return .5+Math.tan(minPitch*Math.PI/180)/Math.tan(verticalFovRad()/2)*.5;
+}
+let ratio=horizonRatio();
+if(Math.abs(ratio-Math.min(.9,(height-(barHeight+10)-12)/height))>1e-8)throw Error("desktop framing must respect bottom controls");
+barHeight=125;
+ratio=horizonRatio();
+if(ratio*height>height-(barHeight+10)-11)throw Error("horizon overlaps layer bar");
+height=360;barHeight=100;
+ratio=horizonRatio();
+if(ratio*height>height-(barHeight+10)-11)throw Error("compact viewport overlap");
+"""
     )
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr

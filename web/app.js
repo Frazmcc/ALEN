@@ -318,10 +318,13 @@ function screenElevationAtY(y){
  return clamp(pitch+delta,-90,90);
 }
 function updateMinPitch(){
- // At the manual viewing floor, place the astronomical horizon near the lower
- // fifth of the canvas as in the accepted wide-sky reference recording.
- // Account for the perspective projection rather than using a fixed pitch.
- const normalized=2*.82-1;
+ // Frame the real zero-degree horizon near the bottom, but keep it above
+ // the actual on-screen layer bar and its text on every viewport size.
+ // Only the viewing pitch changes: terrain elevations and sky coordinates
+ // remain topocentric and are projected together without screen offsets.
+ const skyBottom=Math.max(height*.5,height-horizonBottomGap()-12);
+ const horizonY=Math.min(height*.9,skyBottom);
+ const normalized=clamp(2*horizonY/Math.max(1,height)-1,0,.98);
  minPitch=Math.atan(normalized*Math.tan(verticalFovRad()/2))*RAD;
 }
 function fovLimits(){
