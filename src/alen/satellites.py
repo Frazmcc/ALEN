@@ -36,6 +36,7 @@ class SatelliteProvider:
     FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"
     ORBITALWIKI_URL = "https://www.orbitalwiki.com/api/v1/elements"
     SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
+    ALEN_SNAPSHOT_URL = "https://raw.githubusercontent.com/Frazmcc/ALEN/orbit-feed/{group}.json"
     CACHE_SECONDS = 1800
     MAX_CACHE_GROUPS = 16
     POSITION_BUCKET_SECONDS = 1
@@ -554,14 +555,80 @@ class SatelliteProvider:
             )
         return tuple(records)
 
+    @classmethod
+    def _catalog_fresh_enough(
+        cls, group: str, records: tuple[OrbitRecord, ...], when: datetime | None = None,
+    ) -> bool:
+        """Never silently substitute a weeks-old satellite mirror.
+
+        Freshness is evaluated from the element epochs, NOT the GitHub mirror's
+        latest commit or its global manifest date.
+        """
+        if not records:
+            return False
+        moment = when or datetime.now(timezone.utc)
+        stride = max(1, len(records) // 128)
+        ages = [
+            cls._orbit_epoch_age_days(record, moment)
+            for record in records[::stride]
+        ]
+        known = sorted(age for age in ages if age is not None)
+        if len(known) < max(1, len(ages) // 2):
+            return False
+        median_age = known[len(known) // 2]
+        max_age = 5.0 if group in {"starlink", "oneweb", "kuiper"} else (
+            10.0 if group in {"stations", "visual", "last-30-days"} else 21.0
+        )
+        return -2.0 <= median_age <= max_age
+
     def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
-        records = self._fetch_group_json(group)
-        if records:
-            return records
-        records = self._fetch_group_mirror_json(group)
-        if records:
-            return records
-        return self._fetch_group_tle(group)
+        # Primary: authoritative current OMM. A backed-up snapshot refreshed by
+        # our own scheduled GitHub Actions is safer than a third-party mirror
+        # with a misleadingly fresh repository timestamp.
+        for source in (
+            self._fetch_group_json,
+            self._fetch_group_alen_snapshot_json,
+            self._fetch_group_mirror_json,
+            self._fetch_group_tle,
+        ):
+            records = source(group)
+            if self._catalog_fresh_enough(group, records):
+                return records
+        return ()
+
+    def _fetch_group_alen_snapshot_json(self, group: str) -> tuple[OrbitRecord, ...]:
+        try:
+            with httpx.Client(
+                timeout=12.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
+            ) as client:
+                response = client.get(self.ALEN_SNAPSHOT_URL.format(group=group.lower()))
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return ()
+        if not isinstance(payload, list):
+            return ()
+        records: list[OrbitRecord] = []
+        for fields in payload:
+            if not isinstance(fields, dict):
+                continue
+            try:
+                satellite = Satrec()
+                omm.initialize(satellite, fields)
+                norad = int(fields["NORAD_CAT_ID"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            records.append(
+                OrbitRecord(
+                    name=str(fields.get("OBJECT_NAME") or f"NORAD {norad}").strip(),
+                    norad=norad,
+                    international_id=str(fields.get("OBJECT_ID") or "").strip(),
+                    satellite=satellite,
+                )
+            )
+        return tuple(records)
 
     def _fetch_group_json(self, group: str) -> tuple[OrbitRecord, ...]:
         try:
