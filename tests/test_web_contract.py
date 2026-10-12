@@ -728,10 +728,13 @@ def test_bright_stars_remain_visible_in_daylight() -> None:
     assert "const daylightAlpha=starVisibilityAlpha(visualMag,sky)" in APP
 
 
-def test_satellite_group_fetch_has_fast_public_mirror_fallback() -> None:
+def test_satellite_group_fetch_rejects_stale_mirrors_and_prioritises_trusted_snapshot() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
     assert 'SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"' in source
-    assert "records = self._fetch_group_mirror_json(group)" in source
+    assert '("alen_snapshot", self._fetch_group_alen_snapshot_json)' in source
+    assert '("third_party_mirror", self._fetch_group_mirror_json)' in source
+    assert "if self._catalog_fresh_enough(group, records):" in source
+    assert "ALEN_SNAPSHOT_URL" in source
     assert "def _fetch_group_mirror_json" in source
     assert "self.SATVISOR_MIRROR_URL.format(group=group.lower())" in source
     assert "timeout=10.0" in source
