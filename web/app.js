@@ -2084,7 +2084,6 @@ function stopCompassFollowing(){
 function onCompassOrientation(event){
  if(!compassFollowing)return;
  const heading=absoluteCompassHeading(event);
- if(heading===null)return;
  const rawTilt=deviceTiltElevation(event);
  if(rawTilt!==null){
   lastDeviceBeta=event.beta;
@@ -2097,6 +2096,7 @@ function onCompassOrientation(event){
    if(tiltGain>0)pitch+=clamp(tiltError*tiltGain,-3,3);
   }
  }
+ if(heading===null)return;
  const delta=((heading-yaw+540)%360)-180;
  // Reject sub-degree magnetometer jitter, but catch up promptly on deliberate turns.
  // This remains an orientation display filter, never a change to sky positions.
@@ -2105,27 +2105,58 @@ function onCompassOrientation(event){
  if(gain>0)yaw=norm360(yaw+clamp(delta*gain,-5,5));
  compassToggle.textContent="Follow compass: on";
 }
-compassToggle.addEventListener("click",async()=>{
- if(compassFollowing){stopCompassFollowing();skyViewMessage("Compass following stopped. Manual controls available.");return}
+const mobileSensorButton=document.querySelector("#mobile-sensors-enable");
+const mobileDevice=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||
+ (navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+async function startCompassFollowing({requestPermission=false}={}){
  if(!("DeviceOrientationEvent" in window)){
-  skyViewMessage("Device compass unavailable. Continue using manual controls.");return;
+  skyViewMessage("Compass unavailable. Use manual sky controls.");
+  return false;
  }
  try{
   if(typeof DeviceOrientationEvent.requestPermission==="function"){
+   if(!requestPermission)return false; // iOS requires direct user interaction.
    const permission=await DeviceOrientationEvent.requestPermission();
-   if(permission!=="granted"){skyViewMessage("Compass permission denied. Manual controls remain available.");return}
+   if(permission!=="granted"){skyViewMessage("Motion permission denied. Manual controls remain available.");return false}
   }
   compassFollowing=true;
+  // Map the phone's upright portrait tilt to its physical horizon without
+  // borrowing the previous manually positioned sky angle.
+  tiltOffsetDeg=0;
   compassToggle.setAttribute("aria-pressed","true");
   compassToggle.textContent="Follow compass: awaiting heading";
   window.addEventListener("deviceorientation",onCompassOrientation);
   window.addEventListener("deviceorientationabsolute",onCompassOrientation);
-  skyViewMessage("Approximate compass active. Tilt stays manual until calibrated in upright portrait mode.");
+  mobileSensorButton.hidden=true;
+  skyViewMessage("Live mobile heading and upright portrait tilt enabled. Sensor accuracy varies by device.");
+  return true;
  }catch{
   stopCompassFollowing();
-  skyViewMessage("Compass unavailable or permission failed. Manual controls remain available.");
+  skyViewMessage("Motion sensors unavailable or permission denied. Manual sky controls remain available.");
+  return false;
+ }
+}
+compassToggle.addEventListener("click",async()=>{
+ if(compassFollowing){stopCompassFollowing();skyViewMessage("Compass following stopped. Manual controls available.");return}
+ await startCompassFollowing({requestPermission:true});
+});
+mobileSensorButton.addEventListener("click",async()=>{
+ if(!await startCompassFollowing({requestPermission:true})){
+  mobileSensorButton.hidden=false;
  }
 });
+function initialiseMobileSkySensors(){
+ if(!mobileDevice)return;
+ if(!("DeviceOrientationEvent" in window))return;
+ if(typeof DeviceOrientationEvent.requestPermission==="function"){
+  // Never make an iOS permission request outside a user gesture.
+  mobileSensorButton.hidden=false;
+  skyViewMessage("Tap Enable live compass & tilt to allow motion sensors on this Apple device.");
+ }else{
+  void startCompassFollowing();
+ }
+}
+
 const skyViewCalibrationStatus=document.querySelector("#sky-view-calibration-status");
 function skyViewMessage(message){if(skyViewCalibrationStatus)skyViewCalibrationStatus.textContent=message}
 document.querySelector("#sky-view-save").addEventListener("click",()=>{
@@ -2310,5 +2341,5 @@ document.addEventListener("visibilitychange",()=>{
 });
 window.addEventListener("beforeunload",()=>{stopCompassFollowing()});
 window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);stopSatellitePolling()});
-loadBrightStars();setLiveStatus();requestLocation();requestAnimationFrame(tick);
+loadBrightStars();setLiveStatus();requestLocation();initialiseMobileSkySensors();requestAnimationFrame(tick);
 })();
