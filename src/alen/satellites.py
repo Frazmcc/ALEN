@@ -78,6 +78,26 @@ class SatelliteProvider:
         ] = {}
         self.last_diagnostics: dict[str, object] = {}
 
+    @staticmethod
+    def _orbit_epoch_age_days(record: OrbitRecord, when: datetime) -> float | None:
+        """Signed epoch age in days; negative means a future-dated element set.
+
+        The orbit age is diagnostic, not a universal validity or accuracy bound.
+        """
+        try:
+            epoch_jd = float(record.satellite.jdsatepoch) + float(record.satellite.jdsatepochF)
+            if not math.isfinite(epoch_jd) or epoch_jd <= 0:
+                return None
+            moment = when.astimezone(timezone.utc)
+            now_jd, now_frac = jday(
+                moment.year, moment.month, moment.day,
+                moment.hour, moment.minute,
+                moment.second + moment.microsecond / 1_000_000,
+            )
+            return round(now_jd + now_frac - epoch_jd, 3)
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            return None
+
     def visible(
         self,
         latitude_deg: float,
@@ -206,6 +226,7 @@ class SatelliteProvider:
                 {
                     "norad": record.norad,
                     "name": record.name,
+                    "orbit_epoch_age_days": self._orbit_epoch_age_days(record, now),
                     "international_id": record.international_id or "—",
                     "azimuth_deg": trajectory[0]["azimuth_deg"],
                     "elevation_deg": trajectory[0]["elevation_deg"],
@@ -223,6 +244,19 @@ class SatelliteProvider:
                 }
             )
 
+        epoch_ages = [
+            self._orbit_epoch_age_days(record, now)
+            for record in records
+        ]
+        valid_epoch_ages = [age for age in epoch_ages if age is not None]
+        orbit_epoch_diagnostics = {
+            "orbit_epoch_age_known": len(valid_epoch_ages),
+            "orbit_epoch_age_unknown": len(epoch_ages) - len(valid_epoch_ages),
+            "orbit_epoch_older_than_3_days": sum(age > 3 for age in valid_epoch_ages),
+            "orbit_epoch_older_than_7_days": sum(age > 7 for age in valid_epoch_ages),
+            "orbit_epoch_future_dated": sum(age < -1 for age in valid_epoch_ages),
+            "orbit_epoch_max_age_days": max(valid_epoch_ages, default=None),
+        }
         visible_total = len(visible)
         selected = _select_visible_satellites(visible, limit)
         selected.sort(
@@ -237,6 +271,7 @@ class SatelliteProvider:
         complete = not missing_groups and not fallback_used
         self.last_diagnostics = {
             "requested_groups": requested_groups,
+            **orbit_epoch_diagnostics,
             "loaded_by_group": loaded_by_group,
             "missing_groups": missing_groups,
             "complete": complete,
