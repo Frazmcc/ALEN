@@ -32,7 +32,7 @@ def test_satellite_sample_ids_stable_across_azimuth_cell_boundaries():
 
 def test_explicit_group_label_mode_has_no_arbitrary_cap():
     assert "const MAX_SATELLITE_LABELS=18" not in APP
-    assert 'const labelsEnabled=layerLabelsOn("satellites")||satGroup?.labels;' in APP
+    assert "const labelsEnabled=satelliteLabelsEnabled(s)" in APP
     assert "if(visibility>.5&&(active||labelsEnabled))" in APP
     assert "labelsEnabled&&s.el>18" not in APP
     assert "chooseSatelliteLabelPosition(" in APP
@@ -63,3 +63,24 @@ def test_five_second_poller_does_not_skip_every_other_cycle():
     assert "const SATELLITE_REFRESH_MS=5000" in APP
     assert "satellitesUpdated<8000" not in APP
     assert "satellitesUpdated<SATELLITE_REFRESH_MS-200" in APP
+
+
+def test_secondary_starlink_membership_can_enable_labels():
+    start=APP.index("function satelliteLabelsEnabled(s){")
+    end=APP.index("function satelliteLabelText(",start)
+    script="""const layerLabelsOn=()=>false;
+const SATELLITE_GROUPS={
+ new:{enabled:true,labels:false},
+ starlink:{enabled:true,labels:true},
+ bright:{enabled:false,labels:true}
+};
+"""+APP[start:end]+"""
+if(!satelliteLabelsEnabled({group:"new",memberships:["new","starlink"]}))
+ throw Error("Starlink label suppressed by new-launch styling");
+if(satelliteLabelsEnabled({group:"new",memberships:["new"]}))
+ throw Error("Disabled label group unexpectedly enabled");
+if(satelliteLabelsEnabled({group:"bright",memberships:["bright"]}))
+ throw Error("Disabled group should never label objects");
+"""
+    result=subprocess.run(["node","-e",script],capture_output=True,text=True,timeout=10)
+    assert result.returncode==0,result.stderr
