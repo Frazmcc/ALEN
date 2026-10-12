@@ -18,20 +18,8 @@ def test_sky_view_controls_and_local_storage_contract() -> None:
 
 def test_saved_view_rejects_invalid_data_and_restores_valid_angles() -> None:
     start = APP.index("const SKY_VIEW_STORAGE_KEY=")
-    end = APP.index("const activePointers", start) if "const activePointers" in APP[start:] else -1
-    # The sky-view helpers terminate before the next top-level view declaration.
-    end = APP.index("const SKY_VIEW_STORAGE_KEY=", start) if False else APP.index(
-        "const activePointers", 0
-    ) if False else APP.index("const layers=", start)
-    # Extract only the self-contained storage helper functions.
-    end = APP.index("let simTime=", start) if "let simTime=" in APP[start:] else end
-    functions = APP[start:APP.index("const SKY_VIEW_STORAGE_KEY=", start) + 0] if False else APP[start:APP.index("const activePointers", start)] if "const activePointers" in APP[start:] else APP[start:APP.index("const layers=", start)]
-    # End at the last helper, not unrelated renderer state.
-    functions = functions[: functions.index("function clearSavedSkyView(){")]
-    functions += """function clearSavedSkyView(){
- try{localStorage.removeItem(SKY_VIEW_STORAGE_KEY);return true}catch{return false}
-}
-"""
+    end = APP.index("let simTime=", start)
+    helpers = APP[start:end]
     js = """
 const store=new Map();
 const localStorage={
@@ -43,7 +31,7 @@ let yaw=180,pitch=30,fov=90,minPitch=0;
 const norm360=x=>(x%360+360)%360;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 function setFov(x){fov=clamp(x,18,130)}
-""" + functions + """
+""" + helpers + """
 const check=(ok,msg)=>{if(!ok)throw Error(msg)};
 check(!readSavedSkyView(),"empty store should not restore");
 store.set(SKY_VIEW_STORAGE_KEY,'{"version":1,"yaw":900,"pitch":30,"fov":90}');
