@@ -39,7 +39,7 @@ def test_fresh_alternative_wins_over_old_third_party_mirror(monkeypatch):
     monkeypatch.setattr(provider,"_fetch_group_tle",source("tle",()))
     monkeypatch.setattr("alen.satellites.datetime", type("FixedDatetime", (datetime,), {"now": classmethod(lambda cls,tz=None: WHEN)}))
     assert provider._fetch_group("starlink")==recent
-    assert hits==["primary","alen"]
+    assert hits==["alen"]
 
 
 def test_stale_cached_elements_cannot_be_reused_on_fetch_failure(monkeypatch):
@@ -62,3 +62,15 @@ def test_snapshot_schema_rejects_stale_elements_without_changing_omm():
     old={**fields,"EPOCH":"2026-08-31T10:23:20.000000"}
     assert validated_snapshot("starlink",[old],WHEN) is None
     assert validated_snapshot("starlink",[],WHEN) is None
+
+
+def test_primary_feed_is_used_when_managed_snapshot_is_stale(monkeypatch):
+    provider=SatelliteProvider()
+    stale=(record("26242.23989767"),)
+    recent=(record("26285.23989767"),)
+    hits=[]
+    monkeypatch.setattr(provider,"_fetch_group_alen_snapshot_json",lambda group: hits.append("snapshot") or stale)
+    monkeypatch.setattr(provider,"_fetch_group_json",lambda group: hits.append("primary") or recent)
+    monkeypatch.setattr("alen.satellites.datetime", type("FixedDatetime", (datetime,), {"now": classmethod(lambda cls,tz=None: WHEN)}))
+    assert provider._fetch_group("starlink")==recent
+    assert hits==["snapshot","primary"]
