@@ -18,6 +18,7 @@ class Airport:
     longitude_deg: float
     airport_type: str
     scheduled_service: bool
+    elevation_m: float | None = None
 
 
 class AirportProvider:
@@ -69,6 +70,7 @@ class AirportProvider:
                         "distance_km": round(distance, 1),
                         "bearing_deg": round(bearing, 1),
                         "type": airport.airport_type,
+                        "elevation_m": airport.elevation_m,
                     },
                 )
             )
@@ -124,6 +126,10 @@ class AirportProvider:
                     longitude = float(row.get("longitude_deg") or "")
                 except ValueError:
                     continue
+                try:
+                    elevation_m = float(row["elevation_ft"]) * 0.3048 if row.get("elevation_ft") else None
+                except (ValueError, TypeError):
+                    elevation_m = None
                 records.append(
                     Airport(
                         iata=iata if len(iata) == 3 else "",
@@ -133,6 +139,7 @@ class AirportProvider:
                         longitude_deg=longitude,
                         airport_type=airport_type,
                         scheduled_service=scheduled,
+                        elevation_m=elevation_m,
                     )
                 )
         except csv.Error:
@@ -155,6 +162,11 @@ class AirportProvider:
                 longitude = float(row.get("Longitude") or "")
             except ValueError:
                 continue
+            try:
+                raw_elevation = row.get("Elevation") or row.get("ElevationFt") or ""
+                elevation_m = float(raw_elevation) * 0.3048 if raw_elevation else None
+            except (ValueError, TypeError):
+                elevation_m = None
             records.append(
                 Airport(
                     iata=iata if len(iata) == 3 else "",
@@ -164,6 +176,7 @@ class AirportProvider:
                     longitude_deg=longitude,
                     airport_type="fallback",
                     scheduled_service=True,
+                    elevation_m=elevation_m,
                 )
             )
         return tuple(records)
