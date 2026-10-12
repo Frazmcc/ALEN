@@ -661,6 +661,19 @@ function aircraftScreenRotation(a,q,p){
  }
  return adiff(heading,q.az)*DEG;
 }
+function aircraftDepthCue(rangeKm,elevationDeg=30,active=false){
+ // Screen sizes are restrained visual cues, not literal aircraft angular sizes.
+ const distance=Number(rangeKm),km=Number.isFinite(distance)&&distance>=0?clamp(distance,0.25,180):180;
+ const proximity=1-clamp(Math.log1p(km)/Math.log1p(180),0,1);
+ const elevation=Number(elevationDeg),clarity=Number.isFinite(elevation)?clamp((elevation-1)/45,0,1):0;
+ const alpha=clamp((.4+.6*Math.sqrt(proximity))*(.56+.44*Math.sqrt(clarity))*(active?1.2:1),.19,1);
+ return{
+  // Keep near aircraft recognisable, but make distant traffic only a tiny silhouette.
+  size:active?clamp(4+12*Math.pow(proximity,1.2),5,17):2.5+12*Math.pow(proximity,1.4),
+  alpha,
+  halo:active?5:1+2.2*proximity
+ };
+}
 function drawAircraftIcon(kind,size,fill,stroke){
  const s=size/20;
  ctx.save();ctx.scale(s,s);ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=1.7/s;ctx.lineJoin="round";ctx.lineCap="round";
@@ -1270,9 +1283,12 @@ function draw(){
   for(const a of aircraft){
    if(!aircraftGroupEnabled(a))continue;
    const q=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
-   const depthScale=clamp(1.28-q.slantRangeKm/110,.72,1.22),iconSize=Math.round(19*depthScale),visualType=aircraftVisualType(a);
-   ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(aircraftScreenRotation(a,q,p));
-   drawAircraftIcon(visualType,iconSize,aircraftInk,dayMode?"rgba(255,255,255,.88)":"rgba(0,0,0,.55)");
+   const active=selected?.id===a.id,depth=aircraftDepthCue(q.slantRangeKm,q.el,active),iconSize=depth.size,visualType=aircraftVisualType(a);
+   ctx.save();ctx.translate(p[0],p[1]);
+   ctx.globalAlpha=depth.alpha*(dayMode?.08:.12);ctx.fillStyle=aircraftInk;ctx.beginPath();ctx.arc(0,0,depth.halo,0,Math.PI*2);ctx.fill();
+   ctx.globalAlpha=depth.alpha;ctx.rotate(aircraftScreenRotation(a,q,p));
+   if(iconSize<5){ctx.fillStyle=aircraftInk;ctx.beginPath();ctx.arc(0,0,Math.max(.8,iconSize*.3),0,Math.PI*2);ctx.fill()}
+   else drawAircraftIcon(visualType,iconSize,aircraftInk,dayMode?"rgba(255,255,255,.65)":"rgba(0,0,0,.4)");
    ctx.restore();
    ctx.globalAlpha=1;
    if(aircraftLabelsOn(a)){
