@@ -320,7 +320,8 @@ function screenElevationAtY(y){
 function updateMinPitch(){
  const vfov=verticalFovRad(),targetY=Math.max(0,height-horizonBottomGap());
  const normalized=(targetY-height*.5)/Math.max(1,height*.5);
- minPitch=Math.atan(normalized*Math.tan(vfov/2))*RAD;
+ // Allow a genuinely level (0°) view with the physical horizon at screen centre.
+ minPitch=0;
 }
 function fovLimits(){
  const min=18,maxHorizontal=130;
@@ -1946,7 +1947,10 @@ function calibrateDeviceTilt(){
  if(lastDeviceBeta===null)return false;
  const raw=deviceTiltElevation({beta:lastDeviceBeta});
  if(raw===null)return false;
- tiltOffsetDeg=pitch-applyTiltDirection(raw);
+ // Calibration means the user is holding the phone level, not matching an
+ // earlier artificially horizon-raised browser view.
+ pitch=0;
+ tiltOffsetDeg=-applyTiltDirection(raw);
  return true;
 }
 tiltCalibrationButton.addEventListener("click",()=>{
@@ -1982,15 +1986,18 @@ function onCompassOrientation(event){
   lastDeviceBeta=event.beta;
   if(tiltOffsetDeg!==null){
    const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg,minPitch,89);
-   pitch+=clamp(targetPitch-pitch,-6,6)*.3;
+   const tiltError=targetPitch-pitch;
+   const tiltMagnitude=Math.abs(tiltError);
+   const tiltGain=tiltMagnitude<0.65?0:tiltMagnitude<5?.08:tiltMagnitude<20?.15:.24;
+   if(tiltGain>0)pitch+=clamp(tiltError*tiltGain,-3,3);
   }
  }
  const delta=((heading-yaw+540)%360)-180;
  // Reject sub-degree magnetometer jitter, but catch up promptly on deliberate turns.
  // This remains an orientation display filter, never a change to sky positions.
  const magnitude=Math.abs(delta);
- const gain=magnitude<0.7?0:magnitude<5?0.09:magnitude<20?0.19:0.32;
- if(gain>0)yaw=norm360(yaw+clamp(delta*gain,-9,9));
+ const gain=magnitude<1.0?0:magnitude<5?.055:magnitude<20?.12:.24;
+ if(gain>0)yaw=norm360(yaw+clamp(delta*gain,-5,5));
  compassToggle.textContent="Follow compass: on";
 }
 compassToggle.addEventListener("click",async()=>{

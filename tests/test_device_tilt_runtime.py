@@ -45,9 +45,9 @@ check(deviceTiltElevation({beta:90})===null,"reject landscape");
 screen.orientation.angle=0;
 check(!calibrateDeviceTilt(),"calibration requires a sample");
 lastDeviceBeta=120;
-check(calibrateDeviceTilt()&&tiltOffsetDeg===5,"align to current elevation");
+check(calibrateDeviceTilt()&&tiltOffsetDeg===-30&&pitch===0,"calibrate level horizon");
 reverseDeviceTilt=true;
-check(calibrateDeviceTilt()&&tiltOffsetDeg===65,"reverse tilt anchoring");
+check(calibrateDeviceTilt()&&tiltOffsetDeg===30&&pitch===0,"reverse tilt horizon anchoring");
 """
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr
