@@ -492,7 +492,9 @@ def test_satellite_shared_snapshot_is_advanced_to_now() -> None:
     assert "position_cache_hits" in source
     assert "position_cache_misses" in source
     assert "const SATELLITE_MAX_SAMPLE_AGE_MS=10000" in APP
-    assert "const sampleAgeMs=clamp((Number(satelliteDiagnostics?.position_sample_age_seconds)||0)*1000,0,SATELLITE_MAX_SAMPLE_AGE_MS)" in APP
+    assert 'position_sample_at||""' in APP
+    assert "wallNow-sampleEpochMs" in APP
+    assert 'throw new Error("stale satellite prediction")' in APP
     assert "const trajectory=satelliteTrajectory(raw,horizon)" in APP
     assert "targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs)" in APP
     assert 'detail:"SGP4 · shared world-position trajectory"' in APP
@@ -854,7 +856,8 @@ def test_satellite_motion_uses_sgp4_forecast_trajectory() -> None:
     assert "function satelliteSlerp(a,b,t)" in APP
     assert "const supplied=Array.isArray(raw.trajectory)?raw.trajectory:[]" in APP
     assert "const vec=satelliteSlerp(a.vec,b.vec,t)" in APP
-    assert "tMs>b.timeMs?10:1" in APP
+    assert "tMs>b.timeMs?10:1" not in APP
+    assert "t=clamp((tMs-a.timeMs)/span,0,1)" in APP
 
 
 def test_satellite_motion_has_no_zenith_azimuth_singularity() -> None:
