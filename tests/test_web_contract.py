@@ -175,7 +175,8 @@ def test_airports_are_clickable_selectable_objects_with_media() -> None:
     assert 'limit:"30"' in APP
     assert "Number(a.distance_km)<=AIRPORT_RADIUS_KM" in APP
     assert "setTimeout(()=>refreshAirports(),5000)" in APP
-    assert "horizonEl+1.6" in APP
+    assert "horizonEl+1.6" not in APP
+    assert "markerEl=visible?actualEl:horizonEl" in APP
     assert "function airportDisplayObject" in APP
     assert "airports.map(airportDisplayObject)" in APP
     assert 'o.kind==="AIRPORT"' in APP
@@ -325,7 +326,7 @@ def test_unified_sky_object_foundation() -> None:
     assert 'return makeAstronomySkyObject({id:"planet:"+id' in APP
     assert 'const sat=makeSkyObject({id,kind:"SATELLITE"' in APP
     assert 'return p?makeAstronomySkyObject({...o,az:p.az,el:p.el}):null' in APP
-    assert "airports.map(airportDisplayObject).filter(o=>skyObjectVisible" in APP
+    assert "airports.map(airportDisplayObject).filter(o=>Number.isFinite(o.el))" in APP
     assert "skyObjectScreen(o)" in APP
 
 
@@ -604,7 +605,7 @@ def test_multistate_layer_label_controls() -> None:
     assert 'state==="off"?"false":state==="labels"?"true":"mixed"' in APP
     assert 'if(layerLabelsOn("stars")' in APP
     assert 'if(layerLabelsOn("planets"))' in APP
-    assert 'if(layerLabelsOn("airports"))' in APP
+    assert 'if(layerLabelsOn("airports")||active)' in APP
     assert 'layerLabelsOn("satellites")&&satGroup?.labels' in APP
 
 

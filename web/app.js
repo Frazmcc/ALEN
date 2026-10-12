@@ -510,7 +510,7 @@ function requestLocation(){
 }
 function onLocation(pos){
  const first=!observer;
- observer={lat:pos.coords.latitude,lon:pos.coords.longitude,altM:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:0,accuracy:pos.coords.accuracy};
+ observer={lat:pos.coords.latitude,lon:pos.coords.longitude,altM:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:0,gpsAltM:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:null,accuracy:pos.coords.accuracy};
  setLocationStatus(observerLabel(),"ok");
  if(first){
    yaw=observer.lat>=0?180:0;
@@ -835,7 +835,8 @@ async function refreshAirports(){
    const next=(Array.isArray(data.airports)?data.airports:[]).filter(a=>Number(a.distance_km)<=AIRPORT_RADIUS_KM).map(a=>({
      id:"airport:"+(a.icao||a.iata||a.name),kind:"AIRPORT",name:a.name||a.icao||"Airport",
      iata:a.iata||"",icao:a.icao||"",distanceKm:Number(a.distance_km)||0,
-     az:Number(a.bearing_deg)||0,type:a.type||"airport",lat:Number(a.latitude),lon:Number(a.longitude)
+     az:Number(a.bearing_deg)||0,type:a.type||"airport",lat:Number(a.latitude),lon:Number(a.longitude),
+     elevationM:a.elevation_m==null?null:Number(a.elevation_m)
    }));
    airports=next;
  }catch(e){
@@ -843,9 +844,31 @@ async function refreshAirports(){
    setTimeout(()=>refreshAirports(),5000);
  }
 }
+function airportGroundAltAz(lat,lon,airportElevationM,observerElevationM){
+ const observerPoint=geodeticToEcef(observer.lat,observer.lon,observerElevationM);
+ const airportPoint=geodeticToEcef(lat,lon,airportElevationM);
+ const dx=airportPoint.x-observerPoint.x,dy=airportPoint.y-observerPoint.y,dz=airportPoint.z-observerPoint.z;
+ const phi=observer.lat*DEG,lambda=observer.lon*DEG;
+ const east=-Math.sin(lambda)*dx+Math.cos(lambda)*dy;
+ const north=-Math.sin(phi)*Math.cos(lambda)*dx-Math.sin(phi)*Math.sin(lambda)*dy+Math.cos(phi)*dz;
+ const up=Math.cos(phi)*Math.cos(lambda)*dx+Math.cos(phi)*Math.sin(lambda)*dy+Math.sin(phi)*dz;
+ const horizontal=Math.hypot(east,north);
+ if(horizontal<1)return null;
+ return {az:norm360(Math.atan2(east,north)*RAD),el:Math.atan2(up,horizontal)*RAD};
+}
 function airportDisplayObject(a){
- const horizonEl=terrainHorizonElevation(a.az);
- return makeSkyObject({...a,horizonEl,el:horizonEl+1.6});
+ const hasElevation=Number.isFinite(a.elevationM);
+ const observerElevation=observer?(Number.isFinite(observer.gpsAltM)?observer.gpsAltM:terrainProfile?.length?terrainObserverElevation:null):null;
+ const position=hasElevation&&Number.isFinite(a.lat)&&Number.isFinite(a.lon)&&observerElevation!==null
+  ?airportGroundAltAz(a.lat,a.lon,a.elevationM,observerElevation):null;
+ const az=position?.az??a.az,horizonEl=terrainHorizonElevation(az);
+ const actualEl=position?.el??null;
+ const visible=actualEl!==null&&actualEl>0&&actualEl>horizonEl;
+ // An unavailable or obstructed field is indicated at the skyline, never assigned fake altitude.
+ const markerEl=visible?actualEl:horizonEl;
+ return makeSkyObject({...a,az,el:markerEl,actualEl,horizonEl,
+  visibleAirport:visible,airportPositionKnown:actualEl!==null,
+  visibility:actualEl===null?"elevation unavailable":actualEl<=0?"below geometric horizon":visible?"above terrain horizon":"terrain obstructed"});
 }
 
 function satelliteGroupEntries(){
@@ -1376,20 +1399,37 @@ function draw(){
  drawDistantTerrain(dayMode);
 
  if(layers.airports){
+  const airportLabels=[];
   for(const raw of airports){
-   const a=airportDisplayObject(raw),p=project(a.az,a.el),h=project(a.az,a.horizonEl);if(!p)continue;
+   const a=airportDisplayObject(raw),p=project(a.az,a.el);if(!p)continue;
+   if(p[0]<-12||p[0]>width+12||p[1]<-12||p[1]>height+12)continue;
    const active=selected?.id===a.id,label=a.iata||a.icao||"APT";
+   const x=p[0],y=p[1],visible=a.visibleAirport;
    ctx.save();
-   ctx.strokeStyle=active?"#ffffff":"rgba(123,229,255,.95)";ctx.fillStyle=active?"#ffffff":"rgba(123,229,255,.95)";
-   ctx.lineWidth=active?2:1.4;
-   if(h){ctx.beginPath();ctx.moveTo(p[0],p[1]+7);ctx.lineTo(h[0],h[1]);ctx.stroke()}
-   ctx.beginPath();ctx.moveTo(p[0],p[1]-9);ctx.lineTo(p[0]-6,p[1]+2);ctx.lineTo(p[0]+6,p[1]+2);ctx.closePath();ctx.stroke();
-   ctx.beginPath();ctx.moveTo(p[0],p[1]+2);ctx.lineTo(p[0],p[1]+9);ctx.stroke();
-   if(layerLabelsOn("airports")){
-    ctx.font="700 10px ui-monospace,monospace";
-    const tw=ctx.measureText(label).width;
-    ctx.fillStyle="rgba(2,7,12,.82)";ctx.fillRect(p[0]+8,p[1]-17,tw+8,15);
-    ctx.fillStyle=active?"#ffffff":"#9feaff";ctx.fillText(label,p[0]+12,p[1]-6);
+   const ink=dayMode?"#0c536a":"#89dce9";
+   ctx.strokeStyle=active?"#ffffff":ink;
+   ctx.fillStyle=active?"#ffffff":ink;
+   ctx.lineWidth=active?1.7:1.15;
+   ctx.globalAlpha=active?1:visible?.9:.57;
+   if(visible){
+    ctx.beginPath();ctx.arc(x,y,active?3.6:2.4,0,Math.PI*2);ctx.fill();
+   }else{
+    ctx.beginPath();ctx.moveTo(x-3.3,y-2);ctx.lineTo(x,y-5.5);ctx.lineTo(x+3.3,y-2);ctx.stroke();
+   }
+   if(active){ctx.globalAlpha=.45;ctx.beginPath();ctx.arc(x,y,8.5,0,Math.PI*2);ctx.stroke()}
+   ctx.globalAlpha=1;
+   if(layerLabelsOn("airports")||active){
+    ctx.font="600 10px ui-monospace,monospace";
+    const w=ctx.measureText(label).width+12;
+    const bx=clamp(x+9,4,Math.max(4,width-w-4)),by=clamp(y-19,4,Math.max(4,height-20));
+    const box={x:bx,y:by,w,h:17};
+    if(active||!labelBoxOverlaps(box,airportLabels)){
+     airportLabels.push(box);
+     ctx.fillStyle=dayMode?"rgba(245,250,253,.92)":"rgba(3,13,21,.9)";
+     ctx.beginPath();ctx.roundRect(bx,by,w,17,5);ctx.fill();
+     ctx.fillStyle=active?(dayMode?"#11344b":"#ffffff"):ink;
+     ctx.fillText(label,bx+6,by+11.5);
+    }
    }
    ctx.restore();
   }
@@ -1405,7 +1445,7 @@ function draw(){
 function allSelectableObjects(){
  const stars=currentSkyObjects(simTime).filter(o=>skyObjectVisible(o));
  const ac=layers.aircraft?aircraft.filter(aircraftGroupEnabled).map(a=>{const p=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);return p?makeSkyObject({...a,az:p.az,el:p.el,distanceKm:p.distanceKm,slantRangeKm:p.slantRangeKm,horizontalKm:p.horizontalKm}):null}).filter(o=>skyObjectVisible(o)):[];
- const aps=layers.airports?airports.map(airportDisplayObject).filter(o=>skyObjectVisible(o,{respectLandscape:false})):[];
+ const aps=layers.airports?airports.map(airportDisplayObject).filter(o=>Number.isFinite(o.el)):[];
  const planets=currentPlanetObjects(simTime).filter(o=>skyObjectVisible(o));
  const visibleSatellites=layers.satellites?satellites.filter(o=>SATELLITE_GROUPS[o.group]?.enabled!==false&&skyObjectVisible(o)):[];
  return [...stars,...planets,...aps,...ac,...visibleSatellites];
@@ -1862,13 +1902,13 @@ function showObject(o){
  updateInspectorMedia(o);
  document.querySelector("#inspector-fact").textContent=o.fact||(
    o.kind==="AIRCRAFT"?"Live aircraft position from the current ADS-B feed; motion is smoothed between network updates.":
-   o.kind==="AIRPORT"?"Nearby airport positioned at its true bearing along the local terrain horizon.":
+   o.kind==="AIRPORT"?"Airport location is calculated from field elevation and observer position where elevation data is available. Obstructed airports use a quiet horizon beacon.":
    "Live satellite position propagated from current orbital elements. The marker is deliberately point-like, with a subtle range cue; precise line-of-sight distance is shown on selection. Visual position remains limited by source-data and observer/camera calibration accuracy."
  );
  const details=document.querySelector("#inspector-details");details.replaceChildren();
  let rows=[];
  if(o.kind==="AIRCRAFT"){const meaning=aircraftSpecialMeaning(o);rows=[["Callsign",o.callsign||o.name||"—"],["Operator",aircraftOperator(o)],["Squawk",o.squawk||"—"],["Meaning",meaning||"Standard ATC assignment / no special operation identified"],["Departure","Looking up…"],["Arrival","Looking up…"],["Military",aircraftIsMilitary(o)?"Yes":"No"],["Type",o.type],["Registration",o.registration],["ICAO hex",o.hex||"—"],["Altitude",Math.round(o.altM)+" m"],["Ground speed",Math.round(o.gs)+" kt"],["Track",Math.round(o.track)+"°"],["Ground distance",o.distanceKm.toFixed(1)+" km"],["Slant range",o.slantRangeKm.toFixed(1)+" km"],["Azimuth",o.az.toFixed(1)+"°"],["Elevation",o.el.toFixed(1)+"°"]]}
- else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"]];
+ else if(o.kind==="AIRPORT")rows=[["IATA",o.iata||"—"],["ICAO",o.icao||"—"],["Type",String(o.type).replaceAll("_"," ")],["Distance",o.distanceKm.toFixed(1)+" km"],["Bearing",o.az.toFixed(1)+"°"],["Airport elevation",Number.isFinite(o.elevationM)?Math.round(o.elevationM)+" m":"Unavailable"],["Apparent elevation",o.actualEl===null?"Unavailable":o.actualEl.toFixed(2)+"°"],["Visibility",o.visibility]];
  else if(o.kind==="SATELLITE")rows=[
   ["What is it?","Looking up…"],
   ["Owner / operator","Looking up…"],
