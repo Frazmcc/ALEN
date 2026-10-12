@@ -4,8 +4,6 @@ Compare ALEN against Skyfield's event finder for rise, culmination, and set.
 This verifies orbital geometry and timing, not contemporary element freshness.
 """
 from datetime import datetime, timedelta, timezone
-import math
-
 from sgp4.api import Satrec
 from skyfield.api import EarthSatellite, load, wgs84
 
