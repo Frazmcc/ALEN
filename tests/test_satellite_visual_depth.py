@@ -28,5 +28,5 @@ check(satelliteDepthCue(400,NaN).alpha<=near.alpha,"invalid elevation must fade 
 
 def test_existing_perspective_projection_is_preserved():
     assert "const nx=x/(z*Math.tan(hfov/2)),ny=y/(z*Math.tan(vfov/2));" in APP
-    assert "if(!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);" in APP
+    assert "if(s.el<0||!isAboveLandscape(s.az,s.el))continue;const p=project(s.az,s.el);" in APP
     assert "const depth=satelliteDepthCue(s.rangeKm,s.el,active);" in APP

@@ -161,11 +161,15 @@ class SatelliteProvider:
         ] = []
         propagated = 0
         propagation_failures = 0
+        physically_implausible = 0
         below_horizon = 0
         for satnum, (record, memberships) in merged.items():
             world_position = current_world.get(satnum)
             if world_position is None:
                 propagation_failures += 1
+                continue
+            if not _physically_plausible_orbit_position(record, memberships, world_position, sample_at):
+                physically_implausible += 1
                 continue
             position = _topocentric_from_frame(world_position, observer_frame)
             if position is None:
@@ -206,9 +210,14 @@ class SatelliteProvider:
             ]
             last_position = position
             for offset_seconds, future_world in future_worlds:
-                future_position = _topocentric_from_frame(
-                    future_world.get(record.norad),
-                    observer_frame,
+                future_ecef = future_world.get(record.norad)
+                future_position = (
+                    _topocentric_from_frame(future_ecef, observer_frame)
+                    if _physically_plausible_orbit_position(
+                        record, memberships, future_ecef,
+                        sample_at + timedelta(seconds=offset_seconds),
+                    )
+                    else None
                 ) or last_position
                 trajectory.append(
                     {
@@ -278,11 +287,12 @@ class SatelliteProvider:
             "unique_orbits": len(merged),
             "propagated": propagated,
             "propagation_failures": propagation_failures,
+            "physically_implausible": physically_implausible,
             "below_horizon": below_horizon,
             "visible": visible_total,
             "returned": len(selected),
             "truncated": len(selected) < visible_total,
-            "selection_policy": "density-preserving-sky-stratified-priority-sample",
+            "selection_policy": "stable-priority-orbit-hash-sample",
             "sky_distribution": _satellite_distribution(visible),
             "returned_sky_distribution": _satellite_distribution(selected),
             "fallback_used": fallback_used,
@@ -690,6 +700,34 @@ _SATELLITE_DISPLAY_PRIORITY_GROUPS = frozenset(
 )
 
 
+def _physically_plausible_orbit_position(
+    record: OrbitRecord,
+    memberships: set[str],
+    position_ecef: tuple[float, float, float] | None,
+    when: datetime,
+) -> bool:
+    """Reject impossible predicted orbits before exposing them on the sky.
+
+    In particular, a Starlink-labelled object millions of kilometres away
+    cannot be a valid Starlink satellite. Stale/invalid elements must never
+    produce plausible-looking moving points in the live view.
+    """
+    if position_ecef is None or not all(math.isfinite(x) for x in position_ecef):
+        return False
+    radius_km = math.sqrt(sum(x * x for x in position_ecef))
+    if not 6350.0 <= radius_km <= 500_000.0:
+        return False
+    is_starlink = "starlink" in memberships or record.name.upper().startswith("STARLINK")
+    if is_starlink:
+        mean_motion = float(record.satellite.no_kozai) * 1440.0 / (2.0 * math.pi)
+        if not 9.0 <= mean_motion <= 18.0 or not 6450.0 <= radius_km <= 9000.0:
+            return False
+        age = SatelliteProvider._orbit_epoch_age_days(record, when)
+        if age is None or abs(age) > 14.0:
+            return False
+    return True
+
+
 def _stable_satellite_rank(item: dict[str, object]) -> tuple[int, int]:
     try:
         norad = int(item.get("norad", 0))
@@ -729,58 +767,26 @@ def _satellite_sky_cell(item: dict[str, object]) -> tuple[int, int]:
     return azimuth_bin, elevation_bin
 
 
-def _density_preserving_satellite_sample(
+def _stable_satellite_sample(
     items: list[dict[str, object]],
     cap: int,
 ) -> list[dict[str, object]]:
+    """Select stable NORAD IDs regardless of their momentary sky-bin position.
+
+    Prioritise important object groups, then use a deterministic hashed NORAD
+    order. Azimuth/elevation cells remain diagnostics, not selection gates:
+    crossing an arbitrary bin boundary must not eject otherwise valid objects.
+    This is a bounded catalogue sample, not an optical visibility filter.
+    """
     if len(items) <= cap:
         return list(items)
-
-    cells: dict[tuple[int, int], list[dict[str, object]]] = {}
-    for item in items:
-        cells.setdefault(_satellite_sky_cell(item), []).append(item)
-
-    total = len(items)
-    quotas: dict[tuple[int, int], int] = {}
-    fractions: list[tuple[float, tuple[int, int]]] = []
-    allocated = 0
-    for key in sorted(cells):
-        ideal = len(cells[key]) * cap / total
-        quota = min(len(cells[key]), int(math.floor(ideal)))
-        quotas[key] = quota
-        allocated += quota
-        fractions.append((ideal - quota, key))
-
-    remaining = cap - allocated
-    for _fraction, key in sorted(
-        fractions,
-        key=lambda entry: (-entry[0], entry[1]),
-    ):
-        if remaining <= 0:
-            break
-        if quotas[key] < len(cells[key]):
-            quotas[key] += 1
-            remaining -= 1
-
-    if remaining > 0:
-        for key in sorted(cells):
-            while remaining > 0 and quotas[key] < len(cells[key]):
-                quotas[key] += 1
-                remaining -= 1
-            if remaining <= 0:
-                break
-
-    selected: list[dict[str, object]] = []
-    for key in sorted(cells):
-        ordered = sorted(
-            cells[key],
-            key=lambda item: (
-                0 if _satellite_is_display_priority(item) else 1,
-                _stable_satellite_rank(item),
-            ),
-        )
-        selected.extend(ordered[: quotas[key]])
-    return selected
+    return sorted(
+        items,
+        key=lambda item: (
+            0 if _satellite_is_display_priority(item) else 1,
+            _stable_satellite_rank(item),
+        ),
+    )[:cap]
 
 
 def _satellite_distribution(items: list[dict[str, object]]) -> dict[str, object]:
@@ -804,7 +810,7 @@ def _select_visible_satellites(
     limit: int,
 ) -> list[dict[str, object]]:
     cap = max(1, min(int(limit), 500))
-    return _density_preserving_satellite_sample(visible, cap)
+    return _stable_satellite_sample(visible, cap)
 
 
 def _ecef_from_tle(
