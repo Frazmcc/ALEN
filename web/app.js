@@ -1937,7 +1937,7 @@ function deviceTiltElevation(event){
  const angle=Number(screen.orientation?.angle)||0;
  // This mapping is only valid for an upright portrait-held device. Landscape
  // orientations and upside-down configurations need separate camera extrinsics.
- if(angle!==0||!Number.isFinite(event.beta)||event.beta<15||event.beta>165)return null;
+ if(angle!==0||!Number.isFinite(event.beta)||event.beta<0||event.beta>180)return null;
  // Portrait device beta increases as its top tilts towards the observer;
  // the camera's upward sightline therefore increases with beta.
  return event.beta-90;
