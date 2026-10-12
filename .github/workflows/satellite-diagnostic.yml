@@ -1,0 +1,19 @@
+name: Temporary satellite source diagnostic
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/satellite_source_diagnostic.py
+      - .github/workflows/satellite-diagnostic.yml
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install .
+      - name: Profile real orbital feed and currently deployed API
+        run: python scripts/satellite_source_diagnostic.py
