@@ -318,10 +318,11 @@ function screenElevationAtY(y){
  return clamp(pitch+delta,-90,90);
 }
 function updateMinPitch(){
- const vfov=verticalFovRad(),targetY=Math.max(0,height-horizonBottomGap());
- const normalized=(targetY-height*.5)/Math.max(1,height*.5);
- // Allow a genuinely level (0°) view with the physical horizon at screen centre.
- minPitch=0;
+ // At the manual viewing floor, place the astronomical horizon near the lower
+ // fifth of the canvas as in the accepted wide-sky reference recording.
+ // Account for the perspective projection rather than using a fixed pitch.
+ const normalized=2*.82-1;
+ minPitch=Math.atan(normalized*Math.tan(verticalFovRad()/2))*RAD;
 }
 function fovLimits(){
  const min=18,maxHorizontal=130;
@@ -511,7 +512,7 @@ function onLocation(pos){
  if(first){
    yaw=observer.lat>=0?180:0;
    pitch=minPitch;
-   restoreSavedSkyView();
+   // Always start at the lowest sky framing; saved views remain restorable on demand.
    refreshAircraft(true);
    restartSatellitePolling(true);
    refreshTerrainProfile();
@@ -2016,7 +2017,8 @@ function onCompassOrientation(event){
  if(rawTilt!==null){
   lastDeviceBeta=event.beta;
   if(tiltOffsetDeg!==null){
-   const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg,minPitch,89);
+   // Phone tilt is physical and must retain a true level (0°) horizon.
+   const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg,0,89);
    const tiltError=targetPitch-pitch;
    const tiltMagnitude=Math.abs(tiltError);
    const tiltGain=tiltMagnitude<0.65?0:tiltMagnitude<5?.08:tiltMagnitude<20?.15:.24;

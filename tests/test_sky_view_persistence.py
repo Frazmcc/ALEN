@@ -11,7 +11,8 @@ def test_sky_view_controls_and_local_storage_contract() -> None:
         assert f'id="{control}"' in HTML
         assert f'querySelector("#{control}")' in APP
     assert "alen.sky-view.v1" in APP
-    assert "restoreSavedSkyView();" in APP
+    assert 'querySelector("#sky-view-restore").addEventListener("click"' in APP
+    assert "function restoreSavedSkyView()" in APP
     assert "localStorage.removeItem(SKY_VIEW_STORAGE_KEY)" in APP
     assert "do not calibrate a physical camera lens" in HTML
 
