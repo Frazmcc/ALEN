@@ -161,11 +161,15 @@ class SatelliteProvider:
         ] = []
         propagated = 0
         propagation_failures = 0
+        physically_implausible = 0
         below_horizon = 0
         for satnum, (record, memberships) in merged.items():
             world_position = current_world.get(satnum)
             if world_position is None:
                 propagation_failures += 1
+                continue
+            if not _physically_plausible_orbit_position(record, memberships, world_position, sample_at):
+                physically_implausible += 1
                 continue
             position = _topocentric_from_frame(world_position, observer_frame)
             if position is None:
@@ -206,9 +210,14 @@ class SatelliteProvider:
             ]
             last_position = position
             for offset_seconds, future_world in future_worlds:
-                future_position = _topocentric_from_frame(
-                    future_world.get(record.norad),
-                    observer_frame,
+                future_ecef = future_world.get(record.norad)
+                future_position = (
+                    _topocentric_from_frame(future_ecef, observer_frame)
+                    if _physically_plausible_orbit_position(
+                        record, memberships, future_ecef,
+                        sample_at + timedelta(seconds=offset_seconds),
+                    )
+                    else None
                 ) or last_position
                 trajectory.append(
                     {
@@ -278,6 +287,7 @@ class SatelliteProvider:
             "unique_orbits": len(merged),
             "propagated": propagated,
             "propagation_failures": propagation_failures,
+            "physically_implausible": physically_implausible,
             "below_horizon": below_horizon,
             "visible": visible_total,
             "returned": len(selected),
@@ -688,6 +698,34 @@ class SatelliteProvider:
 _SATELLITE_DISPLAY_PRIORITY_GROUPS = frozenset(
     {"stations", "visual", "last-30-days"}
 )
+
+
+def _physically_plausible_orbit_position(
+    record: OrbitRecord,
+    memberships: set[str],
+    position_ecef: tuple[float, float, float] | None,
+    when: datetime,
+) -> bool:
+    """Reject impossible predicted orbits before exposing them on the sky.
+
+    In particular, a Starlink-labelled object millions of kilometres away
+    cannot be a valid Starlink satellite. Stale/invalid elements must never
+    produce plausible-looking moving points in the live view.
+    """
+    if position_ecef is None or not all(math.isfinite(x) for x in position_ecef):
+        return False
+    radius_km = math.sqrt(sum(x * x for x in position_ecef))
+    if not 6350.0 <= radius_km <= 500_000.0:
+        return False
+    is_starlink = "starlink" in memberships or record.name.upper().startswith("STARLINK")
+    if is_starlink:
+        mean_motion = float(record.satellite.no_kozai) * 1440.0 / (2.0 * math.pi)
+        if not 9.0 <= mean_motion <= 18.0 or not 6450.0 <= radius_km <= 9000.0:
+            return False
+        age = SatelliteProvider._orbit_epoch_age_days(record, when)
+        if age is None or abs(age) > 14.0:
+            return False
+    return True
 
 
 def _stable_satellite_rank(item: dict[str, object]) -> tuple[int, int]:
