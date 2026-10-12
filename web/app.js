@@ -1916,6 +1916,25 @@ canvas.addEventListener("wheel",e=>{
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 let compassFollowing=false;
+let lastDeviceBeta=null,tiltOffsetDeg=null;
+const tiltCalibrationButton=document.querySelector("#sky-tilt-calibrate");
+function deviceTiltElevation(event){
+ const angle=Number(screen.orientation?.angle)||0;
+ // This mapping is only valid for an upright portrait-held device. Landscape
+ // orientations and upside-down configurations need separate camera extrinsics.
+ if(angle!==0||!Number.isFinite(event.beta)||event.beta<15||event.beta>165)return null;
+ return 90-event.beta;
+}
+function calibrateDeviceTilt(){
+ if(lastDeviceBeta===null)return false;
+ const raw=deviceTiltElevation({beta:lastDeviceBeta});
+ if(raw===null)return false;
+ tiltOffsetDeg=pitch-raw;
+ return true;
+}
+tiltCalibrationButton.addEventListener("click",()=>{
+ skyViewMessage(calibrateDeviceTilt()?"Tilt aligned to current sky elevation for this session.":"Hold a supported device upright in portrait, enable Follow compass, and try again.");
+});
 const compassToggle=document.querySelector("#sky-compass-toggle");
 function absoluteCompassHeading(event){
  if(Number.isFinite(event.webkitCompassHeading)){
@@ -1931,6 +1950,7 @@ function absoluteCompassHeading(event){
 }
 function stopCompassFollowing(){
  compassFollowing=false;
+ lastDeviceBeta=null;tiltOffsetDeg=null;
  window.removeEventListener("deviceorientation",onCompassOrientation);
  window.removeEventListener("deviceorientationabsolute",onCompassOrientation);
  compassToggle.setAttribute("aria-pressed","false");
@@ -1940,6 +1960,14 @@ function onCompassOrientation(event){
  if(!compassFollowing)return;
  const heading=absoluteCompassHeading(event);
  if(heading===null)return;
+ const rawTilt=deviceTiltElevation(event);
+ if(rawTilt!==null){
+  lastDeviceBeta=event.beta;
+  if(tiltOffsetDeg!==null){
+   const targetPitch=clamp(rawTilt+tiltOffsetDeg,minPitch,89);
+   pitch+=clamp(targetPitch-pitch,-6,6)*.3;
+  }
+ }
  const delta=((heading-yaw+540)%360)-180;
  yaw=norm360(yaw+clamp(delta,-12,12)*.3);
  compassToggle.textContent="Follow compass: on";
@@ -1959,7 +1987,7 @@ compassToggle.addEventListener("click",async()=>{
   compassToggle.textContent="Follow compass: awaiting heading";
   window.addEventListener("deviceorientation",onCompassOrientation);
   window.addEventListener("deviceorientationabsolute",onCompassOrientation);
-  skyViewMessage("Compass is approximate; magnetic interference and device orientation can cause errors. Tilt remains manual.");
+  skyViewMessage("Approximate compass active. Tilt stays manual until calibrated in upright portrait mode.");
  }catch{
   stopCompassFollowing();
   skyViewMessage("Compass unavailable or permission failed. Manual controls remain available.");
