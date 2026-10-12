@@ -2179,7 +2179,7 @@ function tick(now){
  const dt=Math.min(100,Math.max(0,now-lastFrame));lastFrame=now;
  simTime=Date.now();
  clock.textContent=new Date(simTime).toLocaleString([], {year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
- stepAircraft(now);stepSatellites(now);updateAlignmentReadout(simTime,now);draw();requestAnimationFrame(tick);
+ stepAircraft(now);stepSatellites(now);draw();updateAlignmentReadout(simTime,now);requestAnimationFrame(tick);
 }
 function pauseLiveDataForHiddenPage(){
  stopSatellitePolling();
