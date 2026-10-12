@@ -78,6 +78,7 @@ class SatelliteProvider:
             dict[int, tuple[float, float, float] | None],
         ] = {}
         self.last_diagnostics: dict[str, object] = {}
+        self._group_source: dict[str, str] = {}
 
     @staticmethod
     def _orbit_epoch_age_days(record: OrbitRecord, when: datetime) -> float | None:
@@ -283,6 +284,7 @@ class SatelliteProvider:
             "requested_groups": requested_groups,
             **orbit_epoch_diagnostics,
             "loaded_by_group": loaded_by_group,
+            "catalogue_source_by_group": {group: self._group_source.get(group, "unavailable") for group in requested_groups},
             "missing_groups": missing_groups,
             "complete": complete,
             "unique_orbits": len(merged),
@@ -585,15 +587,19 @@ class SatelliteProvider:
         # Prefer our freshness-checked CelesTrak OMM snapshot, updated every
         # six hours. This avoids issuing excessive live queries to CelesTrak
         # from Render; fall back to its authoritative API on snapshot failure.
-        for source in (
-            self._fetch_group_alen_snapshot_json,
-            self._fetch_group_json,
-            self._fetch_group_mirror_json,
-            self._fetch_group_tle,
+        for source_name, source in (
+            ("alen_snapshot", self._fetch_group_alen_snapshot_json),
+            ("celestrak", self._fetch_group_json),
+            ("third_party_mirror", self._fetch_group_mirror_json),
+            ("celestrak_tle", self._fetch_group_tle),
         ):
             records = source(group)
             if self._catalog_fresh_enough(group, records):
+                with self._lock:
+                    self._group_source[group] = source_name
                 return records
+        with self._lock:
+            self._group_source[group] = "unavailable"
         return ()
 
     def _fetch_group_alen_snapshot_json(self, group: str) -> tuple[OrbitRecord, ...]:
