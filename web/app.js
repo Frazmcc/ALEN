@@ -1881,14 +1881,14 @@ canvas.addEventListener("pointermove",e=>{
   const midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;
   if(Math.abs(distance-pinch.startDistance)>2||Math.hypot(midX-pinch.midX,midY-pinch.midY)>2)pinch.moved=true;
   setFov(pinch.startFov*pinch.startDistance/distance);
-  yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
+  stopCompassFollowing();yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
   pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62,minPitch,89);
   return;
  }
  if(!drag||drag.pointerId!==e.pointerId)return;
  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
  if(Math.hypot(dx,dy)>3)drag.moved=true;
- yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
+ stopCompassFollowing();yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
  pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89);
 });
 function finishPointer(e,cancelled=false){
@@ -1915,6 +1915,56 @@ canvas.addEventListener("wheel",e=>{
  setFov(fov*(e.deltaY<0?.88:1.12));
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
+let compassFollowing=false;
+const compassToggle=document.querySelector("#sky-compass-toggle");
+function absoluteCompassHeading(event){
+ if(Number.isFinite(event.webkitCompassHeading)){
+  if(Number.isFinite(event.webkitCompassAccuracy)&&event.webkitCompassAccuracy>35)return null;
+  return norm360(event.webkitCompassHeading);
+ }
+ // Relative-only alpha has no reliable relationship to true north.
+ if(event.absolute!==true||!Number.isFinite(event.alpha))return null;
+ // The W3C absolute alpha convention describes rotation about the vertical axis,
+ // not a camera optical-axis direction. This is an approximate device heading.
+ const screenAngle=Number(screen.orientation?.angle)||0;
+ return norm360(360-event.alpha+screenAngle);
+}
+function stopCompassFollowing(){
+ compassFollowing=false;
+ window.removeEventListener("deviceorientation",onCompassOrientation);
+ window.removeEventListener("deviceorientationabsolute",onCompassOrientation);
+ compassToggle.setAttribute("aria-pressed","false");
+ compassToggle.textContent="Follow compass: off";
+}
+function onCompassOrientation(event){
+ if(!compassFollowing)return;
+ const heading=absoluteCompassHeading(event);
+ if(heading===null)return;
+ const delta=((heading-yaw+540)%360)-180;
+ yaw=norm360(yaw+clamp(delta,-12,12)*.3);
+ compassToggle.textContent="Follow compass: on";
+}
+compassToggle.addEventListener("click",async()=>{
+ if(compassFollowing){stopCompassFollowing();skyViewMessage("Compass following stopped. Manual controls available.");return}
+ if(!("DeviceOrientationEvent" in window)){
+  skyViewMessage("Device compass unavailable. Continue using manual controls.");return;
+ }
+ try{
+  if(typeof DeviceOrientationEvent.requestPermission==="function"){
+   const permission=await DeviceOrientationEvent.requestPermission();
+   if(permission!=="granted"){skyViewMessage("Compass permission denied. Manual controls remain available.");return}
+  }
+  compassFollowing=true;
+  compassToggle.setAttribute("aria-pressed","true");
+  compassToggle.textContent="Follow compass: awaiting heading";
+  window.addEventListener("deviceorientation",onCompassOrientation);
+  window.addEventListener("deviceorientationabsolute",onCompassOrientation);
+  skyViewMessage("Compass is approximate; magnetic interference and device orientation can cause errors. Tilt remains manual.");
+ }catch{
+  stopCompassFollowing();
+  skyViewMessage("Compass unavailable or permission failed. Manual controls remain available.");
+ }
+});
 const skyViewCalibrationStatus=document.querySelector("#sky-view-calibration-status");
 function skyViewMessage(message){if(skyViewCalibrationStatus)skyViewCalibrationStatus.textContent=message}
 document.querySelector("#sky-view-save").addEventListener("click",()=>{
@@ -1931,7 +1981,7 @@ canvas.addEventListener("keydown",e=>{
  if(!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key))return;
  e.preventDefault();
  const step=Math.max(1.5,fov*.035);
- if(e.key==="ArrowLeft")yaw=norm360(yaw-step);
+ if(e.key==="ArrowLeft")stopCompassFollowing();yaw=norm360(yaw-step);
  if(e.key==="ArrowRight")yaw=norm360(yaw+step);
  if(e.key==="ArrowUp")pitch=clamp(pitch+step,minPitch,89);
  if(e.key==="ArrowDown")pitch=clamp(pitch-step,minPitch,89);
@@ -2046,6 +2096,7 @@ document.addEventListener("visibilitychange",()=>{
  if(document.hidden)pauseLiveDataForHiddenPage();
  else resumeLiveDataAfterVisibility();
 });
+window.addEventListener("beforeunload",()=>{stopCompassFollowing()});
 window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);stopSatellitePolling()});
 loadBrightStars();setLiveStatus();requestLocation();requestAnimationFrame(tick);
 })();
