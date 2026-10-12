@@ -510,7 +510,7 @@ function requestLocation(){
 }
 function onLocation(pos){
  const first=!observer;
- observer={lat:pos.coords.latitude,lon:pos.coords.longitude,altM:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:0,accuracy:pos.coords.accuracy};
+ observer={lat:pos.coords.latitude,lon:pos.coords.longitude,altM:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:0,gpsAltM:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:null,accuracy:pos.coords.accuracy};
  setLocationStatus(observerLabel(),"ok");
  if(first){
    yaw=observer.lat>=0?180:0;
@@ -844,10 +844,23 @@ async function refreshAirports(){
    setTimeout(()=>refreshAirports(),5000);
  }
 }
+function airportGroundAltAz(lat,lon,airportElevationM,observerElevationM){
+ const observerPoint=geodeticToEcef(observer.lat,observer.lon,observerElevationM);
+ const airportPoint=geodeticToEcef(lat,lon,airportElevationM);
+ const dx=airportPoint.x-observerPoint.x,dy=airportPoint.y-observerPoint.y,dz=airportPoint.z-observerPoint.z;
+ const phi=observer.lat*DEG,lambda=observer.lon*DEG;
+ const east=-Math.sin(lambda)*dx+Math.cos(lambda)*dy;
+ const north=-Math.sin(phi)*Math.cos(lambda)*dx-Math.sin(phi)*Math.sin(lambda)*dy+Math.cos(phi)*dz;
+ const up=Math.cos(phi)*Math.cos(lambda)*dx+Math.cos(phi)*Math.sin(lambda)*dy+Math.sin(phi)*dz;
+ const horizontal=Math.hypot(east,north);
+ if(horizontal<1)return null;
+ return {az:norm360(Math.atan2(east,north)*RAD),el:Math.atan2(up,horizontal)*RAD};
+}
 function airportDisplayObject(a){
  const hasElevation=Number.isFinite(a.elevationM);
- const position=hasElevation&&Number.isFinite(a.lat)&&Number.isFinite(a.lon)
-  ?airborneAltAz(a.lat,a.lon,a.elevationM):null;
+ const observerElevation=observer?(Number.isFinite(observer.gpsAltM)?observer.gpsAltM:terrainProfile?.length?terrainObserverElevation:null):null;
+ const position=hasElevation&&Number.isFinite(a.lat)&&Number.isFinite(a.lon)&&observerElevation!==null
+  ?airportGroundAltAz(a.lat,a.lon,a.elevationM,observerElevation):null;
  const az=position?.az??a.az,horizonEl=terrainHorizonElevation(az);
  const actualEl=position?.el??null;
  const visible=actualEl!==null&&actualEl>0&&actualEl>horizonEl;
