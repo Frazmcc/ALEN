@@ -117,11 +117,12 @@
         <button type="button" class="sat-group is-on" data-layer="atmosphere" aria-pressed="true"><span class="sat-mark">◌</span><span>Atmosphere</span></button>
       </div>
       <div class="satellite-group-grid display-group-grid">
+        <button id="sky-compass-toggle" type="button" class="sat-group" aria-pressed="false" title="Use device compass heading if available">Follow compass: off</button>
         <button id="sky-view-save" type="button" class="sat-group" title="Save this view on this device">Save sky view</button>
         <button id="sky-view-restore" type="button" class="sat-group" title="Restore the saved view on this device">Restore sky view</button>
         <button id="sky-view-clear" type="button" class="sat-group" title="Delete this device's saved view">Clear saved view</button>
       </div>
-      <p id="sky-view-calibration-status" class="satellite-groups-note" role="status" aria-live="polite">A saved view restores viewing direction and zoom, not physical camera lens calibration.</p>
+      <p id="sky-view-calibration-status" class="satellite-groups-note" role="status" aria-live="polite">Compass following is optional and approximate. Saved views restore direction and zoom, not camera lens calibration.</p>
     </aside>
 
     <div class="compass" aria-hidden="true">
