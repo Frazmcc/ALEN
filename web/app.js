@@ -1881,14 +1881,14 @@ canvas.addEventListener("pointermove",e=>{
   const midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;
   if(Math.abs(distance-pinch.startDistance)>2||Math.hypot(midX-pinch.midX,midY-pinch.midY)>2)pinch.moved=true;
   setFov(pinch.startFov*pinch.startDistance/distance);
-  yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
+  stopCompassFollowing();yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
   pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62,minPitch,89);
   return;
  }
  if(!drag||drag.pointerId!==e.pointerId)return;
  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
  if(Math.hypot(dx,dy)>3)drag.moved=true;
- yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
+ stopCompassFollowing();yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
  pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89);
 });
 function finishPointer(e,cancelled=false){
@@ -1981,7 +1981,7 @@ canvas.addEventListener("keydown",e=>{
  if(!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key))return;
  e.preventDefault();
  const step=Math.max(1.5,fov*.035);
- if(e.key==="ArrowLeft")yaw=norm360(yaw-step);
+ if(e.key==="ArrowLeft")stopCompassFollowing();yaw=norm360(yaw-step);
  if(e.key==="ArrowRight")yaw=norm360(yaw+step);
  if(e.key==="ArrowUp")pitch=clamp(pitch+step,minPitch,89);
  if(e.key==="ArrowDown")pitch=clamp(pitch-step,minPitch,89);
