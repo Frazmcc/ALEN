@@ -40,6 +40,7 @@ def test_fresh_alternative_wins_over_old_third_party_mirror(monkeypatch):
     monkeypatch.setattr("alen.satellites.datetime", type("FixedDatetime", (datetime,), {"now": classmethod(lambda cls,tz=None: WHEN)}))
     assert provider._fetch_group("starlink")==recent
     assert hits==["alen"]
+    assert provider._group_source["starlink"] == "alen_snapshot"
 
 
 def test_stale_cached_elements_cannot_be_reused_on_fetch_failure(monkeypatch):
@@ -74,3 +75,4 @@ def test_primary_feed_is_used_when_managed_snapshot_is_stale(monkeypatch):
     monkeypatch.setattr("alen.satellites.datetime", type("FixedDatetime", (datetime,), {"now": classmethod(lambda cls,tz=None: WHEN)}))
     assert provider._fetch_group("starlink")==recent
     assert hits==["snapshot","primary"]
+    assert provider._group_source["starlink"] == "celestrak"
