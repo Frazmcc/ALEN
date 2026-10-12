@@ -975,18 +975,18 @@ function satelliteDepthCue(rangeKm,elevationDeg=45,active=false){
   alpha:clamp(distanceOpacity*elevationOpacity*(active?1.25:1),.14,1)
  };
 }
-function drawSatellitePoint(s,active,dayMode){
+function drawSatellitePoint(s,active,dayMode,visibility=1){
  const depth=satelliteDepthCue(s.rangeKm,s.el,active);
  ctx.save();
  // A faint, soft glint rather than a solid chart marker with a bright outline.
- ctx.globalAlpha=depth.alpha*(dayMode?.08:.12);
+ ctx.globalAlpha=depth.alpha*visibility*(dayMode?.08:.12);
  ctx.fillStyle=s.color;
  ctx.beginPath();ctx.arc(0,0,depth.halo,0,Math.PI*2);ctx.fill();
- ctx.globalAlpha=depth.alpha;
+ ctx.globalAlpha=depth.alpha*visibility;
  ctx.fillStyle=s.color;
  ctx.beginPath();ctx.arc(0,0,depth.radius,0,Math.PI*2);ctx.fill();
  if(active){
-  ctx.globalAlpha=Math.min(1,depth.alpha*.9);
+  ctx.globalAlpha=Math.min(1,depth.alpha*visibility*.9);
   ctx.strokeStyle=dayMode?"#12364f":"#e9f5ff";
   ctx.lineWidth=.7;
   ctx.stroke();
@@ -1348,8 +1348,7 @@ function draw(){
    const active=selected?.id===s.id;
    ctx.save();ctx.translate(p[0],p[1]);
    const visibility=satelliteVisibility(s);
-   ctx.globalAlpha=visibility;
-   const depth=drawSatellitePoint(s,active,dayMode);
+   const depth=drawSatellitePoint(s,active,dayMode,visibility);
    ctx.restore();
    if(active&&visibility>.05){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
    const satGroup=SATELLITE_GROUPS[s.group],labelsEnabled=layerLabelsOn("satellites")&&satGroup?.labels;
