@@ -20,6 +20,7 @@ def test_tilt_mapping_requires_calibration_and_upright_portrait():
     # The actual helper functions precede the compass element declaration.
     source=APP[start:end]
     js="""const screen={orientation:{angle:0}};
+const performance={now:()=>3000};
 let pitch=35,minPitch=0;
 const document={querySelector(){return {addEventListener(){}}}};
 function skyViewMessage(){}
@@ -33,8 +34,10 @@ screen.orientation.angle=90;
 check(deviceTiltElevation({beta:90})===null,"reject landscape");
 screen.orientation.angle=0;
 check(!calibrateDeviceTilt(),"calibration requires a sample");
-lastDeviceBeta=60;
+lastDeviceBeta=60;lastDeviceBetaAt=2000;
 check(calibrateDeviceTilt()&&tiltOffsetDeg===5,"align to current elevation");
+lastDeviceBetaAt=0;
+check(!calibrateDeviceTilt(),"reject stale tilt sensor sample");
 """
     result=subprocess.run(["node","-e",js],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stderr

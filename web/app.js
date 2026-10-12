@@ -1916,7 +1916,8 @@ canvas.addEventListener("wheel",e=>{
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 let compassFollowing=false;
-let lastDeviceBeta=null,tiltOffsetDeg=null;
+let lastDeviceBeta=null,tiltOffsetDeg=null,lastDeviceBetaAt=0;
+const MAX_TILT_READING_AGE_MS=2000;
 const tiltCalibrationButton=document.querySelector("#sky-tilt-calibrate");
 function deviceTiltElevation(event){
  const angle=Number(screen.orientation?.angle)||0;
@@ -1926,7 +1927,7 @@ function deviceTiltElevation(event){
  return 90-event.beta;
 }
 function calibrateDeviceTilt(){
- if(lastDeviceBeta===null)return false;
+ if(lastDeviceBeta===null||performance.now()-lastDeviceBetaAt>MAX_TILT_READING_AGE_MS)return false;
  const raw=deviceTiltElevation({beta:lastDeviceBeta});
  if(raw===null)return false;
  tiltOffsetDeg=pitch-raw;
@@ -1950,7 +1951,7 @@ function absoluteCompassHeading(event){
 }
 function stopCompassFollowing(){
  compassFollowing=false;
- lastDeviceBeta=null;tiltOffsetDeg=null;
+ lastDeviceBeta=null;tiltOffsetDeg=null;lastDeviceBetaAt=0;
  window.removeEventListener("deviceorientation",onCompassOrientation);
  window.removeEventListener("deviceorientationabsolute",onCompassOrientation);
  compassToggle.setAttribute("aria-pressed","false");
@@ -1962,7 +1963,7 @@ function onCompassOrientation(event){
  if(heading===null)return;
  const rawTilt=deviceTiltElevation(event);
  if(rawTilt!==null){
-  lastDeviceBeta=event.beta;
+  lastDeviceBeta=event.beta;lastDeviceBetaAt=performance.now();
   if(tiltOffsetDeg!==null){
    const targetPitch=clamp(rawTilt+tiltOffsetDeg,minPitch,89);
    pitch+=clamp(targetPitch-pitch,-6,6)*.3;
