@@ -582,12 +582,12 @@ class SatelliteProvider:
         return -2.0 <= median_age <= max_age
 
     def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
-        # Primary: authoritative current OMM. A backed-up snapshot refreshed by
-        # our own scheduled GitHub Actions is safer than a third-party mirror
-        # with a misleadingly fresh repository timestamp.
+        # Prefer our freshness-checked CelesTrak OMM snapshot, updated every
+        # six hours. This avoids issuing excessive live queries to CelesTrak
+        # from Render; fall back to its authoritative API on snapshot failure.
         for source in (
-            self._fetch_group_json,
             self._fetch_group_alen_snapshot_json,
+            self._fetch_group_json,
             self._fetch_group_mirror_json,
             self._fetch_group_tle,
         ):
