@@ -916,24 +916,39 @@ function satelliteLabelText(s){
  const name=String(s?.name||("NORAD "+(s?.norad||""))).replace(/\s+/g," ").trim();
  return `${name} · ${satelliteRangeText(s?.rangeKm)}`;
 }
-function satelliteDepthCue(rangeKm,active=false){
- const km=clamp(Number(rangeKm)||42000,160,42000);
- const near=1-clamp((Math.log10(km)-Math.log10(160))/(Math.log10(42000)-Math.log10(160)),0,1);
+function satelliteDepthCue(rangeKm,elevationDeg=45,active=false){
+ // Artistic marker size, not literal angular diameter: most spacecraft are
+ // unresolved points at naked-eye scale regardless of distance.
+ const distance=Number(rangeKm);
+ const km=Number.isFinite(distance)&&distance>0?clamp(distance,200,42000):42000;
+ const proximity=1-clamp((Math.log10(km)-Math.log10(200))/(Math.log10(42000)-Math.log10(200)),0,1);
+ // Atmospheric extinction and horizon haze reduce contrast below ~20 degrees.
+ const elevation=Number.isFinite(Number(elevationDeg))?Number(elevationDeg):0;
+ const clarity=clamp((elevation-2)/55,0,1);
+ const elevationOpacity=.34+.66*Math.sqrt(clarity);
+ const distanceOpacity=.44+.56*Math.sqrt(proximity);
  return{
-  radius:active?4.2:1.35+near*1.35,
-  halo:active?9:2.5+near*3.5,
-  alpha:active?1:.5+near*.45
+  radius:active?2.1:.65+1.1*Math.pow(proximity,.85),
+  halo:active?5.4:1.5+2.1*proximity,
+  alpha:clamp(distanceOpacity*elevationOpacity*(active?1.25:1),.14,1)
  };
 }
 function drawSatellitePoint(s,active,dayMode){
- const depth=satelliteDepthCue(s.rangeKm,active);
+ const depth=satelliteDepthCue(s.rangeKm,s.el,active);
  ctx.save();
- ctx.globalAlpha=depth.alpha*.2;ctx.fillStyle=s.color;
+ // A faint, soft glint rather than a solid chart marker with a bright outline.
+ ctx.globalAlpha=depth.alpha*(dayMode?.08:.12);
+ ctx.fillStyle=s.color;
  ctx.beginPath();ctx.arc(0,0,depth.halo,0,Math.PI*2);ctx.fill();
- ctx.globalAlpha=depth.alpha;ctx.fillStyle=s.color;
- ctx.strokeStyle=dayMode?"rgba(8,40,63,.82)":"rgba(235,249,255,.78)";
- ctx.lineWidth=active?1.2:.7;
- ctx.beginPath();ctx.arc(0,0,depth.radius,0,Math.PI*2);ctx.fill();ctx.stroke();
+ ctx.globalAlpha=depth.alpha;
+ ctx.fillStyle=s.color;
+ ctx.beginPath();ctx.arc(0,0,depth.radius,0,Math.PI*2);ctx.fill();
+ if(active){
+  ctx.globalAlpha=Math.min(1,depth.alpha*.9);
+  ctx.strokeStyle=dayMode?"#12364f":"#e9f5ff";
+  ctx.lineWidth=.7;
+  ctx.stroke();
+ }
  ctx.restore();
  return depth;
 }

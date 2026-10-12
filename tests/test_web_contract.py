@@ -831,7 +831,7 @@ def test_satellite_inspector_supports_real_photos() -> None:
 
 def test_satellite_visuals_are_point_like_with_depth_and_declutter() -> None:
     assert "function satelliteRangeText(rangeKm)" in APP
-    assert "function satelliteDepthCue(rangeKm,active=false)" in APP
+    assert "function satelliteDepthCue(rangeKm,elevationDeg=45,active=false)" in APP
     assert "function drawSatellitePoint(s,active,dayMode)" in APP
     assert "Math.log10(km)" in APP
     assert "const depth=drawSatellitePoint(s,active,dayMode)" in APP
