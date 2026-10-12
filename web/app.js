@@ -986,6 +986,10 @@ function satelliteRangeText(rangeKm){
  if(km<10000)return `${(km/1000).toFixed(1)}k km`;
  return `${Math.round(km/1000)}k km`;
 }
+function satelliteLabelsEnabled(s){
+ return layerLabelsOn("satellites")||
+  (s.memberships||[]).some(key=>SATELLITE_GROUPS[key]?.enabled&&SATELLITE_GROUPS[key]?.labels);
+}
 function satelliteLabelText(s){
  const name=String(s?.name||("NORAD "+(s?.norad||""))).replace(/\s+/g," ").trim();
  return `${name} · ${satelliteRangeText(s?.rangeKm)}`;
@@ -1390,10 +1394,9 @@ function draw(){
    const depth=drawSatellitePoint(s,active,dayMode,visibility);
    ctx.restore();
    if(active&&visibility>.05){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
-   const satGroup=SATELLITE_GROUPS[s.group];
-   // Either Display Groups "labels on" or this specific satellite group
-   // enables labels. Neither silently imposes an elevation or count cap.
-   const labelsEnabled=layerLabelsOn("satellites")||satGroup?.labels;
+   // Satellites can belong to several enabled groups (e.g. newly launched
+   // Starlink); primary styling must not suppress a secondary group's labels.
+   const labelsEnabled=satelliteLabelsEnabled(s);
    if(visibility>.5&&(active||labelsEnabled)){
     const label=satelliteLabelText(s);ctx.font=active?"700 10px ui-monospace":"700 9px ui-monospace";
     const boxW=ctx.measureText(label).width+10,boxH=15;
