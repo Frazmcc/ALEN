@@ -929,6 +929,16 @@ function satelliteTrajectory(raw,horizonSeconds=2){
   return Number.isFinite(az)&&Number.isFinite(el)&&Number.isFinite(rangeKm)?{timeMs,az,el,rangeKm,vec:satelliteSkyVector(az,el)}:null;
  }).filter(Boolean).sort((a,b)=>a.timeMs-b.timeMs);
 }
+function satelliteTrajectoryPlausible(raw,trajectory){
+ if(!trajectory.length)return false;
+ const memberships=Array.isArray(raw.groups)?raw.groups:[];
+ const isStarlink=memberships.includes("starlink")||/^STARLINK[- ]/i.test(String(raw.name||""));
+ // Operational Starlink objects are low-orbit satellites. Even a generous
+ // 10,000 km observer slant limit rejects the impossible ranges in the video
+ // without filtering normal LEO passes. The API also validates true ECEF radii.
+ const maxRange=isStarlink?10000:500000;
+ return trajectory.every(point=>Number.isFinite(point.rangeKm)&&point.rangeKm>0&&point.rangeKm<=maxRange);
+}
 function satelliteTrajectorySample(points,elapsedMs){
  if(!points?.length)return null;
  if(points.length===1){
@@ -1137,7 +1147,9 @@ async function refreshSatellites(force=false){
    seenNorad.add(norad);
    const memberships=logicalSatelliteMemberships(raw.groups),group=satellitePrimaryGroup(memberships),style=SATELLITE_GROUPS[group]||SATELLITE_GROUPS.bright;
    const id="sat:"+norad,prior=previous.get(id),horizon=Number(raw.motion_horizon_seconds)||2;
-   const trajectory=satelliteTrajectory(raw,horizon),targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs);
+   const trajectory=satelliteTrajectory(raw,horizon);
+   if(!satelliteTrajectoryPlausible(raw,trajectory))continue;
+   const targetNow=satelliteTrajectorySample(trajectory,sampleAgeMs);
    if(!targetNow)continue;
 
    const sat=makeSkyObject({id,kind:"SATELLITE",name:raw.name||("NORAD "+norad),az:snapToFresh?targetNow.az:(prior?.displayAz??targetNow.az),el:snapToFresh?targetNow.el:(prior?.displayEl??targetNow.el),
