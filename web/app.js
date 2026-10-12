@@ -961,23 +961,45 @@ function mergeSatelliteContinuity(previous,next,wallNow,frameNow){
  return next;
 }
 function chooseSatelliteLabelPosition(px,py,w,h,used,screenWidth,screenHeight){
+ // Index occupied labels by coarse screen cell to avoid quadratic checks when
+ // hundreds of Starlink labels are enabled on a mobile device.
+ const cellSize=80,grid=used.grid||(used.grid=new Map());
+ function touchedCells(box){
+  const out=[];
+  for(let cy=Math.floor(box.y/cellSize);cy<=Math.floor((box.y+box.h)/cellSize);cy++)
+   for(let cx=Math.floor(box.x/cellSize);cx<=Math.floor((box.x+box.w)/cellSize);cx++)
+    out.push(cx+":"+cy);
+  return out;
+ }
+ function register(box){
+  const index=used.length;used.push(box);
+  for(const cell of touchedCells(box)){
+   if(!grid.has(cell))grid.set(cell,[]);
+   grid.get(cell).push(index);
+  }
+  return box;
+ }
  const candidates=[[9,-h-5],[9,7],[-w-9,-h-5],[-w-9,7],[9,-h-24],[-w-9,-h-24],[9,25],[-w-9,25],[-w/2,-h-30],[-w/2,30]];
  let best=null,bestCost=Infinity;
  for(const [dx,dy] of candidates){
   const x=clamp(px+dx,5,Math.max(5,screenWidth-w-5));
   const y=clamp(py+dy,5,Math.max(5,screenHeight-h-5));
-  const box={x,y,w,h};let cost=0;
-  for(const prev of used){
+  const box={x,y,w,h},indices=new Set();
+  for(const cell of touchedCells(box))
+   for(const index of grid.get(cell)||[])indices.add(index);
+  let cost=0;
+  for(const index of indices){
+   const prev=used[index];
    const overlapX=Math.max(0,Math.min(x+w,prev.x+prev.w)-Math.max(x,prev.x));
    const overlapY=Math.max(0,Math.min(y+h,prev.y+prev.h)-Math.max(y,prev.y));
    cost+=overlapX*overlapY;
   }
-  if(cost===0){used.push(box);return box}
+  if(cost===0)return register(box);
   if(cost<bestCost){bestCost=cost;best=box}
  }
- // Explicit 'labels on' never silently drops satellites.
- used.push(best);
- return best;
+ // Labels explicitly enabled are displayed even if a very dense area forces
+ // overlaps; the real marker remains at its correct orbital direction.
+ return register(best);
 }
 function satelliteRangeText(rangeKm){
  const km=Number(rangeKm);
