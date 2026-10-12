@@ -1291,7 +1291,7 @@ function draw(){
    else drawAircraftIcon(visualType,iconSize,aircraftInk,dayMode?"rgba(255,255,255,.65)":"rgba(0,0,0,.4)");
    ctx.restore();
    ctx.globalAlpha=1;
-   if(aircraftLabelsOn(a)){
+   if(active){
     const callsign=a.callsign||a.name||"Aircraft",operator=aircraftOperator(a),meaning=aircraftSpecialMeaning(a);
     const lines=meaning?[["Callsign:",callsign],["Meaning:",meaning]]:[["Callsign:",callsign],["Operator:",operator]];
     ctx.font="700 9px ui-monospace";
