@@ -282,7 +282,7 @@ class SatelliteProvider:
             "visible": visible_total,
             "returned": len(selected),
             "truncated": len(selected) < visible_total,
-            "selection_policy": "density-preserving-sky-stratified-priority-sample",
+            "selection_policy": "stable-priority-orbit-hash-sample",
             "sky_distribution": _satellite_distribution(visible),
             "returned_sky_distribution": _satellite_distribution(selected),
             "fallback_used": fallback_used,
@@ -729,58 +729,26 @@ def _satellite_sky_cell(item: dict[str, object]) -> tuple[int, int]:
     return azimuth_bin, elevation_bin
 
 
-def _density_preserving_satellite_sample(
+def _stable_satellite_sample(
     items: list[dict[str, object]],
     cap: int,
 ) -> list[dict[str, object]]:
+    """Select stable NORAD IDs regardless of their momentary sky-bin position.
+
+    Prioritise important object groups, then use a deterministic hashed NORAD
+    order. Azimuth/elevation cells remain diagnostics, not selection gates:
+    crossing an arbitrary bin boundary must not eject otherwise valid objects.
+    This is a bounded catalogue sample, not an optical visibility filter.
+    """
     if len(items) <= cap:
         return list(items)
-
-    cells: dict[tuple[int, int], list[dict[str, object]]] = {}
-    for item in items:
-        cells.setdefault(_satellite_sky_cell(item), []).append(item)
-
-    total = len(items)
-    quotas: dict[tuple[int, int], int] = {}
-    fractions: list[tuple[float, tuple[int, int]]] = []
-    allocated = 0
-    for key in sorted(cells):
-        ideal = len(cells[key]) * cap / total
-        quota = min(len(cells[key]), int(math.floor(ideal)))
-        quotas[key] = quota
-        allocated += quota
-        fractions.append((ideal - quota, key))
-
-    remaining = cap - allocated
-    for _fraction, key in sorted(
-        fractions,
-        key=lambda entry: (-entry[0], entry[1]),
-    ):
-        if remaining <= 0:
-            break
-        if quotas[key] < len(cells[key]):
-            quotas[key] += 1
-            remaining -= 1
-
-    if remaining > 0:
-        for key in sorted(cells):
-            while remaining > 0 and quotas[key] < len(cells[key]):
-                quotas[key] += 1
-                remaining -= 1
-            if remaining <= 0:
-                break
-
-    selected: list[dict[str, object]] = []
-    for key in sorted(cells):
-        ordered = sorted(
-            cells[key],
-            key=lambda item: (
-                0 if _satellite_is_display_priority(item) else 1,
-                _stable_satellite_rank(item),
-            ),
-        )
-        selected.extend(ordered[: quotas[key]])
-    return selected
+    return sorted(
+        items,
+        key=lambda item: (
+            0 if _satellite_is_display_priority(item) else 1,
+            _stable_satellite_rank(item),
+        ),
+    )[:cap]
 
 
 def _satellite_distribution(items: list[dict[str, object]]) -> dict[str, object]:
@@ -804,7 +772,7 @@ def _select_visible_satellites(
     limit: int,
 ) -> list[dict[str, object]]:
     cap = max(1, min(int(limit), 500))
-    return _density_preserving_satellite_sample(visible, cap)
+    return _stable_satellite_sample(visible, cap)
 
 
 def _ecef_from_tle(
