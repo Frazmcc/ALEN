@@ -1969,7 +1969,11 @@ function onCompassOrientation(event){
   }
  }
  const delta=((heading-yaw+540)%360)-180;
- yaw=norm360(yaw+clamp(delta,-12,12)*.3);
+ // Reject sub-degree magnetometer jitter, but catch up promptly on deliberate turns.
+ // This remains an orientation display filter, never a change to sky positions.
+ const magnitude=Math.abs(delta);
+ const gain=magnitude<0.7?0:magnitude<5?0.09:magnitude<20?0.19:0.32;
+ if(gain>0)yaw=norm360(yaw+clamp(delta*gain,-9,9));
  compassToggle.textContent="Follow compass: on";
 }
 compassToggle.addEventListener("click",async()=>{

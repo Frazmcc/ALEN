@@ -47,6 +47,14 @@ check(absoluteCompassHeading({absolute:true,alpha:90})===270,
  "absolute alpha conversion should handle heading");
 compassFollowing=true;onCompassOrientation({absolute:false,alpha:0});
 check(yaw===180,"relative event must not steer sky");
+compassFollowing=true;
+onCompassOrientation({webkitCompassHeading:180.4,webkitCompassAccuracy:3});
+check(yaw===180,"tiny compass jitter must not move sky");
+onCompassOrientation({webkitCompassHeading:190,webkitCompassAccuracy:3});
+check(yaw>180&&yaw<185,"moderate turn should update sky gently");
+const beforeLarge=yaw;
+onCompassOrientation({webkitCompassHeading:260,webkitCompassAccuracy:3});
+check(yaw>beforeLarge&&yaw-beforeLarge<=9.001,"large turn should be bounded but responsive");
 stopCompassFollowing();
 check(compassFollowing===false,"stop must disable compass");
 """
