@@ -203,7 +203,7 @@ def test_satellite_group_controls_and_visual_categories() -> None:
     assert 'isDebris:memberships.includes("debris")' in APP
     assert 'satellitePrimaryGroup' in APP
     assert 'group.enabled=phaseEnabled(group.phase)' in APP
-    assert "const depth=drawSatellitePoint(s,active,dayMode)" in APP
+    assert "const depth=drawSatellitePoint(s,active,dayMode,visibility)" in APP
     assert "drawSatelliteIcon" not in APP
     assert '["Category",o.groupLabel||"Satellite"]' in APP
     assert '["New launch",o.isNew?"Yes · ≤30 days":"No"]' in APP
@@ -226,7 +226,7 @@ def test_dense_stars_and_real_planets_are_present() -> None:
 
 def test_satellites_use_backend_sgp4_live_positions() -> None:
     assert 'API_BASE+"/api/v1/satellites?"+qs' in APP
-    assert "const SATELLITE_REFRESH_MS=10000" in APP
+    assert "const SATELLITE_REFRESH_MS=5000" in APP
     assert "function scheduleSatelliteRefresh(delayMs=SATELLITE_REFRESH_MS)" in APP
     assert "satelliteTimer=setTimeout(async()=>{" in APP
     assert 'function stepSatellites(now)' in APP
@@ -770,7 +770,7 @@ def test_satellite_motion_is_continuous_between_feed_refreshes() -> None:
     assert '"azimuth_deg_next"' in source
     assert '"azimuth_deg_next2"' in source
 
-    assert "const SATELLITE_ERROR_GRACE_MS=30000" in APP
+    assert "const SATELLITE_ERROR_GRACE_MS=45000" in APP
     assert "const SATELLITE_POSITION_RESPONSE_MS=420" in APP
     assert "function satelliteTrajectory(raw,horizonSeconds=2)" in APP
     assert "function satelliteTrajectorySample(points,elapsedMs)" in APP
@@ -832,9 +832,9 @@ def test_satellite_inspector_supports_real_photos() -> None:
 def test_satellite_visuals_are_point_like_with_depth_and_declutter() -> None:
     assert "function satelliteRangeText(rangeKm)" in APP
     assert "function satelliteDepthCue(rangeKm,elevationDeg=45,active=false)" in APP
-    assert "function drawSatellitePoint(s,active,dayMode)" in APP
+    assert "function drawSatellitePoint(s,active,dayMode,visibility=1)" in APP
     assert "Math.log10(km)" in APP
-    assert "const depth=drawSatellitePoint(s,active,dayMode)" in APP
+    assert "const depth=drawSatellitePoint(s,active,dayMode,visibility)" in APP
     assert "drawSatelliteIcon" not in APP
     assert "const MAX_SATELLITE_LABELS=18" in APP
     assert "const satelliteLabelBoxes=[];let satelliteLabelCount=0" in APP
@@ -842,7 +842,7 @@ def test_satellite_visuals_are_point_like_with_depth_and_declutter() -> None:
     assert "function satelliteLabelText(s)" in APP
     assert "satelliteRangeText(s?.rangeKm)" in APP
     assert 'labelsEnabled=layerLabelsOn("satellites")&&satGroup?.labels' in APP
-    assert "if((active||(labelsEnabled&&s.el>18))" in APP
+    assert "if(visibility>.7&&(active||(labelsEnabled&&s.el>18))" in APP
     assert "ctx.roundRect(x,y,boxW,boxH,3)" in APP
     assert '["Line-of-sight distance",satelliteRangeText(o.rangeKm)]' in APP
     assert '["Depth cue","Nearer satellites appear slightly brighter and larger"]' in APP
