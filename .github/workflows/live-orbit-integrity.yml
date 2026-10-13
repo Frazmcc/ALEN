@@ -1,0 +1,30 @@
+name: Live orbital catalogue integrity
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/check_live_orbital_integrity.py
+      - .github/workflows/live-orbit-integrity.yml
+  workflow_run:
+    workflows:
+      - Deploy hosted web to GitHub Pages
+    types: [completed]
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Probe live satellite API and require healthy catalogue
+        run: python scripts/check_live_orbital_integrity.py
