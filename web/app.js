@@ -1464,6 +1464,15 @@ function draw(){
      ctx.fillStyle="#ffffff";ctx.fillText(value,boxX+6+labelWidth,y);
     });
     ctx.globalAlpha=1;
+   }else if(aircraftLabelsOn(a)){
+    const label=String(a.callsign||a.name||a.hex||"Aircraft").trim();
+    ctx.font="700 9px ui-monospace,monospace";
+    const boxW=ctx.measureText(label).width+10;
+    const bx=clamp(p[0]+iconSize*.58,4,Math.max(4,width-boxW-4));
+    const by=clamp(p[1]-iconSize*.72-15,4,Math.max(4,height-19));
+    ctx.fillStyle=dayMode?"rgba(245,250,253,.93)":"rgba(2,8,14,.87)";
+    ctx.beginPath();ctx.roundRect(bx,by,boxW,15,3);ctx.fill();
+    ctx.fillStyle=aircraftInk;ctx.fillText(label,bx+5,by+10.5);
    }
   }
  }
