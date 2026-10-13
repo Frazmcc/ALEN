@@ -36,6 +36,7 @@ class SatelliteProvider:
     FALLBACK_URL = "https://tle.ivanstanojevic.me/api/tle"
     ORBITALWIKI_URL = "https://www.orbitalwiki.com/api/v1/elements"
     SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
+    ALEN_SNAPSHOT_URL = "https://raw.githubusercontent.com/Frazmcc/ALEN/orbit-feed/{group}.json"
     CACHE_SECONDS = 1800
     MAX_CACHE_GROUPS = 16
     POSITION_BUCKET_SECONDS = 1
@@ -77,6 +78,7 @@ class SatelliteProvider:
             dict[int, tuple[float, float, float] | None],
         ] = {}
         self.last_diagnostics: dict[str, object] = {}
+        self._group_source: dict[str, str] = {}
 
     @staticmethod
     def _orbit_epoch_age_days(record: OrbitRecord, when: datetime) -> float | None:
@@ -282,6 +284,7 @@ class SatelliteProvider:
             "requested_groups": requested_groups,
             **orbit_epoch_diagnostics,
             "loaded_by_group": loaded_by_group,
+            "catalogue_source_by_group": {group: self._group_source.get(group, "unavailable") for group in requested_groups},
             "missing_groups": missing_groups,
             "complete": complete,
             "unique_orbits": len(merged),
@@ -351,7 +354,7 @@ class SatelliteProvider:
         now = time()
         with self._lock:
             cached = self._cache.get(group)
-        if cached and now - cached[0] < self.CACHE_SECONDS:
+        if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough(group, cached[1]):
             return cached[1]
 
         # Coalesce simultaneous refreshes for the same large catalog. Without
@@ -361,37 +364,37 @@ class SatelliteProvider:
             now = time()
             with self._lock:
                 cached = self._cache.get(group)
-            if cached and now - cached[0] < self.CACHE_SECONDS:
+            if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough(group, cached[1]):
                 return cached[1]
 
             records = self._fetch_group(group)
             if records:
                 self._store_cache(group, records)
                 return records
-            return cached[1] if cached else ()
+            return cached[1] if cached and self._catalog_fresh_enough(group, cached[1]) else ()
 
     def _load_fallback_catalog(self) -> tuple[OrbitRecord, ...]:
         key = "__public_fallback__"
         now = time()
         with self._lock:
             cached = self._cache.get(key)
-        if cached and now - cached[0] < self.CACHE_SECONDS:
+        if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough("visual", cached[1]):
             return cached[1]
 
         with self._fallback_lock:
             now = time()
             with self._lock:
                 cached = self._cache.get(key)
-            if cached and now - cached[0] < self.CACHE_SECONDS:
+            if cached and now - cached[0] < self.CACHE_SECONDS and self._catalog_fresh_enough("visual", cached[1]):
                 return cached[1]
 
             records = self._fetch_fallback_catalog()
             if not records:
                 records = self._fetch_orbitalwiki_catalog()
-            if records:
+            if records and self._catalog_fresh_enough("visual", records):
                 self._store_cache(key, records)
                 return records
-            return cached[1] if cached else ()
+            return cached[1] if cached and self._catalog_fresh_enough("visual", cached[1]) else ()
 
     def _store_cache(self, key: str, records: tuple[OrbitRecord, ...]) -> None:
         now = time()
@@ -554,14 +557,84 @@ class SatelliteProvider:
             )
         return tuple(records)
 
+    @classmethod
+    def _catalog_fresh_enough(
+        cls, group: str, records: tuple[OrbitRecord, ...], when: datetime | None = None,
+    ) -> bool:
+        """Never silently substitute a weeks-old satellite mirror.
+
+        Freshness is evaluated from the element epochs, NOT the GitHub mirror's
+        latest commit or its global manifest date.
+        """
+        if not records:
+            return False
+        moment = when or datetime.now(timezone.utc)
+        stride = max(1, len(records) // 128)
+        ages = [
+            cls._orbit_epoch_age_days(record, moment)
+            for record in records[::stride]
+        ]
+        known = sorted(age for age in ages if age is not None)
+        if len(known) < max(1, len(ages) // 2):
+            return False
+        median_age = known[len(known) // 2]
+        max_age = 5.0 if group in {"starlink", "oneweb", "kuiper"} else (
+            10.0 if group in {"stations", "visual", "last-30-days"} else 21.0
+        )
+        return -2.0 <= median_age <= max_age
+
     def _fetch_group(self, group: str) -> tuple[OrbitRecord, ...]:
-        records = self._fetch_group_json(group)
-        if records:
-            return records
-        records = self._fetch_group_mirror_json(group)
-        if records:
-            return records
-        return self._fetch_group_tle(group)
+        # Prefer our freshness-checked CelesTrak OMM snapshot, updated every
+        # six hours. This avoids issuing excessive live queries to CelesTrak
+        # from Render; fall back to its authoritative API on snapshot failure.
+        for source_name, source in (
+            ("alen_snapshot", self._fetch_group_alen_snapshot_json),
+            ("celestrak", self._fetch_group_json),
+            ("third_party_mirror", self._fetch_group_mirror_json),
+            ("celestrak_tle", self._fetch_group_tle),
+        ):
+            records = source(group)
+            if self._catalog_fresh_enough(group, records):
+                with self._lock:
+                    self._group_source[group] = source_name
+                return records
+        with self._lock:
+            self._group_source[group] = "unavailable"
+        return ()
+
+    def _fetch_group_alen_snapshot_json(self, group: str) -> tuple[OrbitRecord, ...]:
+        try:
+            with httpx.Client(
+                timeout=12.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
+            ) as client:
+                response = client.get(self.ALEN_SNAPSHOT_URL.format(group=group.lower()))
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return ()
+        if not isinstance(payload, list):
+            return ()
+        records: list[OrbitRecord] = []
+        for fields in payload:
+            if not isinstance(fields, dict):
+                continue
+            try:
+                satellite = Satrec()
+                omm.initialize(satellite, fields)
+                norad = int(fields["NORAD_CAT_ID"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            records.append(
+                OrbitRecord(
+                    name=str(fields.get("OBJECT_NAME") or f"NORAD {norad}").strip(),
+                    norad=norad,
+                    international_id=str(fields.get("OBJECT_ID") or "").strip(),
+                    satellite=satellite,
+                )
+            )
+        return tuple(records)
 
     def _fetch_group_json(self, group: str) -> tuple[OrbitRecord, ...]:
         try:
