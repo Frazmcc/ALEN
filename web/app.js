@@ -89,7 +89,7 @@ function syncGroupButton(btn,group){
  btn.dataset.state=state;
  btn.classList.toggle("is-on",group.enabled);
  btn.setAttribute("aria-pressed",state==="off"?"false":state==="labels"?"true":"mixed");
- btn.title=state==="labels"?`${group.label}: on with labels`:state==="plain"?`${group.label}: on without labels`:`${group.label}: off`;
+ btn.title=(state==="labels"?`${group.label}: on with labels`:state==="plain"?`${group.label}: on without labels`:`${group.label}: off`)+(btn.dataset.visible?` · ${btn.dataset.visible}`:"");
 }
 const SATELLITE_GROUPS={
  new:{label:"New launches · ≤30 days",sources:["last-30-days"],enabled:true,color:"#68ff9a",glyph:"✦",priority:100,limit:900},
@@ -1082,6 +1082,20 @@ function drawSatellitePoint(s,active,dayMode,visibility=1){
 function labelBoxOverlaps(box,boxes){
  return boxes.some(b=>!(box.x+box.w<b.x||b.x+b.w<box.x||box.y+box.h<b.y||b.y+b.h<box.y));
 }
+function updateSatelliteGroupCounts(objects=null){
+ const counts=Object.fromEntries(satelliteGroupEntries().map(([key])=>[key,0]));
+ if(Array.isArray(objects))for(const sat of objects){
+  for(const key of sat.memberships||[])if(Object.hasOwn(counts,key))counts[key]++;
+ }
+ document.querySelectorAll("[data-satellite-group]").forEach(btn=>{
+  const key=btn.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];
+  if(!group)return;
+  let count=btn.querySelector(".sat-count");
+  if(!count){count=document.createElement("small");count.className="sat-count";btn.append(count)}
+  const value=!group.enabled?"":!Array.isArray(objects)?"Loading…":counts[key]+" sky";
+  count.textContent=value;btn.dataset.visible=value;syncGroupButton(btn,group);
+ });
+}
 function stopSatellitePolling(){
  if(satelliteTimer!==null){clearTimeout(satelliteTimer);satelliteTimer=null}
 }
@@ -1121,6 +1135,7 @@ async function refreshSatellites(force=false){
    satellites=[];
    satelliteDiagnostics={unique_orbits:0,visible:0,requested_groups:[]};
    satelliteRequestState="ok";
+   updateSatelliteGroupCounts([]);
    return;
   }
   const qs=new URLSearchParams({
@@ -1187,6 +1202,7 @@ async function refreshSatellites(force=false){
    next.push(sat);
   }
   satellites=mergeSatelliteContinuity(previous,next,wallNow,frameNow);
+  updateSatelliteGroupCounts(satellites);
   if(feedStatus){
    const rejected=(Number(satelliteDiagnostics?.physically_implausible)||0)+rejectedSatelliteTrajectories;
    if(rejected)feedStatus.textContent+=" · rejected "+rejected+" implausible orbital predictions.";
@@ -1200,6 +1216,7 @@ async function refreshSatellites(force=false){
   satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)<=SATELLITE_ERROR_GRACE_MS);
   satelliteDiagnostics=satelliteDiagnostics||{unique_orbits:satellites.length};
   satelliteRequestState=satellites.length?"stale":"error";
+  updateSatelliteGroupCounts(null);
   if(e?.name!=="AbortError")console.warn("ALEN satellite feed unavailable; retaining recent satellites",e);
  }finally{
   clearTimeout(timeout);
@@ -2310,7 +2327,7 @@ document.querySelectorAll("[data-satellite-group]").forEach(btn=>{
   group.phase=advancePhase(group.phase);
   group.enabled=phaseEnabled(group.phase);
   group.labels=phaseLabels(group.phase);
-  syncGroupButton(btn,group);
+  updateSatelliteGroupCounts(null);
   await refreshSatellites(true);
   restartSatellitePolling(false);
  });
@@ -2325,6 +2342,7 @@ document.querySelectorAll("[data-aircraft-group]").forEach(btn=>{
   syncGroupButton(btn,group);
  });
 });
+updateSatelliteGroupCounts(null);
 const GROUP_PANELS=[
  ["astronomy-groups","astronomy-groups-button","astronomy-groups-close"],
  ["aircraft-groups","aircraft-groups-button","aircraft-groups-close"],
