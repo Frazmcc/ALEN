@@ -66,11 +66,12 @@
         <button type="button" class="sat-group is-on" data-layer="constellations" aria-pressed="true"><span class="sat-mark">⌁</span><span>Constellations</span></button>
         <button type="button" class="sat-group is-on" data-layer="planets" aria-pressed="true"><span class="sat-mark">●</span><span>Planets</span></button>
       </div>
+      <p id="constellation-status" class="satellite-groups-note" role="status">Loading constellation star catalogue…</p>
     </aside>
 
     <aside id="aircraft-groups" class="satellite-groups" hidden aria-label="Aircraft groups">
       <div class="satellite-groups-head">
-        <div><strong>Aircraft groups</strong><span>Click each group to cycle labels on → labels off → off → labels off → labels on</span></div>
+        <div><strong>Aircraft groups</strong><span>Click each group to cycle labels on → labels off → hidden</span></div>
         <button id="aircraft-groups-close" type="button" aria-label="Close aircraft groups">×</button>
       </div>
       <div class="satellite-group-grid aircraft-group-grid">
@@ -84,7 +85,7 @@
 
     <aside id="satellite-groups" class="satellite-groups" hidden aria-label="Satellite groups">
       <div class="satellite-groups-head">
-        <div><strong>Satellite groups</strong><span>Labels start off. Each group cycles labels off → off → labels off → labels on. When enabled, all group satellites are labelled; zoom in if labels overlap.</span></div>
+        <div><strong>Satellite groups</strong><span>Each group cycles labels on → labels off → hidden. Some categories start hidden to reduce load; choose any to activate it. Counts show currently tracked objects above the horizon.</span></div>
         <button id="satellite-groups-close" type="button" aria-label="Close satellite groups">×</button>
       </div>
       <div class="satellite-group-grid">
@@ -92,11 +93,11 @@
         <button type="button" class="sat-group is-on sat-stations" data-satellite-group="stations" aria-pressed="mixed"><span class="sat-mark">▣</span><span>Space stations</span></button>
         <button type="button" class="sat-group is-on sat-bright" data-satellite-group="bright" aria-pressed="mixed"><span class="sat-mark">◆</span><span>Bright / visual</span></button>
         <button type="button" class="sat-group is-on sat-starlink" data-satellite-group="starlink" aria-pressed="mixed"><span class="sat-mark">●</span><span>Starlink</span></button>
-        <button type="button" class="sat-group sat-oneweb" data-satellite-group="oneweb" aria-pressed="false"><span class="sat-mark">●</span><span>OneWeb</span></button>
+        <button type="button" class="sat-group is-on sat-oneweb" data-satellite-group="oneweb" aria-pressed="mixed"><span class="sat-mark">●</span><span>OneWeb</span></button>
         <button type="button" class="sat-group sat-kuiper" data-satellite-group="kuiper" aria-pressed="false"><span class="sat-mark">●</span><span>Kuiper</span></button>
-        <button type="button" class="sat-group sat-navigation" data-satellite-group="navigation" aria-pressed="false"><span class="sat-mark">◇</span><span>Navigation / GNSS</span></button>
-        <button type="button" class="sat-group sat-weather" data-satellite-group="weather" aria-pressed="false"><span class="sat-mark">◐</span><span>Weather</span></button>
-        <button type="button" class="sat-group sat-earth" data-satellite-group="earth" aria-pressed="false"><span class="sat-mark">◉</span><span>Earth observation</span></button>
+        <button type="button" class="sat-group is-on sat-navigation" data-satellite-group="navigation" aria-pressed="mixed"><span class="sat-mark">◇</span><span>Navigation / GNSS</span></button>
+        <button type="button" class="sat-group is-on sat-weather" data-satellite-group="weather" aria-pressed="mixed"><span class="sat-mark">◐</span><span>Weather</span></button>
+        <button type="button" class="sat-group is-on sat-earth" data-satellite-group="earth" aria-pressed="mixed"><span class="sat-mark">◉</span><span>Earth observation</span></button>
         <button type="button" class="sat-group sat-science" data-satellite-group="science" aria-pressed="false"><span class="sat-mark">✧</span><span>Science</span></button>
         <button type="button" class="sat-group sat-amateur" data-satellite-group="amateur" aria-pressed="false"><span class="sat-mark">○</span><span>Amateur radio</span></button>
         <button type="button" class="sat-group sat-geo" data-satellite-group="geo" aria-pressed="false"><span class="sat-mark">◇</span><span>Geostationary</span></button>
@@ -149,6 +150,6 @@
     </div>
     <p class="hint">Live from your location · horizon is the lowest view · drag to look around · pinch or wheel to zoom</p>
   </main>
-  <script src="./app.js?v=1.6.14"></script>
+  <script src="./app.js?v=1.6.15"></script>
 </body>
 </html>

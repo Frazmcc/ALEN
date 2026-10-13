@@ -39,7 +39,7 @@ class SatelliteProvider:
     ALEN_SNAPSHOT_URL = "https://raw.githubusercontent.com/Frazmcc/ALEN/orbit-feed/{group}.json"
     SECONDARY_TLE_MIRROR_URL = "https://raw.githubusercontent.com/caelo-works/tle-mirror/main/tle/{group}.tle"
     CACHE_SECONDS = 1800
-    MAX_CACHE_GROUPS = 16
+    MAX_CACHE_GROUPS = 20
     POSITION_BUCKET_SECONDS = 1
     MAX_POSITION_BUCKETS = 20
     MOTION_STEP_SECONDS = 2
@@ -116,7 +116,7 @@ class SatelliteProvider:
             group
             for group in dict.fromkeys(groups)
             if group in self.ALLOWED_GROUPS
-        ][:12]
+        ][:len(self.ALLOWED_GROUPS)]
         loaded_by_group: dict[str, int] = {group: 0 for group in requested_groups}
         records_by_group: dict[str, tuple[OrbitRecord, ...]] = {}
         if requested_groups:

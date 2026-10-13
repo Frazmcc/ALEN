@@ -48,7 +48,7 @@ function clearSavedSkyView(){
 const activePointers=new Map();
 let simTime=Date.now(),lastFrame=performance.now();
 let observer=null,geoWatch=null,aircraftTimer=null,satelliteTimer=null;
-let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[];
+let aircraft=[],satellites=[],satelliteElements=[],airports=[],brightStars=[],constellationFigures=[];
 let aircraftUpdated=0,satellitesUpdated=0,lastSatelliteStep=0,aircraftDiagnostics=null,aircraftRequestInFlight=false,aircraftRefreshQueued=false,satelliteDiagnostics=null,satelliteRequestState="idle",satelliteRequestInFlight=false,satelliteRefreshQueued=false;
 let aircraftResumePending=false,satelliteResumePending=false,aircraftSnapOnRefresh=false,satelliteSnapOnRefresh=false;
 let aircraftAbortController=null,satelliteAbortController=null;
@@ -67,18 +67,20 @@ const AIRCRAFT_GROUPS={
 function phaseState(phase){return phase===2?"off":phase===0?"labels":"plain"}
 function phaseEnabled(phase){return phase!==2}
 function phaseLabels(phase){return phase===0}
-function advancePhase(phase){return ((Number(phase)||0)+1)%4}
+function advancePhase(phase){return ((Number(phase)||0)+1)%3}
 function layerLabelsOn(key){return !MULTISTATE_LAYERS.has(key)||phaseLabels(layerPhases[key])}
 function syncLayerButton(btn,key){
  if(!MULTISTATE_LAYERS.has(key)){
   const state=layers[key]?"on":"off";
   btn.dataset.state=state;
+  btn.classList.toggle("is-on",layers[key]);
   btn.setAttribute("aria-pressed",String(layers[key]));
   btn.title=`${btn.textContent}: ${layers[key]?"on":"off"}`;
   return;
  }
  const phase=layerPhases[key],state=phaseState(phase);
  btn.dataset.state=state;
+ btn.classList.toggle("is-on",layers[key]);
  btn.setAttribute("aria-pressed",state==="off"?"false":state==="labels"?"true":"mixed");
  btn.title=state==="labels"?`${btn.textContent}: on with labels`:state==="plain"?`${btn.textContent}: on without labels`:`${btn.textContent}: off`;
 }
@@ -87,18 +89,18 @@ function syncGroupButton(btn,group){
  btn.dataset.state=state;
  btn.classList.toggle("is-on",group.enabled);
  btn.setAttribute("aria-pressed",state==="off"?"false":state==="labels"?"true":"mixed");
- btn.title=state==="labels"?`${group.label}: on with labels`:state==="plain"?`${group.label}: on without labels`:`${group.label}: off`;
+ btn.title=(state==="labels"?`${group.label}: on with labels`:state==="plain"?`${group.label}: on without labels`:`${group.label}: off`)+(btn.dataset.visible?` · ${btn.dataset.visible}`:"");
 }
 const SATELLITE_GROUPS={
  new:{label:"New launches · ≤30 days",sources:["last-30-days"],enabled:true,color:"#68ff9a",glyph:"✦",priority:100,limit:900},
  stations:{label:"Space stations",sources:["stations"],enabled:true,color:"#ffffff",glyph:"▣",priority:90,limit:120},
  bright:{label:"Bright / visual",sources:["visual"],enabled:true,color:"#ffe082",glyph:"◆",priority:70,limit:250},
  starlink:{label:"Starlink",sources:["starlink"],enabled:true,color:"#64b5f6",glyph:"●",priority:60,limit:1800},
- oneweb:{label:"OneWeb",sources:["oneweb"],enabled:false,color:"#ab8cff",glyph:"●",priority:59,limit:900},
+ oneweb:{label:"OneWeb",sources:["oneweb"],enabled:true,color:"#ab8cff",glyph:"●",priority:59,limit:900},
  kuiper:{label:"Kuiper",sources:["kuiper"],enabled:false,color:"#50d0ff",glyph:"●",priority:58,limit:700},
- navigation:{label:"Navigation / GNSS",sources:["gnss"],enabled:false,color:"#4dd0c8",glyph:"◇",priority:57,limit:500},
- weather:{label:"Weather",sources:["weather"],enabled:false,color:"#6ed0ff",glyph:"◐",priority:56,limit:500},
- earth:{label:"Earth observation",sources:["earth-resources"],enabled:false,color:"#7ee787",glyph:"◉",priority:55,limit:700},
+ navigation:{label:"Navigation / GNSS",sources:["gnss"],enabled:true,color:"#4dd0c8",glyph:"◇",priority:57,limit:500},
+ weather:{label:"Weather",sources:["weather"],enabled:true,color:"#6ed0ff",glyph:"◐",priority:56,limit:500},
+ earth:{label:"Earth observation",sources:["earth-resources"],enabled:true,color:"#7ee787",glyph:"◉",priority:55,limit:700},
  science:{label:"Science",sources:["science"],enabled:false,color:"#e6a6ff",glyph:"✧",priority:54,limit:500},
  amateur:{label:"Amateur radio",sources:["amateur"],enabled:false,color:"#ffb86c",glyph:"○",priority:53,limit:700},
  geo:{label:"Geostationary",sources:["geo"],enabled:false,color:"#ffd166",glyph:"◇",priority:52,limit:700},
@@ -135,11 +137,7 @@ const PLANET_INFO={
  uranus:{name:"Uranus",symbol:"⛢",color:"#9fe8eb",detail:"Ice giant",fact:"Uranus rotates on its side relative to most planets."},
  neptune:{name:"Neptune",symbol:"♆",color:"#759cff",detail:"Ice giant",fact:"Neptune is the outermost major planet."}
 };
-const constellationLines=[
-["vega","deneb","altair"],
-["betelgeuse","rigel"],
-["sirius","procyon","pollux"]
-];
+// Stick figures are loaded from data/constellations.json, anchored to catalogue HR identifiers.
 
 function starColor(temp){
  const t=clamp(Number(temp)||6000,2500,30000);
@@ -171,6 +169,22 @@ function starVisibilityAlpha(visualMag,sky){
  const daylightFloor=.1+.28*brightFactor;
  return Math.max(night,daylightFloor);
 }
+function updateConstellationStatus(){
+ const status=document.querySelector("#constellation-status");
+ if(!status)return;
+ status.textContent=brightStars.length&&constellationFigures.length
+  ?constellationFigures.length+" star patterns mapped · lines and names follow the live sky."
+  :!constellationFigures.length?"Constellation catalogue not loaded.":"Waiting for the star catalogue.";
+}
+async function loadConstellations(){
+ try{
+  const res=await fetch("./data/constellations.json?v=1",{cache:"force-cache"});
+  if(!res.ok)throw new Error("constellations "+res.status);
+  const data=await res.json();
+  constellationFigures=(Array.isArray(data.figures)?data.figures:[]).filter(f=>f.name&&Array.isArray(f.paths));
+ }catch(e){console.warn("ALEN constellation lines unavailable",e)}
+ updateConstellationStatus();
+}
 async function loadBrightStars(){
  try{
   const res=await fetch("./data/bright-stars.json?v=1",{cache:"force-cache"});
@@ -181,7 +195,8 @@ async function loadBrightStars(){
    color:starColor(s.temp),distance:"—",detail:s.designation||"Catalogued star",temperatureK:Number(s.temp)||null,
    fact:`${s.name||s.designation||"This star"} is a catalogued star plotted at its real right ascension and declination. Apparent magnitude describes how bright it looks from Earth; lower values are brighter.`
   })).filter(s=>Number.isFinite(s.ra)&&Number.isFinite(s.dec)&&Number.isFinite(s.mag));
- }catch(e){console.warn("ALEN bright-star catalogue unavailable",e)}
+  updateConstellationStatus();
+ }catch(e){console.warn("ALEN bright-star catalogue unavailable",e);updateConstellationStatus()}
 }
 function orbitalEccentricAnomaly(Mdeg,e){
  const M=norm360(Mdeg)*DEG;let E=M+e*Math.sin(M)*(1+e*Math.cos(M));
@@ -1067,6 +1082,20 @@ function drawSatellitePoint(s,active,dayMode,visibility=1){
 function labelBoxOverlaps(box,boxes){
  return boxes.some(b=>!(box.x+box.w<b.x||b.x+b.w<box.x||box.y+box.h<b.y||b.y+b.h<box.y));
 }
+function updateSatelliteGroupCounts(objects=null){
+ const counts=Object.fromEntries(satelliteGroupEntries().map(([key])=>[key,0]));
+ if(Array.isArray(objects))for(const sat of objects){
+  for(const key of sat.memberships||[])if(Object.hasOwn(counts,key))counts[key]++;
+ }
+ document.querySelectorAll("[data-satellite-group]").forEach(btn=>{
+  const key=btn.dataset.satelliteGroup,group=SATELLITE_GROUPS[key];
+  if(!group)return;
+  let count=btn.querySelector(".sat-count");
+  if(!count){count=document.createElement("small");count.className="sat-count";btn.append(count)}
+  const value=!group.enabled?"":!Array.isArray(objects)?"Loading…":counts[key]+" sky";
+  count.textContent=value;btn.dataset.visible=value;syncGroupButton(btn,group);
+ });
+}
 function stopSatellitePolling(){
  if(satelliteTimer!==null){clearTimeout(satelliteTimer);satelliteTimer=null}
 }
@@ -1106,6 +1135,7 @@ async function refreshSatellites(force=false){
    satellites=[];
    satelliteDiagnostics={unique_orbits:0,visible:0,requested_groups:[]};
    satelliteRequestState="ok";
+   updateSatelliteGroupCounts([]);
    return;
   }
   const qs=new URLSearchParams({
@@ -1172,6 +1202,7 @@ async function refreshSatellites(force=false){
    next.push(sat);
   }
   satellites=mergeSatelliteContinuity(previous,next,wallNow,frameNow);
+  updateSatelliteGroupCounts(satellites);
   if(feedStatus){
    const rejected=(Number(satelliteDiagnostics?.physically_implausible)||0)+rejectedSatelliteTrajectories;
    if(rejected)feedStatus.textContent+=" · rejected "+rejected+" implausible orbital predictions.";
@@ -1185,6 +1216,7 @@ async function refreshSatellites(force=false){
   satellites=satellites.filter(s=>wallNow-(Number(s.lastSeenAt)||wallNow)<=SATELLITE_ERROR_GRACE_MS);
   satelliteDiagnostics=satelliteDiagnostics||{unique_orbits:satellites.length};
   satelliteRequestState=satellites.length?"stale":"error";
+  updateSatelliteGroupCounts(null);
   if(e?.name!=="AbortError")console.warn("ALEN satellite feed unavailable; retaining recent satellites",e);
  }finally{
   clearTimeout(timeout);
@@ -1355,6 +1387,34 @@ function drawHorizon(){
 function isAboveLandscape(az,el){
  return !layers.landscape||el>terrainHorizonElevation(az);
 }
+function drawConstellations(byId,dayMode){
+ if(!brightStars.length||!constellationFigures.length)return;
+ ctx.save();
+ ctx.lineWidth=1.1;
+ ctx.strokeStyle=dayMode?"rgba(16,59,90,.52)":"rgba(133,196,233,.62)";
+ ctx.fillStyle=dayMode?"rgba(7,42,64,.85)":"rgba(185,223,247,.92)";
+ ctx.font="600 10px ui-monospace,monospace";ctx.textAlign="center";
+ for(const figure of constellationFigures){
+  const visible=new Map();let segments=0;
+  for(const path of figure.paths){
+   for(let i=1;i<path.length;i++){
+    const a=byId.get(path[i-1]),b=byId.get(path[i]);
+    if(!a||!b||a.el<=0||b.el<=0)continue;
+    if(!isAboveLandscape(a.az,a.el)||!isAboveLandscape(b.az,b.el))continue;
+    const p=project(a.az,a.el),q=project(b.az,b.el);
+    if(!p||!q)continue;
+    ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
+    visible.set(path[i-1],p);visible.set(path[i],q);segments++;
+   }
+  }
+  if(segments<2||visible.size<3)continue;
+  const positions=[...visible.values()];
+  const x=positions.reduce((sum,p)=>sum+p[0],0)/positions.length;
+  const y=positions.reduce((sum,p)=>sum+p[1],0)/positions.length;
+  if(x>35&&x<width-35&&y>30&&y<height-30)ctx.fillText(figure.name,x,y-12);
+ }
+ ctx.restore();
+}
 function draw(){
  const sun=currentSunAltAz(simTime),sky=timeOfDaySky(sun?.el),dayMode=sky.daylight>.45;
  root.dataset.skyMode=dayMode?"day":"night";
@@ -1366,14 +1426,7 @@ function draw(){
 
  const liveObjects=currentSkyObjects(simTime);
  const byId=new Map(liveObjects.map(o=>[o.id,o]));
- if(layers.constellations){
-  ctx.strokeStyle="rgba(115,160,190,.28)";ctx.lineWidth=.8;
-  for(const chain of constellationLines){
-   ctx.beginPath();let started=false;
-   for(const id of chain){const o=byId.get(id);if(!o||o.el<0){started=false;continue}const p=project(o.az,o.el);if(!p){started=false;continue}if(!started){ctx.moveTo(...p);started=true}else ctx.lineTo(...p)}
-   ctx.stroke();
-  }
- }
+ if(layers.constellations)drawConstellations(byId,dayMode);
  if(layers.stars){
   for(const o of liveObjects){
    if(o.el<0||!isAboveLandscape(o.az,o.el))continue;const p=project(o.az,o.el);if(!p)continue;
@@ -1428,6 +1481,15 @@ function draw(){
      ctx.fillStyle="#ffffff";ctx.fillText(value,boxX+6+labelWidth,y);
     });
     ctx.globalAlpha=1;
+   }else if(aircraftLabelsOn(a)){
+    const label=String(a.callsign||a.name||a.hex||"Aircraft").trim();
+    ctx.font="700 9px ui-monospace,monospace";
+    const boxW=ctx.measureText(label).width+10;
+    const bx=clamp(p[0]+iconSize*.58,4,Math.max(4,width-boxW-4));
+    const by=clamp(p[1]-iconSize*.72-15,4,Math.max(4,height-19));
+    ctx.fillStyle=dayMode?"rgba(245,250,253,.93)":"rgba(2,8,14,.87)";
+    ctx.beginPath();ctx.roundRect(bx,by,boxW,15,3);ctx.fill();
+    ctx.fillStyle=aircraftInk;ctx.fillText(label,bx+5,by+10.5);
    }
   }
  }
@@ -2265,7 +2327,7 @@ document.querySelectorAll("[data-satellite-group]").forEach(btn=>{
   group.phase=advancePhase(group.phase);
   group.enabled=phaseEnabled(group.phase);
   group.labels=phaseLabels(group.phase);
-  syncGroupButton(btn,group);
+  updateSatelliteGroupCounts(null);
   await refreshSatellites(true);
   restartSatellitePolling(false);
  });
@@ -2280,6 +2342,7 @@ document.querySelectorAll("[data-aircraft-group]").forEach(btn=>{
   syncGroupButton(btn,group);
  });
 });
+updateSatelliteGroupCounts(null);
 const GROUP_PANELS=[
  ["astronomy-groups","astronomy-groups-button","astronomy-groups-close"],
  ["aircraft-groups","aircraft-groups-button","aircraft-groups-close"],
@@ -2404,5 +2467,5 @@ document.addEventListener("visibilitychange",()=>{
 });
 window.addEventListener("beforeunload",()=>{stopCompassFollowing()});
 window.addEventListener("beforeunload",()=>{if(geoWatch!==null)navigator.geolocation.clearWatch(geoWatch);clearInterval(aircraftTimer);stopSatellitePolling()});
-loadBrightStars();setLiveStatus();requestLocation();initialiseMobileSkySensors();requestAnimationFrame(tick);
+loadBrightStars();loadConstellations();setLiveStatus();requestLocation();initialiseMobileSkySensors();requestAnimationFrame(tick);
 })();

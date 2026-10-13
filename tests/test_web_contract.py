@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.14' in HTML
+    assert './app.js?v=1.6.15' in HTML
     assert './styles.css?v=0.9.3' in HTML
 
 
@@ -699,8 +699,8 @@ def test_every_nested_footer_control_has_an_active_click_handler() -> None:
     assert 'await refreshSatellites(true)' in APP
 
 
-def test_four_step_label_cycle_is_complete() -> None:
-    assert 'function advancePhase(phase){return ((Number(phase)||0)+1)%4}' in APP
+def test_three_step_label_cycle_is_complete() -> None:
+    assert 'function advancePhase(phase){return ((Number(phase)||0)+1)%3}' in APP
     assert 'function phaseState(phase){return phase===2?"off":phase===0?"labels":"plain"}' in APP
     assert 'function phaseEnabled(phase){return phase!==2}' in APP
     assert 'function phaseLabels(phase){return phase===0}' in APP
