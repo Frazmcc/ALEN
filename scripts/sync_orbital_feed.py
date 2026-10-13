@@ -15,6 +15,8 @@ import os
 import sys
 
 import httpx
+from sgp4 import exporter
+from sgp4.api import Satrec
 
 GROUPS = (
     "last-30-days", "stations", "visual", "starlink", "oneweb", "kuiper",
@@ -25,6 +27,7 @@ GROUPS = (
 HOT_GROUPS = {"starlink", "oneweb", "kuiper"}
 MEDIUM_GROUPS = {"last-30-days", "stations", "visual"}
 SOURCE = "https://celestrak.org/NORAD/elements/gp.php"
+SECONDARY = "https://raw.githubusercontent.com/caelo-works/tle-mirror/main/tle/{group}.tle"
 
 
 def freshness_age_days(epoch: str, when: datetime) -> float:
@@ -57,6 +60,30 @@ def validated_snapshot(group: str, payload: object, when: datetime) -> tuple[lis
     return entries, midpoint
 
 
+def secondary_omm_snapshot(raw: str) -> list[dict]:
+    """Convert independently refreshed legacy TLE into validated OMM JSON."""
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    records: list[dict] = []
+    index = 0
+    while index < len(lines):
+        if lines[index].startswith("1 ") and index + 1 < len(lines) and lines[index + 1].startswith("2 "):
+            name = ""
+            line1, line2 = lines[index], lines[index + 1]
+            index += 2
+        elif index + 2 < len(lines) and lines[index + 1].startswith("1 ") and lines[index + 2].startswith("2 "):
+            name, line1, line2 = lines[index], lines[index + 1], lines[index + 2]
+            index += 3
+        else:
+            index += 1
+            continue
+        try:
+            sat = Satrec.twoline2rv(line1, line2)
+            records.append(exporter.export_omm(sat, name or f"NORAD {sat.satnum}"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return records
+
+
 def main() -> int:
     directory = Path(os.getenv("ALEN_ORBIT_FEED_OUTPUT", "/tmp/alen-orbit-feed"))
     directory.mkdir(parents=True, exist_ok=True)
@@ -65,29 +92,47 @@ def main() -> int:
                 "licenceNote": "Public orbital elements from CelesTrak; respect usage policy.",
                 "groups": {}}
     successful = 0
-    with httpx.Client(timeout=30.0, headers={"User-Agent": "ALEN-OrbitSnapshot/1.0 (https://github.com/Frazmcc/ALEN)", "Accept": "application/json"}) as client:
+    primary_unavailable = False
+    with httpx.Client(timeout=15.0, headers={"User-Agent": "ALEN-OrbitSnapshot/1.0 (https://github.com/Frazmcc/ALEN)", "Accept": "application/json"}) as client:
         for group in GROUPS:
-            # Do not repeatedly retry 403/429 responses: CelesTrak rate-limits.
-            try:
-                res = client.get(SOURCE, params={"GROUP": group.upper(), "FORMAT": "JSON"})
-                res.raise_for_status()
-                checked = validated_snapshot(group, res.json(), now)
-                if checked is None:
-                    print(f"{group}: skipped empty or stale source", flush=True)
-                    continue
-                entries, median_age = checked
-                (directory / f"{group}.json").write_text(
-                    json.dumps(entries, separators=(",", ":"), ensure_ascii=False) + "\n",
-                    encoding="utf-8",
-                )
-                manifest["groups"][group] = {
-                    "count": len(entries), "medianEpochAgeDays": round(median_age, 3),
-                    "fetchedAt": now.isoformat(),
-                }
-                successful += 1
-                print(f"{group}: {len(entries)} records, median age {median_age:.2f} days", flush=True)
-            except (httpx.HTTPError, ValueError, KeyError) as exc:
-                print(f"{group}: source unavailable ({str(exc)[:140]})", flush=True)
+            checked = None
+            source_name = "celestrak_omm"
+            if not primary_unavailable:
+                try:
+                    res = client.get(SOURCE, params={"GROUP": group.upper(), "FORMAT": "JSON"})
+                    res.raise_for_status()
+                    checked = validated_snapshot(group, res.json(), now)
+                    if checked is None:
+                        print(f"{group}: CelesTrak returned an empty or stale catalogue", flush=True)
+                except (httpx.HTTPError, ValueError, KeyError) as exc:
+                    print(f"{group}: primary unavailable ({str(exc)[:130]})", flush=True)
+                    # Avoid hammering CelesTrak when the server reports an outage.
+                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (429, 500, 502, 503, 504):
+                        primary_unavailable = True
+            if checked is None:
+                try:
+                    mirror = client.get(SECONDARY.format(group=group))
+                    mirror.raise_for_status()
+                    checked = validated_snapshot(group, secondary_omm_snapshot(mirror.text), now)
+                    if checked is not None:
+                        source_name = "secondary_current_tle"
+                except (httpx.HTTPError, ValueError, KeyError) as exc:
+                    print(f"{group}: backup unavailable ({str(exc)[:130]})", flush=True)
+            if checked is None:
+                print(f"{group}: no fresh source; keeping previous snapshot", flush=True)
+                continue
+            entries, median_age = checked
+            (directory / f"{group}.json").write_text(
+                json.dumps(entries, separators=(",", ":"), ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            manifest["groups"][group] = {
+                "count": len(entries), "medianEpochAgeDays": round(median_age, 3),
+                "fetchedAt": now.isoformat(), "source": source_name,
+                "legacyTleLimited": source_name == "secondary_current_tle",
+            }
+            successful += 1
+            print(f"{group}: {len(entries)} records, median age {median_age:.2f} days, source {source_name}", flush=True)
             sleep(0.5)
     # Keep the prior snapshot for any group we could not safely refresh.
     (directory / "latest-run.json").write_text(json.dumps(manifest, indent=2) + "\n",encoding="utf-8")
