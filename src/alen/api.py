@@ -182,7 +182,7 @@ def visible_satellites(
     limit: int = Query(default=260, ge=1, le=2500),
 ) -> dict[str, object]:
     requested = [value.strip() for value in groups.split(",") if value.strip()]
-    requested = requested[:12]
+    requested = requested[:len(_satellites.ALLOWED_GROUPS)]
     cache_key = _satellite_observer_cache_key(
         lat,
         lon,
