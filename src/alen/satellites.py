@@ -37,6 +37,7 @@ class SatelliteProvider:
     ORBITALWIKI_URL = "https://www.orbitalwiki.com/api/v1/elements"
     SATVISOR_MIRROR_URL = "https://raw.githubusercontent.com/satvisorcom/satvisor-data/master/celestrak/json/{group}.json"
     ALEN_SNAPSHOT_URL = "https://raw.githubusercontent.com/Frazmcc/ALEN/orbit-feed/{group}.json"
+    SECONDARY_TLE_MIRROR_URL = "https://raw.githubusercontent.com/caelo-works/tle-mirror/main/tle/{group}.tle"
     CACHE_SECONDS = 1800
     MAX_CACHE_GROUPS = 16
     POSITION_BUCKET_SECONDS = 1
@@ -590,6 +591,7 @@ class SatelliteProvider:
         for source_name, source in (
             ("alen_snapshot", self._fetch_group_alen_snapshot_json),
             ("celestrak", self._fetch_group_json),
+            ("secondary_tle", self._fetch_group_secondary_tle),
             ("third_party_mirror", self._fetch_group_mirror_json),
             ("celestrak_tle", self._fetch_group_tle),
         ):
@@ -675,6 +677,51 @@ class SatelliteProvider:
                     satellite=satellite,
                 )
             )
+        return tuple(records)
+
+    def _fetch_group_secondary_tle(self, group: str) -> tuple[OrbitRecord, ...]:
+        """Fresh public TLE mirror used while OMM feeds are unavailable.
+
+        TLE has a legacy five-digit NORAD limitation; OMM is still preferred
+        when available so newer satellite identities aren't silently lost.
+        """
+        try:
+            with httpx.Client(
+                timeout=15.0,
+                follow_redirects=True,
+                headers={"User-Agent": "ALEN/0.1", "Accept": "text/plain"},
+            ) as client:
+                response = client.get(self.SECONDARY_TLE_MIRROR_URL.format(group=group.lower()))
+                response.raise_for_status()
+                lines = [line.strip() for line in response.text.splitlines() if line.strip()]
+        except httpx.HTTPError:
+            return ()
+        records: list[OrbitRecord] = []
+        index = 0
+        while index < len(lines):
+            if lines[index].startswith("1 ") and index + 1 < len(lines) and lines[index + 1].startswith("2 "):
+                name = ""
+                line1, line2 = lines[index], lines[index + 1]
+                index += 2
+            elif (
+                index + 2 < len(lines)
+                and lines[index + 1].startswith("1 ")
+                and lines[index + 2].startswith("2 ")
+            ):
+                name, line1, line2 = lines[index], lines[index + 1], lines[index + 2]
+                index += 3
+            else:
+                index += 1
+                continue
+            try:
+                satellite = Satrec.twoline2rv(line1, line2)
+                norad = satellite.satnum
+            except (TypeError, ValueError):
+                continue
+            records.append(OrbitRecord(
+                name=name or f"NORAD {norad}", norad=norad,
+                international_id=line1[9:17].strip(), satellite=satellite,
+            ))
         return tuple(records)
 
     def _fetch_group_mirror_json(self, group: str) -> tuple[OrbitRecord, ...]:
