@@ -681,6 +681,10 @@ function aircraftScreenRotation(a,q,p){
  }
  return adiff(heading,q.az)*DEG;
 }
+// Presentation minimums apply only to marker pixels, never physical geometry.
+function aircraftMarkerSize(depth,dayMode){
+ return dayMode?Math.max(10,depth.size):Math.max(5.5,depth.size);
+}
 function aircraftDepthCue(rangeKm,elevationDeg=30,active=false){
  // Screen sizes are restrained visual cues, not literal aircraft angular sizes.
  const distance=Number(rangeKm),km=Number.isFinite(distance)&&distance>=0?clamp(distance,0.25,180):180;
@@ -1060,21 +1064,31 @@ function satelliteDepthCue(rangeKm,elevationDeg=45,active=false){
   alpha:clamp(distanceOpacity*elevationOpacity*(active?1.25:1),.14,1)
  };
 }
+function satelliteMarkerRadius(depth,dayMode){
+ return dayMode?Math.max(2.2,depth.radius):depth.radius;
+}
 function drawSatellitePoint(s,active,dayMode,visibility=1){
  const depth=satelliteDepthCue(s.rangeKm,s.el,active);
  ctx.save();
- // A faint, soft glint rather than a solid chart marker with a bright outline.
- ctx.globalAlpha=depth.alpha*visibility*(dayMode?.08:.12);
- ctx.fillStyle=s.color;
- ctx.beginPath();ctx.arc(0,0,depth.halo,0,Math.PI*2);ctx.fill();
- ctx.globalAlpha=depth.alpha*visibility;
- ctx.fillStyle=s.color;
- ctx.beginPath();ctx.arc(0,0,depth.radius,0,Math.PI*2);ctx.fill();
- if(active){
-  ctx.globalAlpha=Math.min(1,depth.alpha*visibility*.9);
-  ctx.strokeStyle=dayMode?"#12364f":"#e9f5ff";
-  ctx.lineWidth=.7;
-  ctx.stroke();
+ if(dayMode){
+  // A narrow navy surround keeps the category-coloured point legible in sun.
+  const markerRadius=satelliteMarkerRadius(depth,true);
+  ctx.globalAlpha=visibility*(active?1:.96);
+  ctx.fillStyle="#08283f";
+  ctx.beginPath();ctx.arc(0,0,markerRadius+1.5,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=visibility*(active?1:Math.max(.88,depth.alpha));
+  ctx.fillStyle=s.color;
+  ctx.beginPath();ctx.arc(0,0,markerRadius,0,Math.PI*2);ctx.fill();
+  if(active){ctx.strokeStyle="#ffffff";ctx.lineWidth=1;ctx.stroke()}
+ }else{
+  // At night retain subtle, range-dependent point-like glints.
+  ctx.globalAlpha=depth.alpha*visibility*.12;
+  ctx.fillStyle=s.color;
+  ctx.beginPath();ctx.arc(0,0,depth.halo,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=depth.alpha*visibility;
+  ctx.fillStyle=s.color;
+  ctx.beginPath();ctx.arc(0,0,depth.radius,0,Math.PI*2);ctx.fill();
+  if(active){ctx.strokeStyle="#e9f5ff";ctx.lineWidth=.7;ctx.stroke()}
  }
  ctx.restore();
  return depth;
@@ -1456,12 +1470,22 @@ function draw(){
   for(const a of aircraft){
    if(!aircraftGroupEnabled(a))continue;
    const q=airborneAltAz(a.displayLat,a.displayLon,a.displayAltM??a.altM);if(!q||q.el<0||!isAboveLandscape(q.az,q.el))continue;const p=project(q.az,q.el);if(!p)continue;
-   const active=selected?.id===a.id,depth=aircraftDepthCue(q.slantRangeKm,q.el,active),iconSize=depth.size,visualType=aircraftVisualType(a);
+   const active=selected?.id===a.id,depth=aircraftDepthCue(q.slantRangeKm,q.el,active),iconSize=aircraftMarkerSize(depth,dayMode),visualType=aircraftVisualType(a);
    ctx.save();ctx.translate(p[0],p[1]);
-   ctx.globalAlpha=depth.alpha*(dayMode?.08:.12);ctx.fillStyle=aircraftInk;ctx.beginPath();ctx.arc(0,0,depth.halo,0,Math.PI*2);ctx.fill();
-   ctx.globalAlpha=depth.alpha;ctx.rotate(aircraftScreenRotation(a,q,p));
+   if(dayMode){
+    // Tracking icon, not a scale model: dark silhouette on a bounded white disc.
+    ctx.globalAlpha=.97;
+    ctx.fillStyle="rgba(250,253,255,.95)";
+    ctx.beginPath();ctx.arc(0,0,Math.max(6,iconSize*.67),0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle="rgba(5,34,53,.96)";ctx.lineWidth=1.2;ctx.stroke();
+   }else{
+    ctx.globalAlpha=Math.max(.5,depth.alpha)*.22;
+    ctx.fillStyle=aircraftInk;ctx.beginPath();ctx.arc(0,0,Math.max(2.8,depth.halo),0,Math.PI*2);ctx.fill();
+   }
+   ctx.globalAlpha=dayMode?1:Math.max(.7,depth.alpha);
+   ctx.rotate(aircraftScreenRotation(a,q,p));
    if(iconSize<5){ctx.fillStyle=aircraftInk;ctx.beginPath();ctx.arc(0,0,Math.max(.8,iconSize*.3),0,Math.PI*2);ctx.fill()}
-   else drawAircraftIcon(visualType,iconSize,aircraftInk,dayMode?"rgba(255,255,255,.65)":"rgba(0,0,0,.4)");
+   else drawAircraftIcon(visualType,iconSize,aircraftInk,dayMode?"rgba(255,255,255,.84)":"rgba(0,0,0,.4)");
    ctx.restore();
    ctx.globalAlpha=1;
    if(active){
@@ -1483,13 +1507,15 @@ function draw(){
     ctx.globalAlpha=1;
    }else if(aircraftLabelsOn(a)){
     const label=String(a.callsign||a.name||a.hex||"Aircraft").trim();
-    ctx.font="700 9px ui-monospace,monospace";
-    const boxW=ctx.measureText(label).width+10;
-    const bx=clamp(p[0]+iconSize*.58,4,Math.max(4,width-boxW-4));
-    const by=clamp(p[1]-iconSize*.72-15,4,Math.max(4,height-19));
-    ctx.fillStyle=dayMode?"rgba(245,250,253,.93)":"rgba(2,8,14,.87)";
-    ctx.beginPath();ctx.roundRect(bx,by,boxW,15,3);ctx.fill();
-    ctx.fillStyle=aircraftInk;ctx.fillText(label,bx+5,by+10.5);
+    ctx.font="700 11px ui-monospace,monospace";
+    const boxW=ctx.measureText(label).width+14,boxH=19;
+    const bx=clamp(p[0]+iconSize*.7,4,Math.max(4,width-boxW-4));
+    const by=clamp(p[1]-iconSize*.72-boxH,4,Math.max(4,height-boxH-4));
+    ctx.fillStyle=dayMode?"rgba(250,253,255,.97)":"rgba(2,8,14,.92)";
+    ctx.beginPath();ctx.roundRect(bx,by,boxW,boxH,4);ctx.fill();
+    ctx.strokeStyle=dayMode?"rgba(5,34,53,.85)":"rgba(160,229,255,.65)";
+    ctx.lineWidth=.8;ctx.stroke();
+    ctx.fillStyle=aircraftInk;ctx.fillText(label,bx+7,by+13);
    }
   }
  }
@@ -1503,7 +1529,7 @@ function draw(){
    const visibility=satelliteVisibility(s);
    const depth=drawSatellitePoint(s,active,dayMode,visibility);
    ctx.restore();
-   if(active&&visibility>.05){ctx.strokeStyle=s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2,0,Math.PI*2);ctx.lineWidth=1;ctx.stroke()}
+   if(active&&visibility>.05){ctx.strokeStyle=dayMode?"#08283f":s.color;ctx.beginPath();ctx.arc(p[0],p[1],depth.halo+2.5,0,Math.PI*2);ctx.lineWidth=dayMode?1.5:1;ctx.stroke()}
    // Satellites can belong to several enabled groups (e.g. newly launched
    // Starlink); primary styling must not suppress a secondary group's labels.
    const labelsEnabled=satelliteLabelsEnabled(s);

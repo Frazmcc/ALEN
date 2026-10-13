@@ -48,6 +48,6 @@ if(unknown.airportPositionKnown||unknown.visibility!=="elevation unavailable")th
 
 def test_deployed_html_uses_new_airport_renderer_asset_version():
     html = Path("web/index.html").read_text(encoding="utf-8")
-    assert '<script src="./app.js?v=1.6.15"></script>' in html
+    assert '<script src="./app.js?v=1.6.16"></script>' in html
     assert '<script src="./app.js?v=1.6.10"></script>' not in html
     assert 'markerEl=visible?actualEl:horizonEl' in APP
