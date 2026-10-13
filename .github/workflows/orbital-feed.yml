@@ -26,8 +26,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
-      - name: Install feed HTTP client
-        run: python -m pip install httpx==0.28.1
+      - name: Install feed validation and SGP4 dependencies
+        run: python -m pip install httpx==0.28.1 sgp4==2.27
       - name: Fetch and validate authoritative OMM datasets
         run: python scripts/sync_orbital_feed.py
       - name: Publish snapshots on separate orbit-feed branch
