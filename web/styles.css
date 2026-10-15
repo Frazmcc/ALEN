@@ -41,3 +41,6 @@
 /* Per-group visible satellite counts make the difference between "off" and "empty sky" clear. */
 .sat-group .sat-count{margin-left:auto;white-space:nowrap;font:600 9px ui-monospace,monospace;color:var(--muted)}
 .sat-group[data-state="off"] .sat-count{display:none}
+
+/* Keep phone-only physical alignment opt-in hidden on desktop. */
+.sat-group[hidden]{display:none}
