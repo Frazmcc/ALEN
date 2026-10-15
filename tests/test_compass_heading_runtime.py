@@ -30,7 +30,7 @@ const button={
  textContent:"",setAttribute(){},
  addEventListener(type,fn){this.click=fn;}
 };
-const document={querySelector:id=>id==="#sky-compass-toggle"||id==="#sky-tilt-calibrate"||id==="#sky-tilt-reverse"||id==="#mobile-sensors-enable"?button:status};
+const document={querySelector:id=>id==="#sky-compass-toggle"||id==="#sky-tilt-calibrate"||id==="#sky-tilt-reverse"||id==="#mobile-sensors-enable"||id==="#sky-mobile-horizon-mode"?button:status};
 const navigator={userAgent:"desktop",platform:"unknown",maxTouchPoints:0};
 const window={addEventListener(){},removeEventListener(){}};
 function skyViewMessage(){}
