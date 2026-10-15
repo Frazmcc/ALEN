@@ -18,6 +18,8 @@ const API_BASE="https://alen-api-lquw.onrender.com";
 const AIRCRAFT_RADIUS_MILES=50,AIRCRAFT_RADIUS_KM=80.4672,AIRCRAFT_RADIUS_NM=43.4488;
 const AIRPORT_RADIUS_MILES=50,AIRPORT_RADIUS_KM=80.4672;
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,pinch=null,selected=null;
+// Opt-in physical pointing removes the comfortable low-horizon phone framing.
+let mobileTrueAlignment=false;
 const SKY_VIEW_STORAGE_KEY="alen.sky-view.v1";
 function readSavedSkyView(){
  try{
@@ -354,7 +356,7 @@ function setFov(next){
  const limits=fovLimits();
  fov=clamp(next,limits.min,limits.max);
  updateMinPitch();
- pitch=Math.max(pitch,minPitch);
+ if(!mobileTrueAlignment)pitch=Math.max(pitch,minPitch);
 }
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
@@ -2094,6 +2096,7 @@ function showObject(o){
 }
 function clearSelection(){selected=null;inspector.hidden=true}
 
+function panScale(pointerType){return pointerType==="touch"?.5:1}
 function pointerPair(){
  return [...activePointers.entries()].slice(0,2);
 }
@@ -2117,9 +2120,9 @@ canvas.addEventListener("pointerdown",e=>{
  if(e.pointerType==="mouse"&&e.button!==0)return;
  e.preventDefault();
  try{canvas.setPointerCapture(e.pointerId)}catch{}
- activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY,pointerType:e.pointerType});
  if(activePointers.size===1){
-  drag={pointerId:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch,moved:false};
+  drag={pointerId:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch,pointerType:e.pointerType,moved:false};
  }else if(activePointers.size===2){
   beginPinch();
  }
@@ -2127,7 +2130,7 @@ canvas.addEventListener("pointerdown",e=>{
 canvas.addEventListener("pointermove",e=>{
  if(!activePointers.has(e.pointerId))return;
  e.preventDefault();
- activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY,pointerType:e.pointerType});
  if(activePointers.size>=2){
   if(!pinch)beginPinch();
   const pair=pointerPair();
@@ -2137,15 +2140,15 @@ canvas.addEventListener("pointermove",e=>{
   const midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;
   if(Math.abs(distance-pinch.startDistance)>2||Math.hypot(midX-pinch.midX,midY-pinch.midY)>2)pinch.moved=true;
   setFov(pinch.startFov*pinch.startDistance/distance);
-  stopCompassFollowing();yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
-  pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62,minPitch,89);
+  stopCompassFollowing();yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov*panScale(e.pointerType));
+  pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62*panScale(e.pointerType),minPitch,89);
   return;
  }
  if(!drag||drag.pointerId!==e.pointerId)return;
  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
  if(Math.hypot(dx,dy)>3)drag.moved=true;
- stopCompassFollowing();yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
- pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89);
+ stopCompassFollowing();yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov*panScale(drag.pointerType));
+ pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62*panScale(drag.pointerType),minPitch,89);
 });
 function finishPointer(e,cancelled=false){
  const wasPinching=pinch!==null||activePointers.size>1;
@@ -2154,7 +2157,7 @@ function finishPointer(e,cancelled=false){
  if(wasPinching){
   pinch=null;
   const remaining=[...activePointers.entries()][0];
-  drag=remaining?{pointerId:remaining[0],x:remaining[1].x,y:remaining[1].y,yaw,pitch,moved:true}:null;
+  drag=remaining?{pointerId:remaining[0],x:remaining[1].x,y:remaining[1].y,yaw,pitch,pointerType:remaining[1].pointerType,moved:true}:null;
   return;
  }
  if(cancelled){drag=null;return}
