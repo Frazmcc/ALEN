@@ -24,7 +24,7 @@ def test_compass_heading_rejects_relative_and_low_accuracy_sensor_data() -> None
 const norm360=n=>(n%360+360)%360;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const screen={orientation:{angle:0}};
-let yaw=180;
+let yaw=180,pitch=50,minPitch=50,mobileTrueAlignment=false;
 const status={textContent:""};
 const button={
  textContent:"",setAttribute(){},
