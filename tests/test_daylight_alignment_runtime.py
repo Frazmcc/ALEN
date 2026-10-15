@@ -14,7 +14,8 @@ def test_alignment_controls_and_live_refresh():
     assert 'if(!observer)' in APP
     assert 'currentSunAltAz(ms)' in APP
     assert 'solarSystemRaDec(ms).moon' in APP
-    assert 'compassFollowing?"Following approximate device heading."' in APP
+    assert 'mobileTrueAlignment?"Following approximate device heading with physical elevation."' in APP
+    assert '"Following approximate device heading with lower-horizon framing (not true physical pointing alignment)."' in APP
 
 
 def test_angular_separation_wrap_and_zenith():

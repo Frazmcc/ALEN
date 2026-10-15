@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.16' in HTML
+    assert './app.js?v=1.6.17' in HTML
     assert './styles.css?v=0.9.3' in HTML
 
 
@@ -123,7 +123,7 @@ def test_live_location_and_horizon_contract() -> None:
     assert "footerHeight+10" in APP
     assert "function updateMinPitch()" in APP
     assert "pitch=minPitch" in APP
-    assert "pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89)" in APP
+    assert "pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62*panScale(drag.pointerType),minPitch,89)" in APP
     assert "function traceTerrainSkyline()" in APP
     assert "function drawDistantTerrain(dayMode)" in APP
     assert "function drawLandscapeForeground()" not in APP

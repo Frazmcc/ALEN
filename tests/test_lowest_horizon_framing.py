@@ -34,10 +34,11 @@ if(ratio*height>height-(barHeight+10)-11)throw Error("compact viewport overlap")
     assert result.returncode==0,result.stderr
 
 
-def test_default_view_starts_low_but_calibrated_phone_can_show_level_horizon():
+def test_default_mobile_view_keeps_horizon_low_with_optional_physical_alignment():
     assert "pitch=minPitch;" in APP
-    assert "const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg,0,89);" in APP
-    assert "pitch=0;" in APP
+    assert "const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg+mobileHorizonOffset(),0,89);" in APP
+    assert "function mobileHorizonOffset(){return mobileTrueAlignment?0:minPitch}" in APP
+    assert "pitch=mobileHorizonOffset();" in APP
     assert "function restoreSavedSkyView()" in APP
     # Saved views remain available via button, but no longer override the new
     # prescribed lowest-framing initial view on GPS initialization.

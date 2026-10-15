@@ -18,6 +18,8 @@ const API_BASE="https://alen-api-lquw.onrender.com";
 const AIRCRAFT_RADIUS_MILES=50,AIRCRAFT_RADIUS_KM=80.4672,AIRCRAFT_RADIUS_NM=43.4488;
 const AIRPORT_RADIUS_MILES=50,AIRPORT_RADIUS_KM=80.4672;
 let width=1,height=1,dpr=1,yaw=180,pitch=30,minPitch=0,fov=130,drag=null,pinch=null,selected=null;
+// Opt-in physical pointing removes the comfortable low-horizon phone framing.
+let mobileTrueAlignment=false;
 const SKY_VIEW_STORAGE_KEY="alen.sky-view.v1";
 function readSavedSkyView(){
  try{
@@ -354,7 +356,7 @@ function setFov(next){
  const limits=fovLimits();
  fov=clamp(next,limits.min,limits.max);
  updateMinPitch();
- pitch=Math.max(pitch,minPitch);
+ if(!mobileTrueAlignment)pitch=Math.max(pitch,minPitch);
 }
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2);
@@ -2094,6 +2096,7 @@ function showObject(o){
 }
 function clearSelection(){selected=null;inspector.hidden=true}
 
+function panScale(pointerType){return pointerType==="touch"?.5:1}
 function pointerPair(){
  return [...activePointers.entries()].slice(0,2);
 }
@@ -2117,9 +2120,9 @@ canvas.addEventListener("pointerdown",e=>{
  if(e.pointerType==="mouse"&&e.button!==0)return;
  e.preventDefault();
  try{canvas.setPointerCapture(e.pointerId)}catch{}
- activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY,pointerType:e.pointerType});
  if(activePointers.size===1){
-  drag={pointerId:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch,moved:false};
+  drag={pointerId:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch,pointerType:e.pointerType,moved:false};
  }else if(activePointers.size===2){
   beginPinch();
  }
@@ -2127,7 +2130,7 @@ canvas.addEventListener("pointerdown",e=>{
 canvas.addEventListener("pointermove",e=>{
  if(!activePointers.has(e.pointerId))return;
  e.preventDefault();
- activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY,pointerType:e.pointerType});
  if(activePointers.size>=2){
   if(!pinch)beginPinch();
   const pair=pointerPair();
@@ -2137,15 +2140,15 @@ canvas.addEventListener("pointermove",e=>{
   const midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;
   if(Math.abs(distance-pinch.startDistance)>2||Math.hypot(midX-pinch.midX,midY-pinch.midY)>2)pinch.moved=true;
   setFov(pinch.startFov*pinch.startDistance/distance);
-  stopCompassFollowing();yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov);
-  pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62,minPitch,89);
+  stopCompassFollowing();yaw=norm360(pinch.startYaw-(midX-pinch.midX)/Math.max(width,1)*pinch.startFov*panScale(e.pointerType));
+  pitch=clamp(pinch.startPitch+(midY-pinch.midY)/Math.max(height,1)*pinch.startFov*.62*panScale(e.pointerType),minPitch,89);
   return;
  }
  if(!drag||drag.pointerId!==e.pointerId)return;
  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
  if(Math.hypot(dx,dy)>3)drag.moved=true;
- stopCompassFollowing();yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov);
- pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62,minPitch,89);
+ stopCompassFollowing();yaw=norm360(drag.yaw-dx/Math.max(width,1)*fov*panScale(drag.pointerType));
+ pitch=clamp(drag.pitch+dy/Math.max(height,1)*fov*.62*panScale(drag.pointerType),minPitch,89);
 });
 function finishPointer(e,cancelled=false){
  const wasPinching=pinch!==null||activePointers.size>1;
@@ -2154,7 +2157,7 @@ function finishPointer(e,cancelled=false){
  if(wasPinching){
   pinch=null;
   const remaining=[...activePointers.entries()][0];
-  drag=remaining?{pointerId:remaining[0],x:remaining[1].x,y:remaining[1].y,yaw,pitch,moved:true}:null;
+  drag=remaining?{pointerId:remaining[0],x:remaining[1].x,y:remaining[1].y,yaw,pitch,pointerType:remaining[1].pointerType,moved:true}:null;
   return;
  }
  if(cancelled){drag=null;return}
@@ -2172,7 +2175,7 @@ canvas.addEventListener("wheel",e=>{
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 let compassFollowing=false;
-let lastDeviceBeta=null,tiltOffsetDeg=null;
+let lastDeviceBeta=null,tiltOffsetDeg=null,lastTiltUpdateAt=null,lastHeadingUpdateAt=null;
 let reverseDeviceTilt=false;
 const reverseTiltButton=document.querySelector("#sky-tilt-reverse");
 function applyTiltDirection(raw){return reverseDeviceTilt?-raw:raw}
@@ -2183,7 +2186,7 @@ reverseTiltButton.addEventListener("click",()=>{
  // Re-anchor at the current view so toggling does not cause a jump.
  if(lastDeviceBeta!==null){
   const raw=deviceTiltElevation({beta:lastDeviceBeta});
-  if(raw!==null)tiltOffsetDeg=pitch-applyTiltDirection(raw);
+  if(raw!==null)tiltOffsetDeg=pitch-applyTiltDirection(raw)-mobileHorizonOffset();
  }
  skyViewMessage(reverseDeviceTilt?"Reversed vertical response for this session.":"Normal vertical response restored.");
 });
@@ -2198,18 +2201,37 @@ function deviceTiltElevation(event){
  // the camera's upward sightline therefore increases with beta.
  return event.beta-90;
 }
+function mobileHorizonOffset(){return mobileTrueAlignment?0:minPitch}
 function calibrateDeviceTilt(){
  if(lastDeviceBeta===null)return false;
  const raw=deviceTiltElevation({beta:lastDeviceBeta});
  if(raw===null)return false;
- // Calibration means the user is holding the phone level, not matching an
- // earlier artificially horizon-raised browser view.
- pitch=0;
+ // Comfortable framing raises the viewing direction, without moving stars.
+ pitch=mobileHorizonOffset();
  tiltOffsetDeg=-applyTiltDirection(raw);
+ lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
  return true;
 }
 tiltCalibrationButton.addEventListener("click",()=>{
- skyViewMessage(calibrateDeviceTilt()?"Tilt aligned to current sky elevation for this session.":"Hold a supported device upright in portrait, enable Follow compass, and try again.");
+ skyViewMessage(calibrateDeviceTilt()?(mobileTrueAlignment?"Tilt calibrated to physical level.":"Tilt calibrated with the horizon near the lower edge."):"Hold a supported device upright in portrait, enable Follow compass, and try again.");
+});
+const mobileHorizonModeButton=document.querySelector("#sky-mobile-horizon-mode");
+function syncMobileHorizonMode(){
+ mobileHorizonModeButton.setAttribute("aria-pressed",String(mobileTrueAlignment));
+ mobileHorizonModeButton.textContent=mobileTrueAlignment?"True horizon alignment: on":"True horizon alignment: off";
+}
+syncMobileHorizonMode();
+mobileHorizonModeButton.addEventListener("click",()=>{
+ mobileTrueAlignment=!mobileTrueAlignment;
+ syncMobileHorizonMode();
+ lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
+ if(lastDeviceBeta!==null){
+  const raw=deviceTiltElevation({beta:lastDeviceBeta});
+  if(raw!==null)pitch=clamp(applyTiltDirection(raw)+(tiltOffsetDeg||0)+mobileHorizonOffset(),0,89);
+ }else if(!mobileTrueAlignment)pitch=Math.max(pitch,minPitch);
+ skyViewMessage(mobileTrueAlignment
+  ?"True pointing alignment on: a level phone centres the physical horizon."
+  :"Comfort framing on: a level phone places the horizon near the bottom.");
 });
 const compassToggle=document.querySelector("#sky-compass-toggle");
 function absoluteCompassHeading(event){
@@ -2226,34 +2248,49 @@ function absoluteCompassHeading(event){
 }
 function stopCompassFollowing(){
  compassFollowing=false;
- lastDeviceBeta=null;tiltOffsetDeg=null;
+ lastDeviceBeta=null;tiltOffsetDeg=null;lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
  window.removeEventListener("deviceorientation",onCompassOrientation);
  window.removeEventListener("deviceorientationabsolute",onCompassOrientation);
  compassToggle.setAttribute("aria-pressed","false");
  compassToggle.textContent="Follow compass: off";
 }
+// Keep heading and tilt clocks independent. Some mobile browsers fire
+// separate orientation and absolute-orientation events milliseconds apart.
+function sensorSampleDt(stamp,lastAt){
+ if(stamp===null||lastAt===null)return 33;
+ const elapsed=stamp-lastAt;
+ if(elapsed>=0&&elapsed<28)return null;
+ return clamp(elapsed,16,65);
+}
+function smoothedOrientationStep(error,dtMs,deadband,responseMs,speedDegPerSec){
+ const magnitude=Math.abs(error);
+ if(magnitude<=deadband)return 0;
+ const alpha=1-Math.exp(-dtMs/responseMs);
+ return Math.sign(error)*Math.min((magnitude-deadband)*alpha,speedDegPerSec*dtMs/1000);
+}
 function onCompassOrientation(event){
  if(!compassFollowing)return;
  const heading=absoluteCompassHeading(event);
  const rawTilt=deviceTiltElevation(event);
+ if(heading===null&&rawTilt===null)return;
+ const stamp=Number.isFinite(event.timeStamp)?event.timeStamp:null;
  if(rawTilt!==null){
   lastDeviceBeta=event.beta;
-  if(tiltOffsetDeg!==null){
-   // Phone tilt is physical and must retain a true level (0°) horizon.
-   const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg,0,89);
-   const tiltError=targetPitch-pitch;
-   const tiltMagnitude=Math.abs(tiltError);
-   const tiltGain=tiltMagnitude<0.65?0:tiltMagnitude<5?.08:tiltMagnitude<20?.15:.24;
-   if(tiltGain>0)pitch+=clamp(tiltError*tiltGain,-3,3);
+  const dtMs=sensorSampleDt(stamp,lastTiltUpdateAt);
+  if(dtMs!==null){
+   if(stamp!==null)lastTiltUpdateAt=stamp;
+   if(tiltOffsetDeg!==null){
+    const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg+mobileHorizonOffset(),0,89);
+    pitch=clamp(pitch+smoothedOrientationStep(targetPitch-pitch,dtMs,.75,650,38),0,89);
+   }
   }
  }
  if(heading===null)return;
+ const dtMs=sensorSampleDt(stamp,lastHeadingUpdateAt);
+ if(dtMs===null)return;
+ if(stamp!==null)lastHeadingUpdateAt=stamp;
  const delta=((heading-yaw+540)%360)-180;
- // Reject sub-degree magnetometer jitter, but catch up promptly on deliberate turns.
- // This remains an orientation display filter, never a change to sky positions.
- const magnitude=Math.abs(delta);
- const gain=magnitude<1.0?0:magnitude<5?.055:magnitude<20?.12:.24;
- if(gain>0)yaw=norm360(yaw+clamp(delta*gain,-5,5));
+ yaw=norm360(yaw+smoothedOrientationStep(delta,dtMs,1.0,520,70));
  compassToggle.textContent="Follow compass: on";
 }
 const mobileSensorButton=document.querySelector("#mobile-sensors-enable");
@@ -2274,12 +2311,13 @@ async function startCompassFollowing({requestPermission=false}={}){
   // Map the phone's upright portrait tilt to its physical horizon without
   // borrowing the previous manually positioned sky angle.
   tiltOffsetDeg=0;
+  lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
   compassToggle.setAttribute("aria-pressed","true");
   compassToggle.textContent="Follow compass: awaiting heading";
   window.addEventListener("deviceorientation",onCompassOrientation);
   window.addEventListener("deviceorientationabsolute",onCompassOrientation);
   mobileSensorButton.hidden=true;
-  skyViewMessage("Live mobile heading and upright portrait tilt enabled. Sensor accuracy varies by device.");
+  skyViewMessage("Smoothed mobile heading and tilt enabled. The horizon stays low by default; true alignment is optional in Display Groups.");
   return true;
  }catch{
   stopCompassFollowing();
@@ -2297,6 +2335,7 @@ mobileSensorButton.addEventListener("click",async()=>{
  }
 });
 function initialiseMobileSkySensors(){
+ mobileHorizonModeButton.hidden=!mobileDevice;
  if(!mobileDevice)return;
  if(!("DeviceOrientationEvent" in window))return;
  if(typeof DeviceOrientationEvent.requestPermission==="function"){
@@ -2461,7 +2500,7 @@ function updateAlignmentReadout(ms,now){
   "Reference minus view: "+dAz.toFixed(1)+"° horizontal, "+dEl.toFixed(1)+"° vertical; "+
   separation.toFixed(1)+"° angular separation. "+
   (alignmentTarget.value!=="landmark"&&target.el<0?"Reference is below the astronomical horizon. ":"")+
-  (compassFollowing?"Following approximate device heading.":"Follow compass off; showing manual view direction.");
+  (compassFollowing?(mobileTrueAlignment?"Following approximate device heading with physical elevation.":"Following approximate device heading with lower-horizon framing (not true physical pointing alignment)."):"Follow compass off; showing manual view direction.");
 }
 function tick(now){
  const dt=Math.min(100,Math.max(0,now-lastFrame));lastFrame=now;
