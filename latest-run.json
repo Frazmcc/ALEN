@@ -1,124 +1,124 @@
 {
   "source": "https://celestrak.org/NORAD/elements/gp.php",
-  "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+  "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
   "licenceNote": "Public orbital elements from CelesTrak; respect usage policy.",
   "groups": {
     "last-30-days": {
       "count": 244,
-      "medianEpochAgeDays": 1.055,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.009,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "stations": {
       "count": 21,
-      "medianEpochAgeDays": 1.381,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.15,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "visual": {
       "count": 155,
-      "medianEpochAgeDays": 1.058,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.031,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "starlink": {
       "count": 11098,
-      "medianEpochAgeDays": 1.093,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.117,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "oneweb": {
       "count": 651,
       "medianEpochAgeDays": 1.042,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "kuiper": {
       "count": 391,
-      "medianEpochAgeDays": 1.065,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.12,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "gnss": {
-      "count": 171,
-      "medianEpochAgeDays": 1.552,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "count": 170,
+      "medianEpochAgeDays": 1.464,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "weather": {
       "count": 73,
-      "medianEpochAgeDays": 0.953,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 0.906,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "science": {
       "count": 46,
-      "medianEpochAgeDays": 0.931,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 0.919,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "amateur": {
       "count": 96,
-      "medianEpochAgeDays": 0.993,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.025,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "geo": {
       "count": 565,
-      "medianEpochAgeDays": 1.18,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 0.906,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "military": {
       "count": 45,
-      "medianEpochAgeDays": 1.173,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.091,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "cubesat": {
       "count": 84,
-      "medianEpochAgeDays": 1.038,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.09,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "fengyun-1c-debris": {
       "count": 1981,
-      "medianEpochAgeDays": 1.517,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.518,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "iridium-33-debris": {
       "count": 109,
-      "medianEpochAgeDays": 1.397,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.391,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "cosmos-2251-debris": {
       "count": 588,
-      "medianEpochAgeDays": 1.361,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.342,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     },
     "cosmos-1408-debris": {
       "count": 3,
-      "medianEpochAgeDays": 0.981,
-      "fetchedAt": "2026-10-15T04:52:19.369058+00:00",
+      "medianEpochAgeDays": 1.261,
+      "fetchedAt": "2026-10-15T11:43:16.998064+00:00",
       "source": "celestrak_omm",
       "legacyTleLimited": false
     }
