@@ -122,7 +122,8 @@
       </div>
       <div class="satellite-group-grid display-group-grid">
         <button id="sky-tilt-reverse" type="button" class="sat-group" aria-pressed="false" title="Invert the vertical response if your device moves the sky the wrong way">Reverse tilt: off</button>
-        <button id="sky-tilt-calibrate" type="button" class="sat-group" title="Align device tilt to the current sky elevation">Calibrate tilt</button>
+        <button id="sky-tilt-calibrate" type="button" class="sat-group" title="Calibrate current level phone orientation for the selected horizon framing">Calibrate tilt</button>
+        <button id="sky-mobile-horizon-mode" type="button" class="sat-group" hidden aria-pressed="false" title="Off: comfortable low-horizon sky view. On: true physical phone pointing angle with a level horizon centred.">True horizon alignment: off</button>
         <button id="sky-compass-toggle" type="button" class="sat-group" aria-pressed="false" title="Use device compass heading if available">Follow compass: off</button>
         <button id="sky-view-save" type="button" class="sat-group" title="Save this view on this device">Save sky view</button>
         <button id="sky-view-restore" type="button" class="sat-group" title="Restore the saved view on this device">Restore sky view</button>
@@ -142,7 +143,7 @@
         <output id="sky-alignment-readout" aria-live="off">Awaiting observer location.</output>
         <p>Align the phone independently with the target before treating differences as errors. Never sight the Sun directly through a camera or optical finder.</p>
       </section>
-      <p id="sky-view-calibration-status" class="satellite-groups-note" role="status" aria-live="polite">Compass and tilt are approximate. Hold the phone upright in portrait and use Calibrate tilt to align elevation. Saved views do not calibrate a physical camera lens.</p>
+      <p id="sky-view-calibration-status" class="satellite-groups-note" role="status" aria-live="polite">Mobile defaults to a lower horizon and smoother motion. True horizon alignment is optional: it puts the real level horizon in the centre for physical sky pointing. Hold the phone upright in portrait and use Calibrate tilt. Saved views do not calibrate a physical camera lens.</p>
     </aside>
 
     <div class="compass" aria-hidden="true">
@@ -150,6 +151,6 @@
     </div>
     <p class="hint">Live from your location · horizon is the lowest view · drag to look around · pinch or wheel to zoom</p>
   </main>
-  <script src="./app.js?v=1.6.16"></script>
+  <script src="./app.js?v=1.6.17"></script>
 </body>
 </html>
