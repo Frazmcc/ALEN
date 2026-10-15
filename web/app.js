@@ -2175,7 +2175,7 @@ canvas.addEventListener("wheel",e=>{
 },{passive:false});
 document.querySelector("#inspector-close").addEventListener("click",clearSelection);
 let compassFollowing=false;
-let lastDeviceBeta=null,tiltOffsetDeg=null,lastOrientationEventAt=null;
+let lastDeviceBeta=null,tiltOffsetDeg=null,lastTiltUpdateAt=null,lastHeadingUpdateAt=null;
 let reverseDeviceTilt=false;
 const reverseTiltButton=document.querySelector("#sky-tilt-reverse");
 function applyTiltDirection(raw){return reverseDeviceTilt?-raw:raw}
@@ -2209,7 +2209,7 @@ function calibrateDeviceTilt(){
  // Comfortable framing raises the viewing direction, without moving stars.
  pitch=mobileHorizonOffset();
  tiltOffsetDeg=-applyTiltDirection(raw);
- lastOrientationEventAt=null;
+ lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
  return true;
 }
 tiltCalibrationButton.addEventListener("click",()=>{
@@ -2224,7 +2224,7 @@ syncMobileHorizonMode();
 mobileHorizonModeButton.addEventListener("click",()=>{
  mobileTrueAlignment=!mobileTrueAlignment;
  syncMobileHorizonMode();
- lastOrientationEventAt=null;
+ lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
  if(lastDeviceBeta!==null){
   const raw=deviceTiltElevation({beta:lastDeviceBeta});
   if(raw!==null)pitch=clamp(applyTiltDirection(raw)+(tiltOffsetDeg||0)+mobileHorizonOffset(),0,89);
@@ -2248,11 +2248,19 @@ function absoluteCompassHeading(event){
 }
 function stopCompassFollowing(){
  compassFollowing=false;
- lastDeviceBeta=null;tiltOffsetDeg=null;lastOrientationEventAt=null;
+ lastDeviceBeta=null;tiltOffsetDeg=null;lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
  window.removeEventListener("deviceorientation",onCompassOrientation);
  window.removeEventListener("deviceorientationabsolute",onCompassOrientation);
  compassToggle.setAttribute("aria-pressed","false");
  compassToggle.textContent="Follow compass: off";
+}
+// Keep heading and tilt clocks independent. Some mobile browsers fire
+// separate orientation and absolute-orientation events milliseconds apart.
+function sensorSampleDt(stamp,lastAt){
+ if(stamp===null||lastAt===null)return 33;
+ const elapsed=stamp-lastAt;
+ if(elapsed>=0&&elapsed<28)return null;
+ return clamp(elapsed,16,65);
 }
 function smoothedOrientationStep(error,dtMs,deadband,responseMs,speedDegPerSec){
  const magnitude=Math.abs(error);
@@ -2265,23 +2273,22 @@ function onCompassOrientation(event){
  const heading=absoluteCompassHeading(event);
  const rawTilt=deviceTiltElevation(event);
  if(heading===null&&rawTilt===null)return;
- // Time-normalised damping and ~30Hz coalescing handle dual orientation events.
  const stamp=Number.isFinite(event.timeStamp)?event.timeStamp:null;
- let dtMs=33;
- if(stamp!==null&&lastOrientationEventAt!==null){
-  const elapsed=stamp-lastOrientationEventAt;
-  if(elapsed>=0&&elapsed<28)return;
-  if(elapsed>0)dtMs=clamp(elapsed,16,65);
- }
- if(stamp!==null)lastOrientationEventAt=stamp;
  if(rawTilt!==null){
   lastDeviceBeta=event.beta;
-  if(tiltOffsetDeg!==null){
-   const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg+mobileHorizonOffset(),0,89);
-   pitch=clamp(pitch+smoothedOrientationStep(targetPitch-pitch,dtMs,.75,650,38),0,89);
+  const dtMs=sensorSampleDt(stamp,lastTiltUpdateAt);
+  if(dtMs!==null){
+   if(stamp!==null)lastTiltUpdateAt=stamp;
+   if(tiltOffsetDeg!==null){
+    const targetPitch=clamp(applyTiltDirection(rawTilt)+tiltOffsetDeg+mobileHorizonOffset(),0,89);
+    pitch=clamp(pitch+smoothedOrientationStep(targetPitch-pitch,dtMs,.75,650,38),0,89);
+   }
   }
  }
  if(heading===null)return;
+ const dtMs=sensorSampleDt(stamp,lastHeadingUpdateAt);
+ if(dtMs===null)return;
+ if(stamp!==null)lastHeadingUpdateAt=stamp;
  const delta=((heading-yaw+540)%360)-180;
  yaw=norm360(yaw+smoothedOrientationStep(delta,dtMs,1.0,520,70));
  compassToggle.textContent="Follow compass: on";
@@ -2304,7 +2311,7 @@ async function startCompassFollowing({requestPermission=false}={}){
   // Map the phone's upright portrait tilt to its physical horizon without
   // borrowing the previous manually positioned sky angle.
   tiltOffsetDeg=0;
-  lastOrientationEventAt=null;
+  lastTiltUpdateAt=null;lastHeadingUpdateAt=null;
   compassToggle.setAttribute("aria-pressed","true");
   compassToggle.textContent="Follow compass: awaiting heading";
   window.addEventListener("deviceorientation",onCompassOrientation);
