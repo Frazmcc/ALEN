@@ -2186,7 +2186,7 @@ reverseTiltButton.addEventListener("click",()=>{
  // Re-anchor at the current view so toggling does not cause a jump.
  if(lastDeviceBeta!==null){
   const raw=deviceTiltElevation({beta:lastDeviceBeta});
-  if(raw!==null)tiltOffsetDeg=pitch-applyTiltDirection(raw);
+  if(raw!==null)tiltOffsetDeg=pitch-applyTiltDirection(raw)-mobileHorizonOffset();
  }
  skyViewMessage(reverseDeviceTilt?"Reversed vertical response for this session.":"Normal vertical response restored.");
 });
