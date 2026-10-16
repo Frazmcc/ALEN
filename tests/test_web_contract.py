@@ -110,7 +110,7 @@ def test_alen_brand_logo_and_favicon_are_present() -> None:
     assert chunk_types[-1] == b"IEND"
     assert offset == len(logo)
     assert "data:image/png;base64," not in HTML
-    assert './app.js?v=1.6.17' in HTML
+    assert './app.js?v=1.6.18' in HTML
     assert './styles.css?v=0.9.3' in HTML
 
 
@@ -304,7 +304,7 @@ def test_true_observer_projection_and_aircraft_geometry() -> None:
 def test_satellite_backend_uses_omm_json() -> None:
     source = Path("src/alen/satellites.py").read_text(encoding="utf-8")
     assert "from sgp4 import omm" in source
-    assert 'params={"GROUP": group.upper(), "FORMAT": "JSON"}' in source
+    assert 'params={"GROUP": self._upstream_group(group).upper(), "FORMAT": "JSON"}' in source
     assert "omm.initialize(satellite, fields)" in source
     assert "omm.initialize(satellite, fields)" in source
     assert "Satrec.twoline2rv" in source
@@ -736,7 +736,7 @@ def test_satellite_group_fetch_rejects_stale_mirrors_and_prioritises_trusted_sna
     assert "if self._catalog_fresh_enough(group, records):" in source
     assert "ALEN_SNAPSHOT_URL" in source
     assert "def _fetch_group_mirror_json" in source
-    assert "self.SATVISOR_MIRROR_URL.format(group=group.lower())" in source
+    assert "self.SATVISOR_MIRROR_URL.format(group=self._upstream_group(group).lower())" in source
     assert "timeout=10.0" in source
 
 
