@@ -514,7 +514,8 @@ function setLiveStatus(){
    else if(satelliteRequestState==="stale")parts.push(`${s} satellites · catalogue reconnecting`);
    else if(satelliteRequestState==="partial")parts.push(`${s} satellites · partial catalogue`);
    else if(satelliteRequestState==="requesting"&&satelliteDiagnostics===null)parts.push("satellites loading…");
-   else parts.push(loaded===0?"satellite feed unavailable":`${s} satellites`);
+   else parts.push(loaded===0&&!earthSourceUnavailable()?"satellite feed unavailable":
+    earthSourceUnavailable()?`${s} satellites · Earth observation reconnecting`:`${s} satellites`);
  }
  liveEl.textContent=observer?`LIVE · ${parts.join(" · ")}`:"WAITING FOR LOCATION";
 }
@@ -908,6 +909,52 @@ function logicalSatelliteMemberships(sourceGroups){
  return memberships;
 }
 const SATELLITE_REFRESH_MS=5000;
+// Earth Resources uses a different upstream group name and has historically
+// held up the entire satellite response. Probe it separately without blocking
+// the other live orbital categories.
+const EARTH_SOURCE_PROBE_INTERVAL_MS=180000;
+let earthSourceHealthy=false,earthSourceChecking=false,earthSourceProbeAt=0;
+function activeSatelliteSourceNames(){
+ return [...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))]
+  .filter(source=>source!=="earth-resources"||earthSourceHealthy);
+}
+function earthSourceUnavailable(){
+ return SATELLITE_GROUPS.earth.enabled&&!earthSourceHealthy;
+}
+async function probeEarthSource(){
+ if(!observer||document.hidden||!layers.satellites||!SATELLITE_GROUPS.earth.enabled||
+    earthSourceHealthy||earthSourceChecking||
+    Date.now()-earthSourceProbeAt<EARTH_SOURCE_PROBE_INTERVAL_MS)return;
+ earthSourceChecking=true;
+ earthSourceProbeAt=Date.now();
+ updateSatelliteGroupCounts(satellites);
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),14000);
+ try{
+  const qs=new URLSearchParams({
+   lat:String(observer.lat),lon:String(observer.lon),altitude_m:String(observer.altM||0),
+   groups:"earth-resources",limit:"10"
+  });
+  const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{
+   mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal
+  });
+  if(!res.ok)throw new Error("Earth observation source HTTP "+res.status);
+  const data=await res.json();
+  if(!(Number(data.diagnostics?.loaded_by_group?.["earth-resources"])>0))
+   throw new Error("Earth observation orbit catalogue not available yet");
+  earthSourceHealthy=true;
+  satelliteRefreshQueued=true;
+  void refreshSatellites(true);
+ }catch(error){
+  console.warn("ALEN Earth observation source unavailable; other satellite groups remain live",error);
+ }finally{
+  clearTimeout(timeout);
+  earthSourceChecking=false;
+  updateSatelliteGroupCounts(satellites);
+  setLiveStatus();
+ }
+}
+
 const SATELLITE_MAX_SAMPLE_AGE_MS=10000;
 const SATELLITE_ERROR_GRACE_MS=45000;
 const SATELLITE_FADE_MS=1600;
@@ -1108,7 +1155,9 @@ function updateSatelliteGroupCounts(objects=null){
   if(!group)return;
   let count=btn.querySelector(".sat-count");
   if(!count){count=document.createElement("small");count.className="sat-count";btn.append(count)}
-  const value=!group.enabled?"":!Array.isArray(objects)?"Loading…":counts[key]+" sky";
+  const value=!group.enabled?"":key==="earth"&&!earthSourceHealthy?
+   (earthSourceChecking?"Checking…":"Source unavailable"):
+   !Array.isArray(objects)?"Loading…":counts[key]+" sky";
   count.textContent=value;btn.dataset.visible=value;syncGroupButton(btn,group);
  });
 }
@@ -1145,13 +1194,14 @@ async function refreshSatellites(force=false){
  satelliteAbortController=controller;
  const timeout=setTimeout(()=>controller.abort(),20000);
  try{
-  const sources=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))];
+  const sources=activeSatelliteSourceNames();
   const requestSignature=sources.slice().sort().join(",");
   if(!sources.length){
    satellites=[];
    satelliteDiagnostics={unique_orbits:0,visible:0,requested_groups:[]};
    satelliteRequestState="ok";
    updateSatelliteGroupCounts([]);
+   void probeEarthSource();
    return;
   }
   const qs=new URLSearchParams({
@@ -1161,7 +1211,7 @@ async function refreshSatellites(force=false){
   const res=await fetch(API_BASE+"/api/v1/satellites?"+qs,{mode:"cors",cache:"no-store",credentials:"omit",signal:controller.signal});
   if(!res.ok)throw new Error("satellites "+res.status);
   const data=await res.json();
-  const currentSignature=[...new Set(activeSatelliteGroups().flatMap(([,group])=>group.sources))].sort().join(",");
+  const currentSignature=activeSatelliteSourceNames().sort().join(",");
   if(currentSignature!==requestSignature){
    satelliteRefreshQueued=true;
    return;
@@ -1185,7 +1235,7 @@ async function refreshSatellites(force=false){
   }
   if(partialCatalogue&&!(Array.isArray(data.satellites)&&data.satellites.length))
    throw new Error("satellite catalogue incomplete");
-  satelliteRequestState=partialCatalogue?"partial":"ok";
+  satelliteRequestState=partialCatalogue||earthSourceUnavailable()?"partial":"ok";
   const frameNow=performance.now(),wallNow=Date.now(),previous=new Map(satellites.map(s=>[s.id,s])),next=[],seenNorad=new Set();
   let rejectedSatelliteTrajectories=0;
   // The server's absolute sample instant includes cache age; comparing it with
@@ -1219,6 +1269,8 @@ async function refreshSatellites(force=false){
   }
   satellites=mergeSatelliteContinuity(previous,next,wallNow,frameNow);
   updateSatelliteGroupCounts(satellites);
+  if(earthSourceUnavailable()&&feedStatus)feedStatus.textContent+=" · Earth observation source checking separately; other satellite groups remain live.";
+  void probeEarthSource();
   if(feedStatus){
    const rejected=(Number(satelliteDiagnostics?.physically_implausible)||0)+rejectedSatelliteTrajectories;
    if(rejected)feedStatus.textContent+=" · rejected "+rejected+" implausible orbital predictions.";
