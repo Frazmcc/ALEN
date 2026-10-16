@@ -42,6 +42,39 @@ def evaluate(diagnostics: dict, satellites: list) -> dict:
     }
 
 
+# Diagnostic request copied from the current web client's default groups.
+# Runs on PRs to expose mobile/desktop failures that the light three-group
+# integrity probe cannot reproduce. Do not confuse the 50-object probe with
+# the default 2000-object browser request.
+FRONTEND_GROUPS = (
+    "last-30-days,stations,visual,starlink,oneweb,"
+    "gnss,weather,earth-resources"
+)
+def probe_frontend_request() -> None:
+    params=urllib.parse.urlencode({
+        "lat":55.7706,"lon":-4.0914,"groups":FRONTEND_GROUPS.replace(",earth-resources",""),
+        "limit":2000,"altitude_m":0,
+    })
+    url=API.rstrip("/")+"/api/v1/satellites?"+params
+    start=time.monotonic()
+    try:
+        request=urllib.request.Request(url,headers={"User-Agent":"ALEN-Frontend-Diagnostics/1.0"})
+        with urllib.request.urlopen(request,timeout=35) as response:
+            payload=json.load(response)
+        diagnostics=payload.get("diagnostics") or {}
+        print("FRONTEND PROBE:",json.dumps({
+            "elapsed_seconds":round(time.monotonic()-start,1),
+            "returned":len(payload.get("satellites") or []),
+            "unique_orbits":diagnostics.get("unique_orbits"),
+            "complete":diagnostics.get("complete"),
+            "missing_groups":diagnostics.get("missing_groups"),
+            "sample_age_seconds":diagnostics.get("position_sample_age_seconds"),
+        },indent=2),flush=True)
+    except Exception as error:
+        print("FRONTEND PROBE FAILED after",round(time.monotonic()-start,1),
+              "seconds:",repr(error),flush=True)
+        raise
+
 def main() -> int:
     url = API.rstrip("/") + "/api/v1/satellites?" + PARAMS
     last_error: Exception | None = None
@@ -52,6 +85,8 @@ def main() -> int:
                 result = json.load(response)
             verified = evaluate(result["diagnostics"], result["satellites"])
             print("PASS: current full-sky orbital feed", json.dumps(verified, indent=2), flush=True)
+            if os.getenv("GITHUB_EVENT_NAME") == "pull_request":
+                probe_frontend_request()
             return 0
         except (OSError, TimeoutError, ValueError, AssertionError, KeyError) as error:
             last_error = error

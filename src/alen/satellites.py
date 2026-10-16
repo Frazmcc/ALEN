@@ -44,6 +44,11 @@ class SatelliteProvider:
     MAX_POSITION_BUCKETS = 20
     MOTION_STEP_SECONDS = 2
     MOTION_FORECAST_SECONDS = 12
+    UPSTREAM_GROUP_NAMES = {"earth-resources": "resource"}
+    @classmethod
+    def _upstream_group(cls, group: str) -> str:
+        return cls.UPSTREAM_GROUP_NAMES.get(group, group)
+
     ALLOWED_GROUPS = frozenset(
         {
             "last-30-days",
@@ -647,7 +652,7 @@ class SatelliteProvider:
             ) as client:
                 response = client.get(
                     self.BASE_URL,
-                    params={"GROUP": group.upper(), "FORMAT": "JSON"},
+                    params={"GROUP": self._upstream_group(group).upper(), "FORMAT": "JSON"},
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -691,7 +696,7 @@ class SatelliteProvider:
                 follow_redirects=True,
                 headers={"User-Agent": "ALEN/0.1", "Accept": "text/plain"},
             ) as client:
-                response = client.get(self.SECONDARY_TLE_MIRROR_URL.format(group=group.lower()))
+                response = client.get(self.SECONDARY_TLE_MIRROR_URL.format(group=self._upstream_group(group).lower()))
                 response.raise_for_status()
                 lines = [line.strip() for line in response.text.splitlines() if line.strip()]
         except httpx.HTTPError:
@@ -732,7 +737,7 @@ class SatelliteProvider:
                 headers={"User-Agent": "ALEN/0.1", "Accept": "application/json"},
             ) as client:
                 response = client.get(
-                    self.SATVISOR_MIRROR_URL.format(group=group.lower())
+                    self.SATVISOR_MIRROR_URL.format(group=self._upstream_group(group).lower())
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -773,7 +778,7 @@ class SatelliteProvider:
             ) as client:
                 response = client.get(
                     self.BASE_URL,
-                    params={"GROUP": group.upper(), "FORMAT": "TLE"},
+                    params={"GROUP": self._upstream_group(group).upper(), "FORMAT": "TLE"},
                 )
                 response.raise_for_status()
                 lines = [line.strip() for line in response.text.splitlines() if line.strip()]

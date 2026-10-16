@@ -28,6 +28,12 @@ HOT_GROUPS = {"starlink", "oneweb", "kuiper"}
 MEDIUM_GROUPS = {"last-30-days", "stations", "visual"}
 SOURCE = "https://celestrak.org/NORAD/elements/gp.php"
 SECONDARY = "https://raw.githubusercontent.com/caelo-works/tle-mirror/main/tle/{group}.tle"
+# CelesTrak's official GROUP parameter for Earth Resources is "resource".
+# Preserve ALEN's earth-resources filename/API grouping for compatibility.
+UPSTREAM_GROUP_NAMES = {"earth-resources": "resource"}
+def celestrak_group(group: str) -> str:
+    return UPSTREAM_GROUP_NAMES.get(group, group)
+
 
 
 def freshness_age_days(epoch: str, when: datetime) -> float:
@@ -99,7 +105,7 @@ def main() -> int:
             source_name = "celestrak_omm"
             if not primary_unavailable:
                 try:
-                    res = client.get(SOURCE, params={"GROUP": group.upper(), "FORMAT": "JSON"})
+                    res = client.get(SOURCE, params={"GROUP": celestrak_group(group).upper(), "FORMAT": "JSON"})
                     res.raise_for_status()
                     checked = validated_snapshot(group, res.json(), now)
                     if checked is None:
@@ -111,7 +117,7 @@ def main() -> int:
                         primary_unavailable = True
             if checked is None:
                 try:
-                    mirror = client.get(SECONDARY.format(group=group))
+                    mirror = client.get(SECONDARY.format(group=celestrak_group(group)))
                     mirror.raise_for_status()
                     checked = validated_snapshot(group, secondary_omm_snapshot(mirror.text), now)
                     if checked is not None:
