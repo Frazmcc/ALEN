@@ -512,7 +512,7 @@ function setLiveStatus(){
    const loaded=satelliteDiagnostics?.unique_orbits;
    if(satelliteRequestState==="error")parts.push(satelliteDiagnostics?.complete===false?"satellite catalogue incomplete":"satellite feed unavailable");
    else if(satelliteRequestState==="stale")parts.push(`${s} satellites · catalogue reconnecting`);
-   else if(satelliteRequestState==="partial")parts.push(`${s} satellites · partial catalogue`);
+   else if(satelliteRequestState==="partial")parts.push(earthSourceUnavailable()?`${s} satellites · Earth observation reconnecting`:`${s} satellites · partial catalogue`);
    else if(satelliteRequestState==="requesting"&&satelliteDiagnostics===null)parts.push("satellites loading…");
    else parts.push(loaded===0&&!earthSourceUnavailable()?"satellite feed unavailable":
     earthSourceUnavailable()?`${s} satellites · Earth observation reconnecting`:`${s} satellites`);
@@ -943,7 +943,6 @@ async function probeEarthSource(){
   if(!(Number(data.diagnostics?.loaded_by_group?.["earth-resources"])>0))
    throw new Error("Earth observation orbit catalogue not available yet");
   earthSourceHealthy=true;
-  satelliteRefreshQueued=true;
   void refreshSatellites(true);
  }catch(error){
   console.warn("ALEN Earth observation source unavailable; other satellite groups remain live",error);
@@ -1269,7 +1268,7 @@ async function refreshSatellites(force=false){
   }
   satellites=mergeSatelliteContinuity(previous,next,wallNow,frameNow);
   updateSatelliteGroupCounts(satellites);
-  if(earthSourceUnavailable()&&feedStatus)feedStatus.textContent+=" · Earth observation source checking separately; other satellite groups remain live.";
+  if(earthSourceUnavailable()&&feedStatus)feedStatus.textContent+=" · Earth observation is reconnecting separately; other satellite groups remain live.";
   void probeEarthSource();
   if(feedStatus){
    const rejected=(Number(satelliteDiagnostics?.physically_implausible)||0)+rejectedSatelliteTrajectories;
