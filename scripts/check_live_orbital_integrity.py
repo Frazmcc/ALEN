@@ -52,7 +52,7 @@ FRONTEND_GROUPS = (
 )
 def probe_frontend_request() -> None:
     params=urllib.parse.urlencode({
-        "lat":55.7706,"lon":-4.0914,"groups":FRONTEND_GROUPS,
+        "lat":55.7706,"lon":-4.0914,"groups":FRONTEND_GROUPS.replace(",earth-resources",""),
         "limit":2000,"altitude_m":0,
     })
     url=API.rstrip("/")+"/api/v1/satellites?"+params
