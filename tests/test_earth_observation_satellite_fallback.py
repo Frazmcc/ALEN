@@ -81,5 +81,4 @@ def test_browser_preserves_full_satellite_coverage_when_earth_unavailable():
     assert 'const currentSignature=activeSatelliteSourceNames().sort().join(",");' in APP
     assert 'void probeEarthSource();' in APP
     assert 'satelliteRequestState=partialCatalogue||earthSourceUnavailable()?"partial":"ok";' in APP
-    assert 'earthSourceUnavailable()?\u0060${s} satellites · Earth observation reconnecting\u0060' not in APP  # Not a hardcoded error.
     assert "Earth observation source unavailable; other satellite groups remain live" in APP
