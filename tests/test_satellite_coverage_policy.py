@@ -29,7 +29,7 @@ def test_api_allows_a_bounded_2500_satellite_response():
 
 def test_partial_upstream_group_failure_does_not_discard_other_satellites():
     assert 'const partialCatalogue=satelliteDiagnostics?.complete===false;' in APP
-    assert 'satelliteRequestState=partialCatalogue?"partial":"ok";' in APP
+    assert 'satelliteRequestState=partialCatalogue||earthSourceUnavailable()?"partial":"ok";' in APP
     assert 'if(partialCatalogue&&!(Array.isArray(data.satellites)&&data.satellites.length))' in APP
     assert 'else if(satelliteRequestState==="partial")' in APP
     assert 'feedStatus.textContent+=" · partial catalogue"' in APP
