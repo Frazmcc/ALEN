@@ -1,0 +1,42 @@
+{
+  "name": "query-string",
+  "version": "7.1.3-security.1",
+  "description": "Parse and stringify URL query strings",
+  "license": "MIT",
+  "repository": "sindresorhus/query-string",
+  "funding": "https://github.com/sponsors/sindresorhus",
+  "author": {
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com",
+    "url": "https://sindresorhus.com"
+  },
+  "engines": {
+    "node": ">=6"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "keywords": [
+    "browser",
+    "querystring",
+    "query",
+    "string",
+    "qs",
+    "param",
+    "parameter",
+    "url",
+    "parse",
+    "stringify",
+    "encode",
+    "decode",
+    "searchparams",
+    "filter"
+  ],
+  "dependencies": {
+    "filter-obj": "^1.1.0",
+    "split-on-first": "^1.0.0",
+    "strict-uri-encode": "^2.0.0"
+  },
+  "private": true
+}
